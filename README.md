@@ -27,7 +27,6 @@ A modern Identity and Authentication service built with Kotlin and Ktor.
 ### Public
 - `POST /api/auth/register` - Create a new user.
 - `POST /api/auth/login` - Authenticate and get tokens.
-- `GET /openapi` - OpenAPI documentation (YAML).
 - `GET /health` - Service health check.
 
 ### UI Consoles (Development)
@@ -41,7 +40,7 @@ A modern Identity and Authentication service built with Kotlin and Ktor.
 
 1. Run the application (this will automatically start Docker dependencies):
    ```bash
-   ./gradlew run
+   mvn clean compile exec:java
    ```
    *The database schema will be applied automatically via Flyway on startup.*
 

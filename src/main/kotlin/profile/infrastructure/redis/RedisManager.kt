@@ -5,24 +5,29 @@ import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.sync.RedisCommands
 import io.ktor.server.config.*
 
-object RedisManager {
-    private var client: RedisClient? = null
-    private var connection: StatefulRedisConnection<String, String>? = null
+class RedisManager(config: ApplicationConfig) {
+    private val client: RedisClient?
+    private val connection: StatefulRedisConnection<String, String>?
 
-    fun init(config: ApplicationConfig) {
+    init {
         val url = config.propertyOrNull("redis.url")?.getString()
         if (url != null) {
-            try {
-                client = RedisClient.create(url)
-                connection = client?.connect()
+            val c = RedisClient.create(url)
+            client = c
+            connection = try {
+                c.connect()
             } catch (e: Exception) {
-                // In a real app we might want to fail, but for tests/dev we can just log
-                println("Failed to connect to Redis: ${e.message}")
+                null
             }
+        } else {
+            client = null
+            connection = null
         }
     }
 
-    fun sync(): RedisCommands<String, String> = connection?.sync() ?: throw IllegalStateException("Redis not initialized")
+    fun sync(): RedisCommands<String, String>? = connection?.sync()
+
+    fun pubSubConnection(): io.lettuce.core.pubsub.StatefulRedisPubSubConnection<String, String>? = client?.connectPubSub()
 
     fun close() {
         connection?.close()

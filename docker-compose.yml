@@ -30,26 +30,12 @@ services:
     volumes:
       - minio_data:/data
 
-  # Helper to create the bucket on startup
-  minio-setup:
-    image: minio/mc
-    depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin;
-      /usr/bin/mc mb --ignore-existing local/avatars;
-      /usr/bin/mc anonymous set public local/avatars;
-      exit 0;
-      "
-
   mailslurper:
-    image: orangesys/mailslurper
+    image: mailhog/mailhog
     container_name: identity-mail
     ports:
-      - "2500:2500" # SMTP
-      - "8085:8080" # Web UI (mapped to 8085 to avoid conflict with Ktor)
-      - "8081:8081" # API
+      - "8025:8025" # UI
+      - "1025:1025" # SMTP
 
 volumes:
   postgres_data:

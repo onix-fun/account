@@ -8,11 +8,10 @@ CREATE TABLE users (
 
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
 
-    first_name TEXT,
-    last_name TEXT,
-    display_name TEXT,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
     avatar_url TEXT,
-    bio TEXT,
+    bio VARCHAR(500),
 
     role TEXT NOT NULL DEFAULT 'USER',
     status TEXT NOT NULL DEFAULT 'ACTIVE',

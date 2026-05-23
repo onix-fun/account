@@ -1,6 +1,15 @@
 package profile.users
 
 import kotlinx.serialization.Serializable
+import profile.infrastructure.db.User
+
+@Serializable
+data class UpdateProfileRequest(
+    val email: String? = null,
+    val firstName: String? = null,
+    val lastName: String? = null,
+    val bio: String? = null
+)
 
 @Serializable
 data class UserPublicDto(
@@ -8,7 +17,9 @@ data class UserPublicDto(
     val username: String,
     val firstName: String? = null,
     val lastName: String? = null,
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val bio: String? = null,
+    val emailVerified: Boolean
 )
 
 fun User.toPublicDto() = UserPublicDto(
@@ -16,5 +27,7 @@ fun User.toPublicDto() = UserPublicDto(
     username = username,
     firstName = firstName,
     lastName = lastName,
-    avatarUrl = avatarUrl
+    avatarUrl = avatarUrl,
+    bio = bio,
+    emailVerified = emailVerified
 )

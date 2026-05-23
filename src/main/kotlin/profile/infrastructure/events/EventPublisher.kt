@@ -12,14 +12,15 @@ data class DomainEvent(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-object EventPublisher {
+class EventPublisher(private val redisManager: RedisManager) {
     fun publish(type: String, payload: String) {
         val event = DomainEvent(type, payload)
         val jsonEvent = Json.encodeToString(event)
         try {
-            RedisManager.sync().publish("identity_events", jsonEvent)
+            redisManager.sync()?.publish("identity_events", jsonEvent)
         } catch (e: Exception) {
-            println("Skipping event publish: ${e.message}")
+            // Log error but don't crash the request
+            System.err.println("Failed to publish event: ${e.message}")
         }
     }
 }

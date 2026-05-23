@@ -2,24 +2,16 @@ package profile.infrastructure.db
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import io.ktor.server.config.*
 import org.flywaydb.core.Flyway
-import java.sql.Connection
+import profile.infrastructure.config.PostgresConfig
 import javax.sql.DataSource
 
 object DatabaseFactory {
-    private var dataSource: DataSource? = null
-
-    fun init(config: ApplicationConfig) {
-        val url = config.propertyOrNull("postgres.url")?.getString() ?: "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
-        val user = config.propertyOrNull("postgres.user")?.getString() ?: "sa"
-        val password = config.propertyOrNull("postgres.password")?.getString() ?: ""
-
+    fun init(config: PostgresConfig): DataSource {
         val hikariConfig = HikariConfig().apply {
-            driverClassName = if (url.startsWith("jdbc:h2:")) "org.h2.Driver" else "org.postgresql.Driver"
-            jdbcUrl = url
-            username = user
-            this.password = password
+            jdbcUrl = config.url
+            username = config.user
+            password = config.password
             maximumPoolSize = 10
             isAutoCommit = false
             transactionIsolation = "TRANSACTION_REPEATABLE_READ"
@@ -27,9 +19,8 @@ object DatabaseFactory {
         }
 
         val ds = HikariDataSource(hikariConfig)
-        dataSource = ds
-
         runFlyway(ds)
+        return ds
     }
 
     private fun runFlyway(datasource: DataSource) {
@@ -38,6 +29,4 @@ object DatabaseFactory {
             .load()
         flyway.migrate()
     }
-
-    fun getConnection(): Connection = dataSource?.connection ?: throw IllegalStateException("Database not initialized")
 }

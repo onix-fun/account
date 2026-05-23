@@ -22,7 +22,7 @@ data class LoginRequest(
 data class AuthResponse(
     val accessToken: String,
     val userId: String,
-    val user: profile.users.User
+    val user: profile.infrastructure.db.User
 )
 
 // No body needed for Refresh or Logout as they use the single HttpOnly cookie.
@@ -30,11 +30,17 @@ data class AuthResponse(
 // Let's remove them if they aren't needed.
 
 @Serializable
-data class SessionInfoDto(
-    val sessionId: String,
-    val userId: String,
-    val deviceId: String? = null,
-    val userAgent: String? = null,
-    val lastUsedAt: String,
-    val user: profile.users.UserPublicDto? = null
+data class VerifyEmailRequest(
+    val code: String
+)
+
+@Serializable
+data class ForgotPasswordRequest(
+    val email: String
+)
+
+@Serializable
+data class ResetPasswordRequest(
+    val token: String,
+    val newPassword: String
 )
