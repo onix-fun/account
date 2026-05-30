@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/infra/store";
 import AppLayout from "@/infra/navigation/layouts/AppLayout.vue";
+import { AuthService } from "@/api/services/AuthService";
 
 const route = useRoute();
 const router = useRouter();
@@ -17,6 +18,40 @@ const registerForm = ref({
     username: "",
     password: "",
 });
+
+const isCheckingUsername = ref(false);
+const isUsernameTaken = ref(false);
+const usernameCheckTouched = ref(false);
+let usernameTimeout: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+    () => registerForm.value.username,
+    (newVal) => {
+        usernameCheckTouched.value = true;
+        isCheckingUsername.value = false;
+        isUsernameTaken.value = false;
+
+        if (usernameTimeout) clearTimeout(usernameTimeout);
+
+        const val = newVal.trim();
+        if (!val) {
+            usernameCheckTouched.value = false;
+            return;
+        }
+
+        isCheckingUsername.value = true;
+        usernameTimeout = setTimeout(async () => {
+            try {
+                const results = await AuthService.searchUsers(val);
+                isUsernameTaken.value = results.some((u) => u.username.toLowerCase() === val.toLowerCase());
+            } catch {
+                // Ignore errors
+            } finally {
+                isCheckingUsername.value = false;
+            }
+        }, 500);
+    },
+);
 const nameForm = ref({
     firstName: "",
     lastName: "",
@@ -184,7 +219,31 @@ const submitResetPassword = async () => {
             <form v-else-if="authMode === 'register'" class="login-form" @submit.prevent="register">
                 <label>
                     Username
-                    <input v-model="registerForm.username" autocomplete="username" required />
+                    <div class="input-wrapper">
+                        <input v-model="registerForm.username" autocomplete="username" required />
+                        <span v-if="isCheckingUsername" class="input-suffix">
+                            <i class="pi pi-spinner pi-spin"></i>
+                        </span>
+                        <span
+                            v-else-if="usernameCheckTouched && registerForm.username"
+                            class="input-suffix"
+                            :class="isUsernameTaken ? 'text-danger' : 'text-success'"
+                        >
+                            <i :class="isUsernameTaken ? 'pi pi-times' : 'pi pi-check'"></i>
+                        </span>
+                    </div>
+                    <span
+                        v-if="usernameCheckTouched && registerForm.username && isUsernameTaken"
+                        class="validation-message text-danger"
+                        >Username is already taken.</span
+                    >
+                    <span
+                        v-else-if="
+                            usernameCheckTouched && registerForm.username && !isCheckingUsername && !isUsernameTaken
+                        "
+                        class="validation-message text-success"
+                        >Username is available.</span
+                    >
                 </label>
                 <label>
                     Email
@@ -200,7 +259,11 @@ const submitResetPassword = async () => {
                         minlength="8"
                     />
                 </label>
-                <button class="btn btn-primary" type="submit" :disabled="authStore.isLoading">
+                <button
+                    class="btn btn-primary"
+                    type="submit"
+                    :disabled="authStore.isLoading || isCheckingUsername || isUsernameTaken || !registerForm.username"
+                >
                     <i class="pi pi-envelope"></i>
                     Send verification code
                 </button>
