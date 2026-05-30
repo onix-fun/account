@@ -16,8 +16,8 @@ class AuthController(
     suspend fun register(call: ApplicationCall) {
         val request = call.receive<RegisterRequest>()
         val response = authService.register(
-            request.email, 
-            request.username, 
+            request.email,
+            request.username,
             request.password,
             request.firstName,
             request.lastName
@@ -29,9 +29,13 @@ class AuthController(
         val request = call.receive<ConfirmRegistrationRequest>()
         val userAgent = call.request.headers["User-Agent"]
         val ipAddress = call.clientIpAddress()
-        val result = authService.confirmRegistration(request.email, request.code, request.deviceId, userAgent, ipAddress)
-        call.response.cookies.append(refreshCookie(result.refreshToken))
-        call.respond(HttpStatusCode.Created, AuthResponse(result.accessToken, result.user.id, result.user.toProfileDto()))
+        val result =
+            authService.confirmRegistration(request.email, request.code, request.deviceId, userAgent, ipAddress)
+        call.response.cookies.append(refreshCookie(result.user.id, result.refreshToken))
+        call.respond(
+            HttpStatusCode.Created,
+            AuthResponse(result.accessToken, result.user.id, result.user.toProfileDto())
+        )
     }
 
     suspend fun resendRegistrationCode(call: ApplicationCall) {
@@ -44,10 +48,16 @@ class AuthController(
         val request = call.receive<LoginRequest>()
         val userAgent = call.request.headers["User-Agent"]
         val ipAddress = call.clientIpAddress()
-        
-        val result = authService.login(request.identifier ?: request.email.orEmpty(), request.password, request.deviceId, userAgent, ipAddress)
-        
-        call.response.cookies.append(refreshCookie(result.refreshToken))
+
+        val result = authService.login(
+            request.identifier ?: request.email.orEmpty(),
+            request.password,
+            request.deviceId,
+            userAgent,
+            ipAddress
+        )
+
+        call.response.cookies.append(refreshCookie(result.user.id, result.refreshToken))
 
         call.respond(HttpStatusCode.OK, AuthResponse(result.accessToken, result.user.id, result.user.toProfileDto()))
     }
@@ -73,33 +83,41 @@ class AuthController(
 
     suspend fun resetPassword(call: ApplicationCall) {
         val request = call.receive<ResetPasswordRequest>()
-        authService.resetPassword(request.identifier ?: request.email.orEmpty(), request.code ?: request.token.orEmpty(), request.newPassword)
+        authService.resetPassword(
+            request.identifier ?: request.email.orEmpty(),
+            request.code ?: request.token.orEmpty(),
+            request.newPassword
+        )
         call.respond(HttpStatusCode.OK, mapOf("message" to "Password has been reset successfully"))
     }
 
     suspend fun refresh(call: ApplicationCall) {
-        val refreshToken = call.request.cookies["refresh_token"]
-        
+        val requestedUserId = call.request.header("X-User-Id")
+        val cookieName = getCookieName(requestedUserId)
+        val refreshToken = call.request.cookies[cookieName] ?: call.request.cookies["refresh_token"]
+
         if (refreshToken == null) {
             call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Missing refresh token cookie"))
             return
         }
 
         val result = authService.refresh(refreshToken)
-        
-        call.response.cookies.append(refreshCookie(result.refreshToken))
+
+        call.response.cookies.append(refreshCookie(result.userId, result.refreshToken))
 
         call.respond(HttpStatusCode.OK, mapOf("accessToken" to result.accessToken))
     }
 
     suspend fun logout(call: ApplicationCall) {
-        val refreshToken = call.request.cookies["refresh_token"]
+        val userId = call.principal<JWTPrincipal>()?.payload?.subject ?: call.request.header("X-User-Id")
+        val cookieName = getCookieName(userId)
+        val refreshToken = call.request.cookies[cookieName] ?: call.request.cookies["refresh_token"]
         if (refreshToken != null) {
             authService.logout(refreshToken)
         }
-        
-        call.response.cookies.append(clearRefreshCookie())
-        
+
+        call.response.cookies.append(clearRefreshCookie(userId))
+
         call.respond(HttpStatusCode.OK, mapOf("message" to "Logged out"))
     }
 
@@ -109,17 +127,21 @@ class AuthController(
             call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))
             return
         }
-        
+
         authService.logoutAll(userId)
-        
-        call.response.cookies.append(clearRefreshCookie())
+
+        call.response.cookies.append(clearRefreshCookie(userId))
 
         call.respond(HttpStatusCode.OK, mapOf("message" to "Logged out from all devices"))
     }
 
-    private fun refreshCookie(value: String): Cookie {
+    private fun getCookieName(userId: String?): String {
+        return if (userId != null) "${REFRESH_COOKIE_NAME}_$userId" else REFRESH_COOKIE_NAME
+    }
+
+    private fun refreshCookie(userId: String, value: String): Cookie {
         return Cookie(
-            name = REFRESH_COOKIE_NAME,
+            name = getCookieName(userId),
             value = value,
             httpOnly = true,
             secure = sessionConfig.cookieSecure,
@@ -129,9 +151,9 @@ class AuthController(
         )
     }
 
-    private fun clearRefreshCookie(): Cookie {
+    private fun clearRefreshCookie(userId: String?): Cookie {
         return Cookie(
-            name = REFRESH_COOKIE_NAME,
+            name = getCookieName(userId),
             value = "",
             httpOnly = true,
             secure = sessionConfig.cookieSecure,

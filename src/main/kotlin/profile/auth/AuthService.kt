@@ -186,7 +186,13 @@ class AuthService(
         sessionRepository.revokeAllForUser(token.userId)
     }
 
-    fun login(identifier: String, password: String, deviceId: String?, userAgent: String?, ipAddress: String?): LoginResult {
+    fun login(
+        identifier: String,
+        password: String,
+        deviceId: String?,
+        userAgent: String?,
+        ipAddress: String?
+    ): LoginResult {
         val user = findUserByIdentifier(identifier) ?: throw IllegalArgumentException("Invalid credentials")
         if (!PasswordHasher.verify(user.passwordHash, password)) throw IllegalArgumentException("Invalid credentials")
 
@@ -232,7 +238,7 @@ class AuthService(
 
         val accessToken = jwtIssuer.createToken(user.id, session.id, user.role)
 
-        return RefreshResult(accessToken, newRefreshToken, session.id)
+        return RefreshResult(accessToken, newRefreshToken, session.id, user.id)
     }
 
     fun logout(refreshToken: String) {
@@ -287,5 +293,6 @@ data class LoginResult(
 data class RefreshResult(
     val accessToken: String,
     val refreshToken: String,
-    val sessionId: String
+    val sessionId: String,
+    val userId: String
 )
