@@ -1,0 +1,20 @@
+FROM maven:3.9-eclipse-temurin-23 AS build
+WORKDIR /app
+
+COPY pom.xml .
+RUN mvn -q -DskipTests dependency:go-offline
+
+COPY src ./src
+RUN mvn -q -DskipTests package
+
+FROM eclipse-temurin:23-jre
+WORKDIR /app
+
+ARG OTEL_JAVA_AGENT_VERSION=2.27.0
+ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVA_AGENT_VERSION}/opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
+
+COPY --from=build /app/target/*-with-dependencies.jar /app/profile.jar
+
+EXPOSE 8080
+
+CMD ["java", "-jar", "/app/profile.jar"]

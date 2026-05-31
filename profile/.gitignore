@@ -1,0 +1,46 @@
+# Maven Build artifacts
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+build.log
+.flattened-pom.xml
+invoker-report.txt
+*.exec
+*.dat
+*.prof
+
+# IDE settings
+.idea/
+*.iml
+*.iws
+*.ipr
+.veai/
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+
+# Logs
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+
+# Kotlin specific
+.kotlin/

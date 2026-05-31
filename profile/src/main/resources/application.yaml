@@ -1,0 +1,39 @@
+ktor:
+  deployment:
+    port: "$PROFILE_PORT:8080"
+  application:
+    modules:
+      - profile.AppKt.module
+
+identity:
+  jwt:
+    issuer: "$IDENTITY_JWT_ISSUER:identity-service"
+    audience: "$IDENTITY_JWT_AUDIENCE:gateway"
+    secret: "$IDENTITY_JWT_SECRET:change-me"
+    access_token_exp_minutes: "$IDENTITY_ACCESS_TOKEN_EXP_MINUTES:15"
+  session:
+    refresh_token_exp_days: "$IDENTITY_REFRESH_TOKEN_EXP_DAYS:30"
+    cookie_secure: "$IDENTITY_REFRESH_COOKIE_SECURE:false"
+  registration:
+    pending_ttl_seconds: "$IDENTITY_REGISTRATION_PENDING_TTL_SECONDS:3600"
+    allow_in_memory_fallback: "$IDENTITY_REGISTRATION_ALLOW_IN_MEMORY_FALLBACK:false"
+
+postgres:
+  url: "$IDENTITY_DATABASE_JDBC_URL:jdbc:postgresql://localhost:5432/identity"
+  user: "$IDENTITY_DATABASE_USERNAME:postgres"
+  password: "$IDENTITY_DATABASE_PASSWORD:password"
+
+redis:
+  url: "$IDENTITY_REDIS_URL:redis://127.0.0.1:6379"
+
+smtp:
+  host: "$IDENTITY_SMTP_HOST:localhost"
+  port: "$IDENTITY_SMTP_PORT:1025"
+  from: "$IDENTITY_SMTP_FROM:no-reply@sparrow.local"
+
+s3:
+  endpoint: "$IDENTITY_S3_ENDPOINT:http://localhost:9000"
+  public_url: "$IDENTITY_S3_PUBLIC_URL:http://localhost:9000"
+  access_key: "$IDENTITY_S3_ACCESS_KEY:minioadmin"
+  secret_key: "$IDENTITY_S3_SECRET_KEY:minioadmin"
+  bucket: "$IDENTITY_S3_BUCKET:avatars"
