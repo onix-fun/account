@@ -6,6 +6,8 @@ ktor:
       - profile.AppKt.module
 
 identity:
+  grpc:
+    port: "$IDENTITY_GRPC_PORT:9097"
   jwt:
     issuer: "$IDENTITY_JWT_ISSUER:account-service"
     audience: "$IDENTITY_JWT_AUDIENCE:sparrow"

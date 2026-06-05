@@ -42,9 +42,4 @@ class SearchService(
         
         return userRepository.findByIds(ids).map { it.toPublicDto() }
     }
-
-    fun getUserIdByUsername(username: String): String? {
-        val user = userRepository.findByUsername(username)
-        return user?.id
-    }
 }

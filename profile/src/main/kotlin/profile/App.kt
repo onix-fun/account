@@ -31,6 +31,8 @@ import profile.auth.RegisterRequest
 import profile.auth.ResendRegistrationCodeRequest
 import profile.auth.ResetPasswordRequest
 import profile.auth.authRouting
+import profile.grpc.ProfileGrpcServer
+import profile.infrastructure.db.UserRepository
 import profile.infrastructure.di.koinModule
 import profile.infrastructure.events.EmailEventConsumer
 import profile.infrastructure.jwt.RsaKeyLoader
@@ -180,6 +182,11 @@ fun Application.module() {
     val userController by inject<UserController>()
     val searchController by inject<SearchController>()
     val sessionController by inject<SessionController>()
+    val userRepository by inject<UserRepository>()
+    val grpcPort = environment.config
+        .propertyOrNull("identity.grpc.port")
+        ?.getString()
+        ?.toIntOrNull() ?: 9097
     
     // 3. Background Tasks
     val backgroundTasksEnabled = environment.config
@@ -205,6 +212,16 @@ fun Application.module() {
         }
     }
     
+    // 3b. Start gRPC Server
+    launch {
+        try {
+            val grpcServer = ProfileGrpcServer(userRepository, grpcPort)
+            grpcServer.start()
+        } catch (e: Exception) {
+            log.error("Failed to start gRPC server: ${e.message}")
+        }
+    }
+
     // 4. Configure Routing
     routing {
         get("health", {
