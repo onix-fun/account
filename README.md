@@ -1,42 +1,96 @@
-# Сервис авторизации (Account)
+# Account
 
-Монорепозиторий для сервиса аккаунтов (Account) и авторизации.
+Сервис аккаунтов, авторизации и профилей. Монорепозиторий содержит frontend,
+backend, публичный gateway и готовые примеры развёртывания.
 
-## Структура проекта
+## Компоненты
 
-- `backend/` — Бэкенд сервиса профилей и авторизации на Kotlin (Ktor).
-- `frontend/` — Пользовательский интерфейс аккаунта на Vue 3 + TypeScript.
-- `gateway/` — Публичный шлюз на базе OpenResty (Nginx + Lua), выступающий как единая точка входа для приложения.
-- `dev/` — Директория с конфигурацией для локального запуска (инфраструктура, генерация ключей и переменные окружения).
-- `example/` — Пример продакшен-конфигурации (Docker Compose + `.env.example`), которая использует готовые образы из GitHub Container Registry (GHCR).
+| Директория | Назначение |
+|---|---|
+| `frontend/` | Vue 3 SPA: вход, регистрация, восстановление, профиль и сессии |
+| `backend/` | Kotlin/Ktor API, PostgreSQL, Redis, email outbox и S3-аватары |
+| `gateway/` | OpenResty: единая публичная точка входа, JWT, CSRF, CORS и rate limit |
+| `dev/` | Локальная Docker Compose-инфраструктура и генерация RSA-ключей |
+| `examples/` | Production-примеры для Docker Compose и Kubernetes |
+| `observability/` | Конфигурация OpenTelemetry Collector |
 
-## Локальный запуск (Разработка)
+Публичный трафик проходит через gateway. Backend, PostgreSQL, Redis и MinIO не
+должны быть доступны из интернета напрямую.
 
-Для удобства локальной разработки в корне проекта предусмотрен `Makefile`. Он автоматически генерирует RSA ключи, запускает инфраструктуру (базу данных, шлюз, бэкенд и т.д.) через Docker Compose и поднимает локальный сервер для фронтенда с Hot-Reload.
+## Локальный запуск
 
-```bash
+Требования: Docker, Node.js 22+, npm, OpenSSL и Make.
+
+```sh
 make up
 ```
 
-- Гейтвей будет доступен по адресу `http://localhost:8089`. Запросы к `/` перенаправляются на локальный сервер фронтенда (Vite HMR также поддерживается и проксируется).
-- Локальный фронтенд-сервер (Vite) запускается на порту `5174` (порт автоматически очищается при повторных запусках `make up`).
+Команда:
 
-Для остановки всех контейнеров используйте:
-```bash
-make down
+1. создаёт development RSA-ключи в `dev/secrets/`;
+2. запускает backend, gateway, PostgreSQL, Redis, MinIO, MailHog и OTel;
+3. запускает Vite frontend с hot reload.
+
+Адреса:
+
+| Сервис | URL |
+|---|---|
+| Frontend | `http://localhost:5174` |
+| Gateway/API | `http://localhost:8089` |
+| Swagger UI | `http://localhost:8089/swagger-ui` |
+| MailHog | `http://localhost:8026` |
+| MinIO Console | `http://localhost:9011` |
+
+Управление окружением:
+
+```sh
+make down   # остановить контейнеры
+make clean  # остановить и удалить локальные volumes
 ```
 
-Остановить и удалить все тома (очистить базу данных и кэш):
-```bash
-make clean
+## Проверки
+
+```sh
+cd backend && mvn clean test
+cd frontend && npm test -- --run && npm run build
+cd gateway && lua tests/test_browser_security.lua
+cd gateway && lua tests/test_jwt_auth.lua
+cd gateway && lua tests/test_session_status.lua
 ```
 
-## Развертывание (Production)
+## Безопасность
 
-При пуше тегов (например, `front_v1.0.0`, `back_v1.0.0`, `gate_v1.0.0`) GitHub Actions автоматически собирает и публикует Docker-образы в GitHub Container Registry (`ghcr.io`).
+- Пароли хешируются Argon2id.
+- Одноразовые коды хешируются контекстным HMAC-SHA-256, имеют срок действия,
+  лимит попыток и cooldown повторной отправки.
+- Access JWT привязан к активной сессии. Gateway и backend отклоняют отозванные
+  сессии.
+- Browser-запросы используют Secure/HttpOnly cookies и CSRF-защиту.
+- Email отправляется через зашифрованный PostgreSQL outbox с retry.
+- Ошибки API имеют стабильные строковые и числовые коды. Frontend показывает
+  только локализованные сообщения.
 
-Для запуска в продакшене:
-1. Перейдите в папку `example/`.
-2. Скопируйте `.env.example` в `.env` и настройте параметры (домены, секреты, доступы).
-3. Создайте папку `secrets/` внутри `example/` и положите туда ваши RSA ключи `account-jwt-private.pem` и `account-jwt-public.pem`.
-4. Запустите `docker-compose up -d`.
+## Production
+
+Используйте один из примеров:
+
+- [`examples/docker-compose/`](examples/docker-compose/) — один сервер за
+  доверенным HTTPS reverse proxy;
+- [`examples/kubernetes/`](examples/kubernetes/) — Kubernetes, TLS Ingress,
+  Services, PVC и NetworkPolicy.
+
+При `APP_ENV=production` backend и gateway завершают запуск при небезопасной
+конфигурации. Обязательны HTTPS, Secure cookies, точный CORS allowlist,
+доверенные proxy CIDR, SMTP STARTTLS и секреты длиной не менее 32 символов.
+
+## Релизы
+
+GitHub Actions публикует образы в GHCR по тегам:
+
+```text
+front_v1.0.0
+back_v1.0.0
+gate_v1.0.0
+```
+
+Перед релизом запускайте тесты всех изменённых компонентов.

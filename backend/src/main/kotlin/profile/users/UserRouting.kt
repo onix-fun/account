@@ -3,6 +3,7 @@ package profile.users
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.patch
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
+import io.github.smiley4.ktorswaggerui.dsl.routing.delete
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.routing.*
@@ -34,6 +35,10 @@ fun Route.userRouting(userController: UserController) {
                 description = "Uploads a new avatar image"
                 response { code(HttpStatusCode.OK) { body<UserProfileDto> { } } }
             }) { userController.uploadAvatar(call) }
+
+            post("/me/email-change/request") { userController.requestEmailChange(call) }
+            post("/me/email-change/confirm") { userController.confirmEmailChange(call) }
+            delete("/me/email-change") { userController.cancelEmailChange(call) }
         }
 
         authenticate {

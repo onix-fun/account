@@ -103,10 +103,16 @@ export const useAuthStore = defineStore("auth", () => {
     }
   };
 
-  const updateProfile = async (payload: { email?: string; firstName?: string; lastName?: string; bio?: string }) => {
+  const updateProfile = async (payload: { firstName?: string; lastName?: string; bio?: string }) => {
     currentUser.value = await AuthService.updateProfile(payload);
     syncAccounts();
   };
+
+  const requestEmailChange = (currentPassword: string, newEmail: string) => AuthService.requestEmailChange(currentPassword, newEmail);
+  const confirmEmailChange = async (code: string) => {
+    currentUser.value = await AuthService.confirmEmailChange(code);
+  };
+  const cancelEmailChange = () => AuthService.cancelEmailChange();
 
   const completeRegistrationProfile = async (payload: { firstName?: string; lastName?: string }) => {
     currentUser.value = await AuthService.updateProfile(payload);
@@ -246,6 +252,9 @@ export const useAuthStore = defineStore("auth", () => {
     confirmRegistration,
     resendRegistrationCode,
     updateProfile,
+    requestEmailChange,
+    confirmEmailChange,
+    cancelEmailChange,
     completeRegistrationProfile,
     uploadAvatar,
     verifyEmail,

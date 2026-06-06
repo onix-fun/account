@@ -52,7 +52,9 @@ class ServerTest {
                 "s3.public_url" to "http://localhost:9000",
                 "s3.access_key" to "minio",
                 "s3.secret_key" to "minio",
-                "s3.bucket" to "avatars"
+                "s3.bucket" to "avatars",
+                "identity.security.otp_hmac_secret" to "test-otp-hmac-secret-at-least-32-characters!",
+                "identity.security.internal_auth_secret" to "test-internal-auth-secret-at-least-32-characters"
             )
         }
     }
@@ -87,7 +89,8 @@ class ServerTest {
         
         assertEquals(HttpStatusCode.Accepted, registerResponse.status, "Registration failed: ${registerResponse.bodyAsText()}")
         val body = Json.parseToJsonElement(registerResponse.bodyAsText()).jsonObject
-        assertEquals("test@example.com", body["email"]?.toString()?.replace("\"", ""))
+        assertEquals("\"CODE_SENT\"", body["status"].toString())
+        assertEquals(null, body["email"])
         val unavailableResponse = client.get("/api/auth/username-available?username=testuser")
         assertEquals(HttpStatusCode.OK, unavailableResponse.status)
         assertTrue(unavailableResponse.bodyAsText().contains("\"available\":false"))
@@ -102,7 +105,7 @@ class ServerTest {
         assertEquals("\"AUTH_INVALID_CREDENTIALS\"", loginError["code"].toString())
         assertNotNull(loginError["numericCode"])
         assertNotNull(loginError["fieldErrors"])
-        assertNotNull(loginError["requestId"])
+        assertNull(loginError["requestId"])
 
         val pendingLookup = client.get("/api/auth/account-lookup?identifier=testuser")
         assertEquals(HttpStatusCode.OK, pendingLookup.status)
@@ -133,8 +136,8 @@ class ServerTest {
 
         val activeLookup = client.get("/api/auth/account-lookup?identifier=test@example.com")
         assertEquals(HttpStatusCode.OK, activeLookup.status)
-        assertTrue(activeLookup.bodyAsText().contains("\"state\":\"ACTIVE\""))
-        assertTrue(activeLookup.bodyAsText().contains("\"username\":\"testuser\""))
+        assertTrue(activeLookup.bodyAsText().contains("\"state\":\"EMAIL_LOGIN\""))
+        assertFalse(activeLookup.bodyAsText().contains("\"username\""))
         assertFalse(activeLookup.bodyAsText().contains("\"email\""))
 
         userRepository.updateEmailVerified(userId, false)
@@ -422,7 +425,7 @@ class ServerTest {
         val pending = store.findByEmail(email) ?: error("Pending registration missing for $email")
         for (value in 0..999_999) {
             val code = value.toString().padStart(6, '0')
-            if (TokenHasher.hash(code) == pending.codeHash) return code
+            if (TokenHasher.challenge("development-only-otp-secret", "REGISTRATION", email, code) == pending.codeHash) return code
         }
         error("Could not resolve pending registration code")
     }
@@ -430,10 +433,20 @@ class ServerTest {
     private fun codeForVerificationToken(repository: VerificationTokenRepository, purpose: String): String {
         for (value in 0..999_999) {
             val code = value.toString().padStart(6, '0')
-            val token = repository.findByHash(TokenHasher.hash(code))
+            val token = repository.findByHash(TokenHasher.challenge("development-only-otp-secret", purpose, testUserIdForPurpose(repository, purpose), code))
             if (token?.purpose == purpose) return code
         }
         error("Could not resolve $purpose verification code")
+    }
+
+    private fun testUserIdForPurpose(repository: VerificationTokenRepository, purpose: String): String {
+        val field = VerificationTokenRepository::class.java.getDeclaredField("dataSource").apply { isAccessible = true }
+        val dataSource = field.get(repository) as javax.sql.DataSource
+        return dataSource.connection.use { conn ->
+            conn.prepareStatement("SELECT user_id FROM verification_tokens WHERE purpose=? AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1").use {
+                it.setString(1, purpose); val rs = it.executeQuery(); if (rs.next()) rs.getObject(1).toString() else error("Missing token")
+            }
+        }
     }
 
     private companion object {

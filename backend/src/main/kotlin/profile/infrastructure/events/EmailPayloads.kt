@@ -13,3 +13,6 @@ data class PasswordResetEmailPayload(
     val email: String,
     val code: String
 )
+
+@Serializable
+data class SecurityNotificationPayload(val email: String, val message: String)

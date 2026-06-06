@@ -385,11 +385,7 @@ class AuthController(
     }
 
     private fun ApplicationCall.clientIpAddress(): String {
-        return request.headers["X-Forwarded-For"]
-            ?.substringBefore(",")
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?: request.headers["X-Real-IP"]
+        return request.headers["X-Real-IP"]
             ?: request.local.remoteHost
     }
 

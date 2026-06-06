@@ -10,6 +10,10 @@ class SearchService(
     private val userRepository: UserRepository,
     private val redisManager: RedisManager
 ) {
+    companion object {
+        private const val MAX_SEARCH_LIMIT = 50
+    }
+
     private val indexKey = "users:idx:username"
 
     fun indexUser(user: User) {
@@ -27,6 +31,7 @@ class SearchService(
     fun searchByUsernamePrefix(prefix: String, limit: Int = 10): List<UserPublicDto> {
         if (prefix.isBlank()) return emptyList()
         val redis = redisManager.sync() ?: return emptyList()
+        val cappedLimit = minOf(limit, MAX_SEARCH_LIMIT)
 
         val results = redis.zrangebylex(
             indexKey, 
@@ -34,7 +39,7 @@ class SearchService(
                 io.lettuce.core.Range.Boundary.including(prefix.lowercase()), 
                 io.lettuce.core.Range.Boundary.excluding(prefix.lowercase() + "\u00ff")
             ), 
-            io.lettuce.core.Limit.create(0, limit.toLong())
+            io.lettuce.core.Limit.create(0, cappedLimit.toLong())
         )
 
         val ids = results.map { it.split(":").last() }

@@ -4,8 +4,8 @@ local last_message = nil
 local last_exit = nil
 local original_getenv = os.getenv
 os.getenv = function(name)
-    if name == "ACCOUNT_TRUSTED_BASE_DOMAIN" then
-        return "example.com"
+    if name == "ACCOUNT_ALLOWED_ORIGINS" then
+        return "https://account.example.com,https://app.example.com"
     end
     return original_getenv(name)
 end
@@ -42,7 +42,7 @@ assert(last_exit == 403)
 assert(last_message:match("Valid CSRF token"))
 assert(last_message:match('"code":"SECURITY_CSRF_INVALID"'))
 assert(last_message:match('"numericCode":5100'))
-assert(last_message:match('"requestId":'))
+-- requestId removed from error responses
 
 ngx.var.http_authorization = "Bearer test"
 assert(security.enforce_csrf())

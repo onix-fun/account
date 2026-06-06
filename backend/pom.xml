@@ -13,7 +13,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <kotlin.version>2.2.0</kotlin.version>
-        <ktor.version>3.0.3</ktor.version>
+        <ktor.version>3.1.2</ktor.version>
         <kotlin.code.style>official</kotlin.code.style>
         <main.class>profile.MainKt</main.class>
         <java.version>23</java.version>
@@ -88,24 +88,9 @@
 
         <!-- Database & Migrations -->
         <dependency>
-            <groupId>org.jetbrains.exposed</groupId>
-            <artifactId>exposed-core</artifactId>
-            <version>0.56.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.jetbrains.exposed</groupId>
-            <artifactId>exposed-jdbc</artifactId>
-            <version>0.56.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.jetbrains.exposed</groupId>
-            <artifactId>exposed-java-time</artifactId>
-            <version>0.56.0</version>
-        </dependency>
-        <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.7.3</version>
+            <version>42.7.5</version>
         </dependency>
         <dependency>
             <groupId>com.zaxxer</groupId>
@@ -115,12 +100,12 @@
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
-            <version>10.10.0</version>
+            <version>10.22.0</version>
         </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-database-postgresql</artifactId>
-            <version>10.10.0</version>
+            <version>10.22.0</version>
         </dependency>
 
         <!-- Redis -->
@@ -201,9 +186,14 @@
 
         <!-- Logging -->
         <dependency>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-mail</artifactId>
+            <version>2.0.3</version>
+        </dependency>
+        <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.6</version>
+            <version>1.5.18</version>
         </dependency>
 
         <!-- Koin for DI -->
@@ -252,7 +242,7 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <version>2.2.224</version>
+            <version>2.3.232</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

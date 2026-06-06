@@ -49,7 +49,7 @@ const logoutCurrent = async () => {
   }
 };
 
-const sessionDevice = (session: AuthSession) => session.deviceId || session.userAgent || t("profile.unknownDevice");
+const sessionDevice = (session: AuthSession) => session.userAgent || session.deviceId || t("profile.unknownDevice");
 const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleString() : t("common.unknown"));
 </script>
 

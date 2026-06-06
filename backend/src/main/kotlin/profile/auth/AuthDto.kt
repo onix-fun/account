@@ -60,6 +60,9 @@ data class AccountLookupResponse(
 )
 
 @Serializable
+data class CodeSentResponse(val status: String = "CODE_SENT", val expiresInSeconds: Long = 900)
+
+@Serializable
 data class PublicVerificationRequest(
     val identifier: String
 )
@@ -85,9 +88,8 @@ data class ApiTokenResponse(
 
 @Serializable
 data class RegistrationStartedResponse(
-    val email: String,
-    val expiresInSeconds: Long,
-    val message: String
+    val status: String = "CODE_SENT",
+    val expiresInSeconds: Long
 )
 
 @Serializable

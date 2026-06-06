@@ -9,7 +9,7 @@ import javax.sql.DataSource
 
 @Serializable
 data class User(
-    val id: String,
+    val id: String = "",
     val email: String,
     val username: String,
     val passwordHash: String,
@@ -29,10 +29,12 @@ data class User(
 class UserRepository(private val dataSource: DataSource) {
     companion object {
         private const val CREATE_SQL = """
-            INSERT INTO users (id, email, username, password_hash, email_verified, first_name, last_name, role, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (email, username, password_hash, email_verified, first_name, last_name, role, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING *
         """
-        private const val UPDATE_PROFILE_SQL = "UPDATE users SET email = ?, first_name = ?, last_name = ?, bio = ?, updated_at = ? WHERE id = ?"
+        private const val UPDATE_PROFILE_SQL = "UPDATE users SET first_name = ?, last_name = ?, bio = ?, updated_at = ? WHERE id = ?"
+        private const val UPDATE_EMAIL_SQL = "UPDATE users SET email = ?, email_verified = TRUE, updated_at = ? WHERE id = ?"
         private const val UPDATE_AVATAR_SQL = "UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?"
         private const val FIND_BY_EMAIL_SQL = "SELECT * FROM users WHERE LOWER(email) = LOWER(?)"
         private const val FIND_BY_ID_SQL = "SELECT * FROM users WHERE id = ?"
@@ -44,35 +46,48 @@ class UserRepository(private val dataSource: DataSource) {
         private const val DELETE_SQL = "DELETE FROM users WHERE id = ?"
     }
 
-    fun create(user: User) {
+    fun create(user: User): User {
         dataSource.connection.use { conn ->
-            conn.prepareStatement(CREATE_SQL).use { stmt ->
-                stmt.setObject(1, UUID.fromString(user.id))
-                stmt.setString(2, user.email)
-                stmt.setString(3, user.username)
-                stmt.setString(4, user.passwordHash)
-                stmt.setBoolean(5, user.emailVerified)
-                stmt.setString(6, user.firstName)
-                stmt.setString(7, user.lastName)
-                stmt.setString(8, user.role)
-                stmt.setString(9, user.status)
-                stmt.setTimestamp(10, java.sql.Timestamp.from(user.createdAt))
-                stmt.setTimestamp(11, java.sql.Timestamp.from(user.updatedAt))
+            val created = conn.prepareStatement(CREATE_SQL).use { stmt ->
+                stmt.setString(1, user.email)
+                stmt.setString(2, user.username)
+                stmt.setString(3, user.passwordHash)
+                stmt.setBoolean(4, user.emailVerified)
+                stmt.setString(5, user.firstName)
+                stmt.setString(6, user.lastName)
+                stmt.setString(7, user.role)
+                stmt.setString(8, user.status)
+                stmt.setTimestamp(9, java.sql.Timestamp.from(user.createdAt))
+                stmt.setTimestamp(10, java.sql.Timestamp.from(user.updatedAt))
+                val rs = stmt.executeQuery()
+                rs.next()
+                mapRow(rs)
+            }
+            conn.commit()
+            return created
+        }
+    }
+
+    fun updateProfile(userId: String, firstName: String?, lastName: String?, bio: String?) {
+        dataSource.connection.use { conn ->
+            conn.prepareStatement(UPDATE_PROFILE_SQL).use { stmt ->
+                stmt.setString(1, firstName)
+                stmt.setString(2, lastName)
+                stmt.setString(3, bio)
+                stmt.setTimestamp(4, java.sql.Timestamp.from(Instant.now()))
+                stmt.setObject(5, UUID.fromString(userId))
                 stmt.executeUpdate()
             }
             conn.commit()
         }
     }
 
-    fun updateProfile(userId: String, email: String, firstName: String?, lastName: String?, bio: String?) {
+    fun updateEmail(userId: String, email: String) {
         dataSource.connection.use { conn ->
-            conn.prepareStatement(UPDATE_PROFILE_SQL).use { stmt ->
+            conn.prepareStatement(UPDATE_EMAIL_SQL).use { stmt ->
                 stmt.setString(1, email)
-                stmt.setString(2, firstName)
-                stmt.setString(3, lastName)
-                stmt.setString(4, bio)
-                stmt.setTimestamp(5, java.sql.Timestamp.from(Instant.now()))
-                stmt.setObject(6, UUID.fromString(userId))
+                stmt.setTimestamp(2, java.sql.Timestamp.from(Instant.now()))
+                stmt.setObject(3, UUID.fromString(userId))
                 stmt.executeUpdate()
             }
             conn.commit()

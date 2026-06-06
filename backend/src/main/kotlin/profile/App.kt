@@ -20,6 +20,7 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
@@ -50,7 +51,16 @@ import profile.shared.ApiErrorResponse
 import profile.shared.ApiException
 import profile.shared.ApiFieldError
 import profile.users.UserController
+import profile.users.RequestEmailChangeRequest
+import profile.users.ConfirmEmailChangeRequest
+import profile.infrastructure.db.SessionRepository
+import profile.infrastructure.config.SecurityConfig
+import profile.infrastructure.ratelimit.RateLimit
+import profile.infrastructure.ratelimit.RateLimitConfig
+import profile.infrastructure.redis.RedisManager
 import profile.users.userRouting
+
+private const val MAX_BODY_SIZE = 5L * 1024 * 1024 // 5MB, matches AVATAR_TOO_LARGE
 
 fun Application.module() {
     // 1. Configure Plugins
@@ -60,7 +70,23 @@ fun Application.module() {
     }
 
     install(ContentNegotiation) {
-        json()
+        json(Json {
+            explicitNulls = false
+            encodeDefaults = true
+        })
+    }
+
+    intercept(ApplicationCallPipeline.Setup) {
+        val contentLength = context.request.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
+        if (contentLength != null && contentLength > MAX_BODY_SIZE) {
+            context.respond(HttpStatusCode.PayloadTooLarge, ApiErrorResponse(
+                code = ApiErrorCode.AVATAR_TOO_LARGE.name,
+                numericCode = ApiErrorCode.AVATAR_TOO_LARGE.numericCode,
+                message = ApiErrorCode.AVATAR_TOO_LARGE.message,
+                fieldErrors = emptyList()
+            ))
+            return@intercept
+        }
     }
 
     install(RequestValidation) {
@@ -138,6 +164,40 @@ fun Application.module() {
                 else -> ValidationResult.Valid
             }
         }
+        validate<RequestEmailChangeRequest> { request ->
+            when {
+                request.currentPassword.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "currentPassword")
+                request.newEmail.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "newEmail")
+                else -> ValidationResult.Valid
+            }
+        }
+        validate<ConfirmEmailChangeRequest> { request ->
+            if (!request.code.matches(Regex("\\d{6}"))) invalid(ApiErrorCode.VALIDATION_INVALID_CODE, "code") else ValidationResult.Valid
+        }
+    }
+
+    install(RateLimit) {
+        route("/api/auth/login", max = 20, windowSeconds = 60)
+        route("/api/auth/token", max = 20, windowSeconds = 60)
+        route("/api/auth/register", max = 20, windowSeconds = 60)
+        route("/api/auth/resend-registration-code", max = 20, windowSeconds = 60)
+        route("/api/auth/forgot-password", max = 20, windowSeconds = 60)
+        route("/api/auth/reset-password", max = 20, windowSeconds = 60)
+        route("/api/auth/confirm-registration", max = 20, windowSeconds = 60)
+        route("/api/auth/verify-email", max = 20, windowSeconds = 60)
+        route("/api/auth/username-available", max = 20, windowSeconds = 60)
+        route("/api/auth/account-lookup", max = 20, windowSeconds = 60)
+        route("/api/auth/public-verification/", max = 20, windowSeconds = 60)
+        route("/api/auth/token/refresh", max = 30, windowSeconds = 60)
+        route("/api/auth/refresh", max = 30, windowSeconds = 60)
+        route("/api/auth/switch", max = 30, windowSeconds = 60)
+        route("/api/auth/logout", max = 30, windowSeconds = 60)
+        route("/api/users/me/avatar", max = 20, windowSeconds = 60)
+    }
+
+    val redisManager by inject<RedisManager>()
+    environment.monitor.subscribe(ApplicationStopping) {
+        redisManager.close()
     }
 
     install(StatusPages) {
@@ -167,6 +227,9 @@ fun Application.module() {
         environment.config.property("identity.jwt.public_key_path").getString()
     )
 
+    val sessionRepository by inject<SessionRepository>()
+    val userRepository by inject<UserRepository>()
+    val securityConfig by inject<SecurityConfig>()
     install(Authentication) {
         jwt {
             authHeader { call ->
@@ -180,7 +243,9 @@ fun Application.module() {
                     .build()
             )
             validate { credential ->
-                JWTPrincipal(credential.payload)
+                val sid = credential.payload.getClaim("sid").asString()
+                val session = sid?.let(sessionRepository::findById)
+                if (session != null && session.revokedAt == null && session.expiresAt.isAfter(java.time.Instant.now())) JWTPrincipal(credential.payload) else null
             }
         }
     }
@@ -218,7 +283,6 @@ fun Application.module() {
     val userController by inject<UserController>()
     val searchController by inject<SearchController>()
     val sessionController by inject<SessionController>()
-    val userRepository by inject<UserRepository>()
     val grpcPort = environment.config
         .propertyOrNull("identity.grpc.port")
         ?.getString()
@@ -248,10 +312,18 @@ fun Application.module() {
         }
     }
     
-    // 3b. Start gRPC Server
-    launch {
+    // 3b. Start optional mTLS gRPC Server
+    val grpcEnabled = environment.config.propertyOrNull("identity.grpc.enabled")?.getString()?.toBoolean() ?: false
+    if (grpcEnabled) launch {
         try {
-            val grpcServer = ProfileGrpcServer(userRepository, grpcPort)
+            val grpcServer = ProfileGrpcServer(
+                userRepository, grpcPort,
+                environment.config.property("identity.grpc.certificate").getString(),
+                environment.config.property("identity.grpc.private_key").getString(),
+                environment.config.property("identity.grpc.client_ca").getString(),
+                environment.config.property("identity.grpc.allowed_client_sans").getString(),
+                environment.config.propertyOrNull("identity.grpc.reflection")?.getString()?.toBoolean() ?: false
+            )
             grpcServer.start()
         } catch (e: Exception) {
             log.error("Failed to start gRPC server: ${e.message}")
@@ -260,6 +332,21 @@ fun Application.module() {
 
     // 4. Configure Routing
     routing {
+        get("/internal/session-check") {
+            if (call.request.headers["X-Internal-Auth"] != securityConfig.internalAuthSecret) {
+                call.respond(HttpStatusCode.Forbidden); return@get
+            }
+            val session = call.request.queryParameters["sid"]?.let { runCatching { sessionRepository.findById(it) }.getOrNull() }
+            val userId = call.request.queryParameters["uid"]
+            if (session != null && session.userId == userId && session.revokedAt == null && session.expiresAt.isAfter(java.time.Instant.now())) {
+                val user = userRepository.findById(userId)
+                if (user == null || user.status != "ACTIVE") {
+                    redisManager.revokeSession(session.id)
+                    call.respond(HttpStatusCode.Unauthorized); return@get
+                }
+                call.respond(HttpStatusCode.NoContent)
+            } else call.respond(HttpStatusCode.Unauthorized)
+        }
         get("health", {
             tags = setOf("System")
             summary = "Health check"
@@ -284,15 +371,13 @@ private fun invalid(error: ApiErrorCode, vararg fields: String): ValidationResul
 }
 
 private suspend fun ApplicationCall.respondApiError(error: ApiErrorCode, fields: List<String> = emptyList()) {
-    val requestId = request.headers["X-Correlation-Id"] ?: java.util.UUID.randomUUID().toString()
     respond(
         error.status,
         ApiErrorResponse(
             code = error.name,
             numericCode = error.numericCode,
             message = error.message,
-            fieldErrors = fields.map { ApiFieldError(it, error.name, error.numericCode) },
-            requestId = requestId
+            fieldErrors = fields.map { ApiFieldError(it, error.name, error.numericCode) }
         )
     )
 }

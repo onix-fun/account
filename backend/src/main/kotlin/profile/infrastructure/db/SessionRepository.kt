@@ -5,7 +5,7 @@ import java.util.*
 import javax.sql.DataSource
 
 data class Session(
-    val id: String,
+    val id: String = "",
     val userId: String,
     val refreshTokenHash: String,
     val previousRefreshTokenHash: String? = null,
@@ -23,8 +23,9 @@ class SessionRepository(private val dataSource: DataSource) {
     companion object {
         private const val REFRESH_TOKEN_GRACE_SECONDS = 30L
         private const val CREATE_SQL = """
-            INSERT INTO sessions (id, user_id, refresh_token_hash, device_id, user_agent, ip_address, expires_at, last_used_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (user_id, refresh_token_hash, device_id, user_agent, ip_address, expires_at, last_used_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
         """
         private const val FIND_BY_TOKEN_HASH_SQL = "SELECT * FROM sessions WHERE refresh_token_hash = ? AND revoked_at IS NULL"
         private const val FIND_BY_TOKEN_HASH_WITH_GRACE_SQL = """
@@ -42,6 +43,7 @@ class SessionRepository(private val dataSource: DataSource) {
         private const val FIND_ACTIVE_BY_IDS_SQL = "SELECT * FROM sessions WHERE id IN (%s) AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP"
         private const val REVOKE_SQL = "UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?"
         private const val REVOKE_ALL_FOR_USER_SQL = "UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ? AND revoked_at IS NULL"
+        private const val REVOKE_ALL_EXCEPT_SQL = "UPDATE sessions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ? AND id <> ? AND revoked_at IS NULL"
         private const val UPDATE_EXPIRATION_SQL = "UPDATE sessions SET expires_at = ?, last_used_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         private const val ROTATE_TOKEN_SQL = """
             UPDATE sessions
@@ -75,21 +77,23 @@ class SessionRepository(private val dataSource: DataSource) {
         private const val FIND_BY_ID_SQL = "SELECT * FROM sessions WHERE id = ?"
     }
 
-    fun create(session: Session) {
+    fun create(session: Session): String {
         dataSource.connection.use { conn ->
-            conn.prepareStatement(CREATE_SQL).use { stmt ->
-                stmt.setObject(1, UUID.fromString(session.id))
-                stmt.setObject(2, UUID.fromString(session.userId))
-                stmt.setString(3, session.refreshTokenHash)
-                stmt.setString(4, session.deviceId)
-                stmt.setString(5, session.userAgent)
-                stmt.setString(6, session.ipAddress)
-                stmt.setTimestamp(7, java.sql.Timestamp.from(session.expiresAt))
-                stmt.setTimestamp(8, java.sql.Timestamp.from(session.lastUsedAt))
-                stmt.setTimestamp(9, java.sql.Timestamp.from(session.createdAt))
-                stmt.executeUpdate()
+            val id = conn.prepareStatement(CREATE_SQL).use { stmt ->
+                stmt.setObject(1, UUID.fromString(session.userId))
+                stmt.setString(2, session.refreshTokenHash)
+                stmt.setString(3, session.deviceId)
+                stmt.setString(4, session.userAgent)
+                stmt.setString(5, session.ipAddress)
+                stmt.setTimestamp(6, java.sql.Timestamp.from(session.expiresAt))
+                stmt.setTimestamp(7, java.sql.Timestamp.from(session.lastUsedAt))
+                stmt.setTimestamp(8, java.sql.Timestamp.from(session.createdAt))
+                val rs = stmt.executeQuery()
+                rs.next()
+                rs.getObject("id").toString()
             }
             conn.commit()
+            return id
         }
     }
 
@@ -160,6 +164,14 @@ class SessionRepository(private val dataSource: DataSource) {
                 stmt.executeUpdate()
             }
             conn.commit()
+        }
+    }
+
+    fun revokeAllExcept(userId: String, sessionId: String) {
+        dataSource.connection.use { conn ->
+            conn.prepareStatement(REVOKE_ALL_EXCEPT_SQL).use {
+                it.setObject(1, UUID.fromString(userId)); it.setObject(2, UUID.fromString(sessionId)); it.executeUpdate()
+            }; conn.commit()
         }
     }
 

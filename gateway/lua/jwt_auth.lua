@@ -1,11 +1,12 @@
 local security = require "browser_security"
 local token_verifier = require "rs256_token"
+local session_status = require "session_status"
 
 local function unauthorized(message)
     ngx.status = ngx.HTTP_UNAUTHORIZED
     ngx.header["Content-Type"] = "application/json"
     ngx.say('{"code":"SECURITY_TOKEN_INVALID","numericCode":5102,"message":"' .. (message or "Invalid bearer token") ..
-        '","fieldErrors":[],"requestId":"' .. (ngx.var.correlation_id or ngx.var.request_id or "") .. '"}')
+        '","fieldErrors":[]}')
     return ngx.exit(ngx.HTTP_UNAUTHORIZED)
 end
 
@@ -65,6 +66,9 @@ if not expires_at or expires_at <= ngx.time() then
 end
 if not payload.sub or payload.sub == "" then
     return unauthorized("Token subject is required")
+end
+if not session_status.require_active(payload.sid, payload.sub, expires_at) then
+    return unauthorized("Session is revoked or unavailable")
 end
 
 ngx.var.auth_client_id = payload.sub

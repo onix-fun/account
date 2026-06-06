@@ -1,19 +1,19 @@
-version: '3.8'
-
 services:
   account-gateway:
     image: ghcr.io/onix-fun/accaunt/gateway:${TAG:-latest}
-    env_file:
-      - .env
     environment:
       IDENTITY_JWT_PUBLIC_KEY_PATH: /run/secrets/account-jwt-public.pem
       IDENTITY_JWT_ISSUER: account-service
       IDENTITY_JWT_AUDIENCE: account
-      ACCOUNT_TRUSTED_BASE_DOMAIN: ${DOMAIN:-localhost}
+      APP_ENV: production
+      ACCOUNT_ALLOWED_ORIGINS: ${ACCOUNT_ALLOWED_ORIGINS:?required}
+      ACCOUNT_HSTS_HEADER: "max-age=31536000; includeSubDomains"
+      IDENTITY_INTERNAL_AUTH_SECRET: ${IDENTITY_INTERNAL_AUTH_SECRET:?required}
       ACCOUNT_SWAGGER_UI_ENABLED: "false"
-      ACCOUNT_TRUSTED_PROXY_CIDRS: "127.0.0.1/32"
-    ports:
-      - "${PORT:-8080}:8089"
+      ACCOUNT_TRUSTED_PROXY_CIDRS: ${ACCOUNT_TRUSTED_PROXY_CIDRS:?required}
+      ACCOUNT_DNS_RESOLVER: "127.0.0.11"
+    expose:
+      - "8089"
     volumes:
       - ./secrets/account-jwt-public.pem:/run/secrets/account-jwt-public.pem:ro
     depends_on:
@@ -31,8 +31,6 @@ services:
 
   profile:
     image: ghcr.io/onix-fun/accaunt/backend:${TAG:-latest}
-    env_file:
-      - .env
     environment:
       PROFILE_PORT: "8080"
       IDENTITY_JWT_ISSUER: account-service
@@ -41,14 +39,22 @@ services:
       IDENTITY_JWT_PUBLIC_KEY_PATH: /run/secrets/account-jwt-public.pem
       IDENTITY_ACCESS_TOKEN_EXP_MINUTES: "15"
       IDENTITY_REFRESH_TOKEN_EXP_DAYS: "30"
+      IDENTITY_REFRESH_COOKIE_SECURE: "true"
+      APP_ENV: production
+      IDENTITY_OTP_HMAC_SECRET: ${IDENTITY_OTP_HMAC_SECRET:?required}
+      IDENTITY_INTERNAL_AUTH_SECRET: ${IDENTITY_INTERNAL_AUTH_SECRET:?required}
+      IDENTITY_SMTP_STARTTLS: "true"
       IDENTITY_DATABASE_JDBC_URL: ${DB_URL:-jdbc:postgresql://account-postgres:5432/account}
       IDENTITY_DATABASE_USERNAME: ${DB_USER:-account}
       IDENTITY_DATABASE_PASSWORD: ${DB_PASSWORD:-account}
       IDENTITY_REDIS_URL: redis://account-redis:6379
-      IDENTITY_SMTP_HOST: account-mail
-      IDENTITY_SMTP_PORT: "1025"
+      IDENTITY_SMTP_HOST: ${IDENTITY_SMTP_HOST:?required}
+      IDENTITY_SMTP_PORT: ${IDENTITY_SMTP_PORT:-587}
+      IDENTITY_SMTP_FROM: ${IDENTITY_SMTP_FROM:?required}
+      IDENTITY_SMTP_USERNAME: ${IDENTITY_SMTP_USERNAME:?required}
+      IDENTITY_SMTP_PASSWORD: ${IDENTITY_SMTP_PASSWORD:?required}
       IDENTITY_S3_ENDPOINT: http://account-minio:9000
-      IDENTITY_S3_PUBLIC_URL: ${S3_PUBLIC_URL:-http://localhost:${PORT:-8080}/api/avatars}
+      IDENTITY_S3_PUBLIC_URL: ${PUBLIC_BASE_URL:?required}/api/avatars
       IDENTITY_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-account-minio}
       IDENTITY_S3_SECRET_KEY: ${S3_SECRET_KEY:-account-minio-secret}
       IDENTITY_S3_BUCKET: avatars
@@ -67,15 +73,13 @@ services:
     restart: unless-stopped
 
   account-postgres:
-    image: postgres:16
-    env_file:
-      - .env
+    image: postgres:18
     environment:
       POSTGRES_DB: ${DB_NAME:-account}
       POSTGRES_USER: ${DB_USER:-account}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-account}
     volumes:
-      - account_postgres_data:/var/lib/postgresql/data
+      - account_postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-account} -d ${DB_NAME:-account}"]
       interval: 5s
@@ -123,12 +127,6 @@ services:
       "
     networks:
       - account-network
-
-  account-mail:
-    image: mailhog/mailhog:latest
-    networks:
-      - account-network
-    restart: unless-stopped
 
 volumes:
   account_postgres_data:

@@ -826,6 +826,36 @@ button:disabled {
   padding: 12px 0;
 }
 
+.email-change-row {
+  align-items: start;
+}
+
+.email-change-row .profile-edit-value,
+.profile-email-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.email-change-row .inline-input {
+  min-width: min(18rem, 100%);
+}
+
+@media (max-width: 640px) {
+  .email-change-row,
+  .email-change-row .profile-edit-value,
+  .profile-email-actions {
+    display: grid;
+    width: 100%;
+  }
+
+  .email-change-row .inline-input,
+  .profile-email-actions .btn {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 .profile-edit-row.editing {
   align-items: start;
 }

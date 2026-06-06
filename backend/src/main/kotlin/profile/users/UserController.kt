@@ -10,11 +10,13 @@ import io.ktor.server.response.*
 import profile.infrastructure.db.User
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
+import profile.auth.AuthService
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
 class UserController(
-    private val userService: UserService
+    private val userService: UserService,
+    private val authService: AuthService
 ) {
     suspend fun getMe(call: ApplicationCall) {
         val userId = call.principal<JWTPrincipal>()!!.payload.subject
@@ -30,6 +32,25 @@ class UserController(
         
         val updatedUser = userService.updateProfile(userId, request)
         call.respond(HttpStatusCode.OK, updatedUser.toProfileDto())
+    }
+
+    suspend fun requestEmailChange(call: ApplicationCall) {
+        val principal = call.principal<JWTPrincipal>()!!
+        val request = call.receive<RequestEmailChangeRequest>()
+        authService.requestEmailChange(principal.payload.subject, request.currentPassword, request.newEmail)
+        call.respond(HttpStatusCode.Accepted, profile.auth.CodeSentResponse())
+    }
+
+    suspend fun confirmEmailChange(call: ApplicationCall) {
+        val principal = call.principal<JWTPrincipal>()!!
+        val request = call.receive<ConfirmEmailChangeRequest>()
+        authService.confirmEmailChange(principal.payload.subject, principal.payload.getClaim("sid").asString(), request.code)
+        call.respond(HttpStatusCode.OK)
+    }
+
+    suspend fun cancelEmailChange(call: ApplicationCall) {
+        authService.cancelEmailChange(call.principal<JWTPrincipal>()!!.payload.subject)
+        call.respond(HttpStatusCode.NoContent)
     }
 
     suspend fun uploadAvatar(call: ApplicationCall) {

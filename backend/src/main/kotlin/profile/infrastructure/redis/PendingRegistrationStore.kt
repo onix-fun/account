@@ -18,6 +18,8 @@ data class PendingRegistration(
     val firstName: String? = null,
     val lastName: String? = null,
     val codeHash: String,
+    val codeAttempts: Int = 0,
+    val codeCreatedAtEpochSeconds: Long = Instant.now().epochSecond,
     val createdAtEpochSeconds: Long = Instant.now().epochSecond
 )
 
@@ -101,7 +103,8 @@ class PendingRegistrationStore(
 
     fun refreshCode(email: String, codeHash: String): PendingRegistration {
         val existing = findByEmail(email) ?: apiError(ApiErrorCode.AUTH_PENDING_REGISTRATION_NOT_FOUND, "email")
-        val updated = existing.copy(codeHash = codeHash)
+        if (existing.codeCreatedAtEpochSeconds > Instant.now().epochSecond - 60) apiError(ApiErrorCode.AUTH_CODE_RESEND_TOO_SOON)
+        val updated = existing.copy(codeHash = codeHash, codeAttempts = 0, codeCreatedAtEpochSeconds = Instant.now().epochSecond)
 
         val redis = redisManager.sync()
         if (redis != null) {
@@ -119,6 +122,17 @@ class PendingRegistrationStore(
         emailByCodeHash.remove(existing.codeHash)
         writeMemory(updated)
         return updated
+    }
+
+    fun verifyCode(email: String, codeHash: String) {
+        val pending = findByEmail(email) ?: apiError(ApiErrorCode.AUTH_PENDING_REGISTRATION_NOT_FOUND, "identifier")
+        if (pending.codeAttempts >= 5) apiError(ApiErrorCode.AUTH_CODE_LOCKED, "code")
+        if (pending.codeHash == codeHash) return
+        val updated = pending.copy(codeAttempts = pending.codeAttempts + 1)
+        val redis = redisManager.sync()
+        if (redis != null) redis.setex(pendingKey(email), ttlSeconds, json.encodeToString(updated)) else writeMemory(updated)
+        if (updated.codeAttempts >= 5) apiError(ApiErrorCode.AUTH_CODE_LOCKED, "code")
+        apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
     }
 
     fun delete(email: String) {
