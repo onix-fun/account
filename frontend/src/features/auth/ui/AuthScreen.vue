@@ -3,16 +3,17 @@ import { useI18n } from "vue-i18n";
 import { useAuthStore } from "@/infra/store";
 import { useAuthFlow } from "@/features/auth/model/useAuthFlow";
 import LocaleSwitcher from "@/shared/ui/LocaleSwitcher.vue";
+import VerificationCodeInput from "@/shared/ui/VerificationCodeInput.vue";
 
 const authStore = useAuthStore();
 const { t } = useI18n();
 const flow = useAuthFlow();
 
 const steps = [
-  { key: "account", label: "auth.steps.account" },
-  { key: "password", label: "auth.steps.password" },
-  { key: "code", label: "auth.steps.code" },
-  { key: "done", label: "auth.steps.done" },
+  { key: "account", label: "auth.steps.account", icon: "pi pi-user" },
+  { key: "password", label: "auth.steps.password", icon: "pi pi-key" },
+  { key: "code", label: "auth.steps.code", icon: "pi pi-shield" },
+  { key: "done", label: "auth.steps.done", icon: "pi pi-check" },
 ];
 </script>
 
@@ -24,8 +25,11 @@ const steps = [
           v-for="step in steps"
           :key="step.key"
           :class="{ active: flow.activeStep.value === step.key }"
+          :aria-label="t(step.label)"
+          :title="t(step.label)"
         >
-          {{ t(step.label) }}
+          <i :class="step.icon" aria-hidden="true"></i>
+          <span class="visually-hidden">{{ t(step.label) }}</span>
         </span>
       </nav>
 
@@ -209,23 +213,16 @@ const steps = [
         </div>
         <label class="field">
           <span>{{ t("auth.verificationCode") }}</span>
-          <input
+          <VerificationCodeInput
             v-model="flow.publicVerificationCode.value"
-            class="input xl code-input"
-            inputmode="numeric"
-            pattern="[0-9]{6}"
-            autocomplete="one-time-code"
-            required
+            :autofocus="true"
+            :error="
+              flow.fieldErrors.value.code ||
+              (flow.publicVerificationCode.value && !/^\d{6}$/.test(flow.publicVerificationCode.value)
+                ? t('errors.VALIDATION_INVALID_CODE')
+                : '')
+            "
           />
-          <span
-            v-if="flow.publicVerificationCode.value && !/^\d{6}$/.test(flow.publicVerificationCode.value)"
-            class="validation-message text-danger"
-          >
-            {{ t("errors.VALIDATION_INVALID_CODE") }}
-          </span>
-          <span v-else-if="flow.fieldErrors.value.code" class="validation-message text-danger">
-            {{ flow.fieldErrors.value.code }}
-          </span>
         </label>
         <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading || !/^\d{6}$/.test(flow.publicVerificationCode.value)">
           {{ t("auth.confirmEmail") }}
@@ -239,16 +236,18 @@ const steps = [
         </div>
         <label class="field">
           <span>{{ t("auth.verificationCode") }}</span>
-          <input
+          <VerificationCodeInput
             v-model="flow.registrationCode.value"
-            class="input xl code-input"
-            inputmode="numeric"
-            pattern="[0-9]{6}"
-            autocomplete="one-time-code"
-            required
+            :autofocus="true"
+            :error="
+              flow.fieldErrors.value.code ||
+              (flow.registrationCode.value && !/^\d{6}$/.test(flow.registrationCode.value)
+                ? t('errors.VALIDATION_INVALID_CODE')
+                : '')
+            "
           />
         </label>
-        <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading">
+        <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading || !/^\d{6}$/.test(flow.registrationCode.value)">
           {{ t("auth.confirmEmail") }}
         </button>
         <div class="auth-actions center">
@@ -290,19 +289,20 @@ const steps = [
       </form>
 
       <form v-else class="account-form" @submit.prevent="flow.submitResetPassword">
-        <label class="field">
-          <span>{{ t("auth.emailOrUsername") }}</span>
-          <input v-model="flow.resetIdentifier.value" class="input xl" autocomplete="username" required />
-        </label>
+        <div class="account-chip">
+          <i class="pi pi-user"></i>
+          <span>{{ flow.resetIdentifier.value }}</span>
+        </div>
         <label class="field">
           <span>{{ t("auth.verificationCode") }}</span>
-          <input
+          <VerificationCodeInput
             v-model="flow.resetCode.value"
-            class="input xl code-input"
-            inputmode="numeric"
-            pattern="[0-9]{6}"
-            autocomplete="one-time-code"
-            required
+            :error="
+              flow.fieldErrors.value.code ||
+              (flow.resetCode.value && !/^\d{6}$/.test(flow.resetCode.value)
+                ? t('errors.VALIDATION_INVALID_CODE')
+                : '')
+            "
           />
         </label>
         <label class="field">
@@ -316,7 +316,7 @@ const steps = [
             minlength="8"
           />
         </label>
-        <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading">
+        <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading || !/^\d{6}$/.test(flow.resetCode.value)">
           {{ t("auth.resetPassword") }}
         </button>
       </form>

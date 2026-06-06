@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiErrorMessage } from "@/api/client";
+import { apiErrorMessage, parseApiError } from "@/api/client";
 import { useAuthStore } from "@/infra/store";
+import VerificationCodeInput from "@/shared/ui/VerificationCodeInput.vue";
 
 const emit = defineEmits<{
   message: [message: string, tone?: "success" | "error" | "warning"];
@@ -12,6 +13,7 @@ const authStore = useAuthStore();
 const { t } = useI18n();
 
 const isResetCodeSent = ref(false);
+const resetCodeError = ref("");
 const directForm = reactive({
   currentPassword: "",
   newPassword: "",
@@ -53,6 +55,7 @@ const changePassword = async () => {
 };
 
 const requestResetCode = async () => {
+  resetCodeError.value = "";
   try {
     await authStore.forgotPassword(accountEmail.value);
     isResetCodeSent.value = true;
@@ -63,6 +66,7 @@ const requestResetCode = async () => {
 };
 
 const resetPassword = async () => {
+  resetCodeError.value = "";
   if (resetForm.newPassword !== resetForm.confirmPassword) {
     emit("message", t("auth.passwordMismatch"), "error");
     return;
@@ -72,7 +76,13 @@ const resetPassword = async () => {
     await authStore.resetPasswordAndEndSession(accountEmail.value, resetForm.code, resetForm.newPassword);
     emit("message", t("system.passwordChanged"));
   } catch (cause) {
-    emit("message", apiErrorMessage(cause), "error");
+    const parsed = parseApiError(cause);
+    const codeError = parsed.fieldErrors.find((error) => error.field === "code");
+    if (codeError) {
+      resetCodeError.value = t(`errors.${codeError.code}`);
+    } else {
+      emit("message", apiErrorMessage(cause), "error");
+    }
   }
 };
 
@@ -175,13 +185,9 @@ const deleteAccount = async () => {
       <form v-else class="system-form" @submit.prevent="resetPassword">
         <label class="field">
           <span>{{ t("auth.verificationCode") }}</span>
-          <input
+          <VerificationCodeInput
             v-model="resetForm.code"
-            class="input code-input"
-            inputmode="numeric"
-            pattern="[0-9]{6}"
-            autocomplete="one-time-code"
-            required
+            :error="resetCodeError"
           />
         </label>
         <div class="field-grid cols-2">
@@ -213,7 +219,7 @@ const deleteAccount = async () => {
           </label>
         </div>
         <div class="system-actions">
-          <button class="btn btn-primary" type="submit" :disabled="authStore.isLoading || resetPasswordMismatch">
+          <button class="btn btn-primary" type="submit" :disabled="authStore.isLoading || resetPasswordMismatch || !/^\d{6}$/.test(resetForm.code)">
             <i class="pi pi-check"></i>
             {{ t("system.resetPasswordAction") }}
           </button>

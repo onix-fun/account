@@ -210,6 +210,10 @@ export function useAuthFlow() {
   const confirmRegistration = async () => {
     authMessage.value = "";
     fieldErrors.value = {};
+    if (!isVerificationCode(registrationCode.value)) {
+      fieldErrors.value = { code: t("errors.VALIDATION_INVALID_CODE") };
+      return;
+    }
     try {
       await authStore.confirmRegistration(pendingRegistrationEmail.value, registrationCode.value);
       nameForm.value = { firstName: "", lastName: "" };
@@ -259,12 +263,17 @@ export function useAuthFlow() {
 
   const submitResetPassword = async () => {
     authMessage.value = "";
+    fieldErrors.value = {};
+    if (!isVerificationCode(resetCode.value)) {
+      fieldErrors.value = { code: t("errors.VALIDATION_INVALID_CODE") };
+      return;
+    }
     try {
       await authStore.resetPassword(resetIdentifier.value, resetCode.value, resetPassword.value);
       mode.value = "identifier";
       authMessage.value = t("auth.passwordUpdated");
-    } catch {
-      authMessage.value = authStore.error || t("auth.resetFailed");
+    } catch (cause) {
+      captureError(cause);
     }
   };
 
