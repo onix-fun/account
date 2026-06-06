@@ -24,7 +24,7 @@ local function forbidden(code, numeric_code, message)
     ngx.status = ngx.HTTP_FORBIDDEN
     ngx.header["Content-Type"] = "application/json"
     ngx.say('{"code":"' .. code .. '","numericCode":' .. numeric_code .. ',"message":"' .. message ..
-        '","fieldErrors":[],"requestId":"' .. (ngx.var.correlation_id or ngx.var.request_id or "") .. '"}')
+        '","fieldErrors":[]}')
     ngx.exit(ngx.HTTP_FORBIDDEN)
     return false
 end
@@ -58,16 +58,18 @@ function _M.is_allowed_origin(origin)
     end
 
     local host = authority:gsub(":%d+$", ""):lower()
-    if host == "localhost" or host == "127.0.0.1" then
+    local environment = os.getenv("APP_ENV") or "development"
+    if environment ~= "production" and (host == "localhost" or host == "127.0.0.1") then
         return scheme == "http" or scheme == "https"
     end
 
-    local base_domain = (os.getenv("ACCOUNT_TRUSTED_BASE_DOMAIN") or ""):lower()
-    if base_domain == "" or scheme ~= "https" then
-        return false
+    local allowed = os.getenv("ACCOUNT_ALLOWED_ORIGINS") or ""
+    for candidate in allowed:gmatch("[^,]+") do
+        if trim(candidate):lower() == origin:lower() then
+            return true
+        end
     end
-
-    return host == base_domain or host:sub(-(#base_domain + 1)) == "." .. base_domain
+    return false
 end
 
 function _M.reject_query_token()

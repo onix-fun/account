@@ -5,7 +5,6 @@ import profile.infrastructure.db.User
 
 @Serializable
 data class UpdateProfileRequest(
-    val email: String? = null,
     val firstName: String? = null,
     val lastName: String? = null,
     val bio: String? = null
@@ -18,8 +17,7 @@ data class UserPublicDto(
     val firstName: String? = null,
     val lastName: String? = null,
     val avatarUrl: String? = null,
-    val bio: String? = null,
-    val emailVerified: Boolean
+    val bio: String? = null
 )
 
 @Serializable
@@ -42,9 +40,14 @@ fun User.toPublicDto() = UserPublicDto(
     firstName = firstName,
     lastName = lastName,
     avatarUrl = avatarUrl,
-    bio = bio,
-    emailVerified = emailVerified
+    bio = bio
 )
+
+@Serializable
+data class RequestEmailChangeRequest(val currentPassword: String, val newEmail: String)
+
+@Serializable
+data class ConfirmEmailChangeRequest(val code: String)
 
 fun User.toProfileDto() = UserProfileDto(
     id = id,

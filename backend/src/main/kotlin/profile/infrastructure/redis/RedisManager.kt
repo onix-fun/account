@@ -29,6 +29,20 @@ class RedisManager(config: ApplicationConfig) {
 
     fun pubSubConnection(): io.lettuce.core.pubsub.StatefulRedisPubSubConnection<String, String>? = client?.connectPubSub()
 
+    fun activateSession(sessionId: String, userId: String, ttlSeconds: Long) {
+        sync()?.setex("profile:session:$sessionId", ttlSeconds, userId)
+    }
+
+    fun revokeSession(sessionId: String) { sync()?.del("profile:session:$sessionId") }
+
+    fun checkRateLimit(scope: String, key: String, max: Long, windowSeconds: Long): Boolean {
+        val redis = sync() ?: return true
+        val redisKey = "profile:rate:$scope:$key"
+        val count = redis.incr(redisKey)
+        if (count == 1L) redis.expire(redisKey, windowSeconds)
+        return count <= max
+    }
+
     fun close() {
         connection?.close()
         client?.shutdown()

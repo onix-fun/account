@@ -1,23 +1,69 @@
-# Account Gateway (Шлюз API)
+# Account Gateway
 
-Шлюз на базе **OpenResty (Nginx + Lua)**, выступающий в роли единой точки входа (`entrypoint`) для сервиса аккаунтов. Он обслуживает SPA-приложение (фронтенд) и проксирует маршруты API к бэкенду. 
+OpenResty gateway является единственной публичной точкой входа для frontend и
+Account API.
 
-## Функции
+## Ответственность
 
-- **Проксирование фронтенда:** Перенаправление всех запросов на `/` к контейнеру фронтенда.
-- **Защита API бэкенда:** Проверка JWT-токенов (с алгоритмом RS256) прямо на уровне Nginx (с помощью Lua скриптов) перед передачей запроса бэкенду.
-- **Два метода авторизации:**
-  - **Браузерные клиенты (Web):** Используется Cookie `access_token`. Шлюз также жестко проверяет наличие `X-CSRF-Token`.
-  - **Мобильные и внешние клиенты:** Могут использовать заголовок `Authorization: Bearer <token>`. При использовании Bearer-токена проверка CSRF корректно пропускается, так как она актуальна только для браузеров.
-- **Ограничение частоты запросов (Rate Limiting):** Защита API авторизации, регистрации и загрузки файлов от брутфорс и DDoS атак (настраивается через `.env`).
+- обслуживает SPA через внутренний frontend service;
+- проверяет RS256 JWT и активность `sid`;
+- при Redis miss выполняет защищённый backend session-check;
+- применяет CSRF и точный credentialed CORS allowlist;
+- формирует доверенный client IP из настроенных proxy CIDR;
+- ограничивает частоту auth, recovery, session и avatar запросов;
+- унифицирует ошибки `401`, `403`, `429` и `503`;
+- проксирует публичные аватары из MinIO.
 
-## Ключи
+Если Redis и backend session-check недоступны, защищённый запрос получает
+`503`, а не проходит без проверки.
 
-Шлюз использует публичный PEM-ключ для проверки подписи JWT-токенов, выданных бэкендом. 
-Локально ключи генерируются автоматически при выполнении `make up` в корне проекта. Вручную можно сгенерировать ключи с помощью скрипта `dev/scripts/generate-dev-keys.sh`.
+## Маршрутизация
+
+| Маршрут | Upstream |
+|---|---|
+| `/api/auth/*` | backend с CSRF/rate-limit правилами |
+| `/api/users/*`, `/api/sessions`, `/api/search/*` | backend после JWT-проверки |
+| `/api/avatars/*` | MinIO |
+| `/swagger-ui`, `/openapi.json` | backend; Swagger можно отключить |
+| `/` | frontend |
+| `/health` | health gateway |
+
+## Конфигурация
+
+| Переменная | Назначение |
+|---|---|
+| `APP_ENV` | режим запуска |
+| `ACCOUNT_ALLOWED_ORIGINS` | точный comma-separated CORS allowlist |
+| `ACCOUNT_TRUSTED_PROXY_CIDRS` | доверенные proxy CIDR |
+| `ACCOUNT_DNS_RESOLVER` | DNS resolver OpenResty |
+| `ACCOUNT_HSTS_HEADER` | значение HSTS |
+| `ACCOUNT_CSP` | Content-Security-Policy |
+| `ACCOUNT_*_RATE` | rate limits по группам маршрутов |
+| `IDENTITY_JWT_*` | публичный ключ, issuer и audience |
+| `IDENTITY_INTERNAL_AUTH_SECRET` | shared secret backend session-check |
+| `IDENTITY_REDIS_HOST`, `IDENTITY_REDIS_PORT` | Redis active-session cache |
+
+В production обязательны allowed origins, HSTS, trusted proxies и internal
+secret длиной от 32 символов. Wildcard origin для credentialed CORS запрещён.
+
+## Проверки
+
+Из директории `gateway/`:
+
+```sh
+lua tests/test_browser_security.lua
+lua tests/test_jwt_auth.lua
+lua tests/test_session_status.lua
+```
+
+RS256-тест требует `cjson.safe`, OpenSSL Lua bindings и тестовый JWT:
+
+```sh
+TEST_RS256_TOKEN=... lua tests/test_rs256_token.lua
+```
 
 ## Production
 
-На проде Ingress-контроллер должен терминировать TLS и передавать правильный заголовок `X-Forwarded-For`. Конфигурация:
-- Настройте `ACCOUNT_TRUSTED_PROXY_CIDRS`, указав только доверенные IP-адреса вашего Ingress/Балансировщика.
-- Передавайте переменную `ACCOUNT_TRUSTED_BASE_DOMAIN` (например, `example.com`), чтобы гейтвей проверял заголовок `Origin` при работе с Web-версией.
+TLS завершается на доверенном ingress/reverse proxy. Он должен быть единственной
+публичной точкой входа. Не публикуйте gateway в обход ingress и не передавайте
+пользовательский `X-Forwarded-For` без очистки.

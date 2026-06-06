@@ -2,6 +2,7 @@ package profile.infrastructure.storage
 
 import io.minio.MinioClient
 import io.minio.PutObjectArgs
+import io.minio.RemoveObjectArgs
 import io.ktor.server.config.*
 import java.io.ByteArrayInputStream
 import java.util.UUID
@@ -29,6 +30,12 @@ class S3Client(config: ApplicationConfig) {
                 .build()
         )
         return "$publicUrl/$fileName"
+    }
+
+    fun deleteByPublicUrl(url: String?) {
+        if (url.isNullOrBlank() || !url.startsWith("$publicUrl/")) return
+        val key = url.removePrefix("$publicUrl/")
+        client.removeObject(RemoveObjectArgs.builder().bucket(bucket).`object`(key).build())
     }
 
     private fun extensionFor(contentType: String): String {

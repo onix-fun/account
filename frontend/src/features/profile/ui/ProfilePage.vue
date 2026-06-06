@@ -10,6 +10,7 @@ import SessionsTab from "@/features/sessions/ui/SessionsTab.vue";
 import SystemTab from "@/features/profile/ui/SystemTab.vue";
 import AccountSwitchModal from "@/features/profile/ui/AccountSwitchModal.vue";
 import { userDisplayName, userInitials } from "@/shared/lib/user";
+import { isEmail, isVerificationCode } from "@/shared/lib/validation";
 
 type ProfileTab = "profile" | "sessions" | "system";
 type MessageTone = "success" | "error" | "warning";
@@ -27,6 +28,9 @@ const isAccountModalOpen = ref(false);
 const cropFile = ref<File | null>(null);
 const avatarPreviewUrl = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const emailChangeStep = ref<"closed" | "request" | "confirm">("closed");
+const emailChangeForm = reactive({ currentPassword: "", newEmail: "", code: "" });
+const isChangingEmail = ref(false);
 
 const profileForm = reactive({
   firstName: "",
@@ -159,6 +163,34 @@ const uploadCroppedAvatar = async (file: File, previewUrl: string) => {
 const revokeAvatarPreview = () => {
   if (avatarPreviewUrl.value) URL.revokeObjectURL(avatarPreviewUrl.value);
   avatarPreviewUrl.value = null;
+};
+
+const requestEmailChange = async () => {
+  if (!emailChangeForm.currentPassword || !isEmail(emailChangeForm.newEmail)) return;
+  isChangingEmail.value = true;
+  try {
+    await authStore.requestEmailChange(emailChangeForm.currentPassword, emailChangeForm.newEmail);
+    emailChangeStep.value = "confirm";
+    setMessage(t("profile.emailChangeSent"));
+  } catch (cause) { setMessage(apiErrorMessage(cause), "error"); }
+  finally { isChangingEmail.value = false; }
+};
+
+const confirmEmailChange = async () => {
+  if (!isVerificationCode(emailChangeForm.code)) return;
+  isChangingEmail.value = true;
+  try {
+    await authStore.confirmEmailChange(emailChangeForm.code);
+    emailChangeStep.value = "closed";
+    emailChangeForm.currentPassword = ""; emailChangeForm.newEmail = ""; emailChangeForm.code = "";
+    setMessage(t("profile.emailChanged"));
+  } catch (cause) { setMessage(apiErrorMessage(cause), "error"); }
+  finally { isChangingEmail.value = false; }
+};
+
+const cancelEmailChange = async () => {
+  if (emailChangeStep.value === "confirm") await authStore.cancelEmailChange().catch(() => undefined);
+  emailChangeStep.value = "closed";
 };
 </script>
 
@@ -317,9 +349,23 @@ const revokeAvatarPreview = () => {
                 <div class="profile-edit-value">
                   <p>{{ authStore.currentUser?.email || t("common.unknown") }}</p>
                 </div>
-                <span :class="authStore.currentUser?.emailVerified ? 'readonly-marker text-success' : 'readonly-marker text-danger'">
-                  {{ authStore.currentUser?.emailVerified ? t("common.verified") : t("common.notVerified") }}
-                </span>
+                <button class="btn btn-ghost" type="button" @click="emailChangeStep = 'request'">{{ t("profile.changeEmail") }}</button>
+              </article>
+              <article v-if="emailChangeStep !== 'closed'" class="profile-edit-row email-change-row">
+                <span class="profile-edit-label">{{ t("profile.changeEmail") }}</span>
+                <div class="profile-edit-value">
+                  <template v-if="emailChangeStep === 'request'">
+                    <input v-model="emailChangeForm.newEmail" class="input inline-input" type="email" :placeholder="t('profile.newEmail')" />
+                    <input v-model="emailChangeForm.currentPassword" class="input inline-input" type="password" :placeholder="t('profile.currentPassword')" />
+                  </template>
+                  <input v-else v-model="emailChangeForm.code" class="input inline-input" inputmode="numeric" maxlength="6" :placeholder="t('auth.verificationCode')" />
+                </div>
+                <div class="profile-email-actions">
+                  <button class="btn btn-primary" type="button" :disabled="isChangingEmail" @click="emailChangeStep === 'request' ? requestEmailChange() : confirmEmailChange()">
+                    {{ t("common.continue") }}
+                  </button>
+                  <button class="btn btn-ghost" type="button" @click="cancelEmailChange">{{ t("common.cancel") }}</button>
+                </div>
               </article>
             </div>
           </form>

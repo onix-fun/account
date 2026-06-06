@@ -187,7 +187,7 @@ export function useAuthFlow() {
     try {
       accountLookup.value = await AuthService.lookupAccount(loginIdentifier.value);
       const lookup = accountLookup.value;
-      if (lookup.state === "ACTIVE") {
+      if (lookup.state === "ACTIVE" || lookup.state === "EMAIL_LOGIN") {
         mode.value = "password";
       } else {
         await handleUnavailableAccount(loginIdentifier.value, lookup);
@@ -215,12 +215,12 @@ export function useAuthFlow() {
     fieldErrors.value = {};
     if (!canRegister.value) return;
     try {
-      const response = await authStore.register({
+      await authStore.register({
         email: registerForm.value.email,
         username: registerForm.value.username,
         password: registerForm.value.password,
       });
-      pendingRegistrationEmail.value = response.email;
+      pendingRegistrationEmail.value = registerForm.value.email;
       registrationCode.value = "";
       mode.value = "confirm";
       authMessage.value = t("auth.verificationSent");
@@ -277,10 +277,9 @@ export function useAuthFlow() {
   const resendRegistrationCode = async () => {
     authMessage.value = "";
     try {
-      const response = await authStore.resendRegistrationCode(
+      await authStore.resendRegistrationCode(
         pendingRegistrationEmail.value || registerForm.value.email,
       );
-      pendingRegistrationEmail.value = response.email;
       authMessage.value = t("auth.verificationResent");
     } catch {
       authMessage.value = authStore.error || t("auth.confirmationFailed");
@@ -297,7 +296,7 @@ export function useAuthFlow() {
       accountLookup.value = await AuthService.lookupAccount(forgotIdentifier.value);
       const lookup = accountLookup.value;
       loginIdentifier.value = forgotIdentifier.value.trim();
-      if (lookup.state === "ACTIVE") {
+      if (lookup.state === "ACTIVE" || lookup.state === "EMAIL_LOGIN") {
         await startPasswordReset(forgotIdentifier.value);
       } else {
         await handleUnavailableAccount(forgotIdentifier.value, lookup);

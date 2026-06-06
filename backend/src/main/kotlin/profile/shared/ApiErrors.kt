@@ -33,6 +33,9 @@ enum class ApiErrorCode(
     AUTH_SESSION_EXPIRED(2013, "Session is expired", HttpStatusCode.Unauthorized),
     AUTH_UNAUTHORIZED(2014, "Unauthorized", HttpStatusCode.Unauthorized),
     AUTH_FORBIDDEN(2015, "Forbidden", HttpStatusCode.Forbidden),
+    AUTH_CODE_LOCKED(2016, "Verification code is locked", HttpStatusCode.TooManyRequests),
+    AUTH_CODE_RESEND_TOO_SOON(2017, "Verification code was sent too recently", HttpStatusCode.TooManyRequests),
+    AUTH_EMAIL_CHANGE_NOT_FOUND(2018, "Pending email change not found", HttpStatusCode.NotFound),
 
     USER_NOT_FOUND(3000, "User not found", HttpStatusCode.NotFound),
     AVATAR_FILE_REQUIRED(3001, "Avatar file is required", HttpStatusCode.BadRequest),
@@ -40,6 +43,8 @@ enum class ApiErrorCode(
     AVATAR_UNSUPPORTED_TYPE(3003, "Avatar type is not supported", HttpStatusCode.UnsupportedMediaType),
     AVATAR_TOO_LARGE(3004, "Avatar must be 5MB or smaller", HttpStatusCode.PayloadTooLarge),
     AVATAR_SIGNATURE_MISMATCH(3005, "Avatar signature does not match content type", HttpStatusCode.UnsupportedMediaType),
+    AVATAR_INVALID_IMAGE(3006, "Avatar is not a valid image", HttpStatusCode.UnsupportedMediaType),
+    AVATAR_DIMENSIONS_TOO_LARGE(3007, "Avatar dimensions are too large", HttpStatusCode.PayloadTooLarge),
 
     SESSION_NOT_FOUND(4000, "Session not found", HttpStatusCode.NotFound),
     SESSION_REVOKE_FORBIDDEN(4001, "Session cannot be revoked by this user", HttpStatusCode.Forbidden),
@@ -64,8 +69,7 @@ data class ApiErrorResponse(
     val code: String,
     val numericCode: Int,
     val message: String,
-    val fieldErrors: List<ApiFieldError> = emptyList(),
-    val requestId: String
+    val fieldErrors: List<ApiFieldError> = emptyList()
 )
 
 class ApiException(

@@ -19,12 +19,11 @@ interface UserResponse {
 }
 
 export interface RegistrationStartedResponse {
-  email: string;
+  status: "CODE_SENT";
   expiresInSeconds: number;
-  message: string;
 }
 
-export type AccountLookupState = "ACTIVE" | "NOT_FOUND" | "PENDING_REGISTRATION" | "EMAIL_UNVERIFIED" | "BLOCKED";
+export type AccountLookupState = "ACTIVE" | "NOT_FOUND" | "PENDING_REGISTRATION" | "EMAIL_UNVERIFIED" | "BLOCKED" | "EMAIL_LOGIN";
 
 export interface AccountLookupResponse {
   state: AccountLookupState;
@@ -45,7 +44,6 @@ interface LoginPayload {
 }
 
 interface UpdateProfilePayload {
-  email?: string;
   firstName?: string;
   lastName?: string;
   bio?: string;
@@ -161,6 +159,19 @@ export class AuthService {
   static async resendRegistrationCode(email: string): Promise<RegistrationStartedResponse> {
     const response = await profileClient.post<RegistrationStartedResponse>("/auth/resend-registration-code", { identifier: email });
     return response.data;
+  }
+
+  static async requestEmailChange(currentPassword: string, newEmail: string): Promise<void> {
+    await profileClient.post("/users/me/email-change/request", { currentPassword, newEmail });
+  }
+
+  static async confirmEmailChange(code: string): Promise<User> {
+    await profileClient.post("/users/me/email-change/confirm", { code });
+    return this.getMe();
+  }
+
+  static async cancelEmailChange(): Promise<void> {
+    await profileClient.delete("/users/me/email-change");
   }
 
   static async refresh(): Promise<User | null> {

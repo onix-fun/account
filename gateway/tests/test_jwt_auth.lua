@@ -1,6 +1,9 @@
 package.path = (os.getenv("PWD") or ".") .. "/lua/?.lua;" .. package.path
 
 local verified_token = nil
+package.preload["session_status"] = function()
+    return { require_active = function(session_id, user_id) return session_id == "session-id" and user_id == "client-id" end }
+end
 package.preload["rs256_token"] = function()
     return {
         verify = function(token)
@@ -10,6 +13,7 @@ package.preload["rs256_token"] = function()
                 aud = "account",
                 exp = 200,
                 sub = "client-id"
+                ,sid = "session-id"
             }
             if token == "bad-issuer" then payload.iss = "other" end
             if token == "bad-audience" then payload.aud = "other" end

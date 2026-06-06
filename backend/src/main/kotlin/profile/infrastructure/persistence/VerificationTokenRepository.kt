@@ -33,14 +33,13 @@ class VerificationTokenRepository(private val database: Database) {
     
     fun create(token: VerificationToken) = transaction(database) {
         val conn = connection.connection as Connection
-        val sql = "INSERT INTO verification_tokens (id, user_id, token_hash, purpose, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+        val sql = "INSERT INTO verification_tokens (user_id, token_hash, purpose, expires_at, created_at) VALUES (?, ?, ?, ?, ?)"
         conn.prepareStatement(sql).use { stmt ->
-            stmt.setObject(1, UUID.fromString(token.id))
-            stmt.setObject(2, UUID.fromString(token.userId))
-            stmt.setString(3, token.tokenHash)
-            stmt.setString(4, token.purpose)
-            stmt.setTimestamp(5, java.sql.Timestamp.from(token.expiresAt))
-            stmt.setTimestamp(6, java.sql.Timestamp.from(token.createdAt))
+            stmt.setObject(1, UUID.fromString(token.userId))
+            stmt.setString(2, token.tokenHash)
+            stmt.setString(3, token.purpose)
+            stmt.setTimestamp(4, java.sql.Timestamp.from(token.expiresAt))
+            stmt.setTimestamp(5, java.sql.Timestamp.from(token.createdAt))
             stmt.executeUpdate()
         }
     }

@@ -5,6 +5,11 @@ env IDENTITY_JWT_PUBLIC_KEY_PATH;
 env IDENTITY_JWT_ISSUER;
 env IDENTITY_JWT_AUDIENCE;
 env ACCOUNT_TRUSTED_BASE_DOMAIN;
+env ACCOUNT_ALLOWED_ORIGINS;
+env APP_ENV;
+env IDENTITY_INTERNAL_AUTH_SECRET;
+env IDENTITY_REDIS_HOST;
+env IDENTITY_REDIS_PORT;
 env ACCOUNT_SWAGGER_UI_ENABLED;
 
 events {
@@ -17,16 +22,16 @@ http {
     default_type application/octet-stream;
 
     lua_package_path "/usr/local/openresty/nginx/lua/?.lua;;";
-    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver ${ACCOUNT_DNS_RESOLVER} valid=10s ipv6=off;
     real_ip_header X-Forwarded-For;
     real_ip_recursive on;
 
-    limit_req_zone $binary_remote_addr zone=auth_login:10m rate=${ACCOUNT_LOGIN_RATE};
-    limit_req_zone $binary_remote_addr zone=auth_recovery:10m rate=${ACCOUNT_RECOVERY_RATE};
-    limit_req_zone $binary_remote_addr zone=auth_confirmation:10m rate=${ACCOUNT_CONFIRMATION_RATE};
-    limit_req_zone $binary_remote_addr zone=username_availability:10m rate=${ACCOUNT_USERNAME_RATE};
-    limit_req_zone $binary_remote_addr zone=auth_session:10m rate=${ACCOUNT_SESSION_RATE};
-    limit_req_zone $binary_remote_addr zone=avatar_upload:10m rate=${ACCOUNT_AVATAR_RATE};
+    limit_req_zone $binary_remote_addr zone=auth_login:10m rate=20r/m;
+    limit_req_zone $binary_remote_addr zone=auth_recovery:10m rate=20r/m;
+    limit_req_zone $binary_remote_addr zone=auth_confirmation:10m rate=20r/m;
+    limit_req_zone $binary_remote_addr zone=username_availability:10m rate=20r/m;
+    limit_req_zone $binary_remote_addr zone=auth_session:10m rate=30r/m;
+    limit_req_zone $binary_remote_addr zone=avatar_upload:10m rate=20r/m;
     limit_req_status 429;
 
     map $http_x_correlation_id $correlation_id {
@@ -61,7 +66,7 @@ http {
         proxy_hide_header Access-Control-Max-Age;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Client-Id $auth_client_id;
         proxy_set_header X-Access-Expires-At $auth_expires_at;
@@ -83,12 +88,18 @@ http {
 
         location @rate_limited {
             default_type application/json;
-            return 429 '{"code":"INFRASTRUCTURE_RATE_LIMITED","numericCode":5002,"message":"Too many requests","fieldErrors":[],"requestId":"$correlation_id"}';
+            return 429 '{"code":"INFRASTRUCTURE_RATE_LIMITED","numericCode":5002,"message":"Too many requests","fieldErrors":[]}';
         }
 
         location @service_unavailable {
             default_type application/json;
-            return 503 '{"code":"INFRASTRUCTURE_SERVICE_UNAVAILABLE","numericCode":5001,"message":"Service temporarily unavailable","fieldErrors":[],"requestId":"$correlation_id"}';
+            return 503 '{"code":"INFRASTRUCTURE_SERVICE_UNAVAILABLE","numericCode":5001,"message":"Service temporarily unavailable","fieldErrors":[]}';
+        }
+
+        location = /_internal/session-check {
+            internal;
+            proxy_set_header X-Internal-Auth "${IDENTITY_INTERNAL_AUTH_SECRET}";
+            proxy_pass http://$profile_upstream/internal/session-check;
         }
 
         location = /health {
@@ -111,25 +122,25 @@ http {
         }
 
         location = /api/auth/login {
-            limit_req zone=auth_login burst=4 nodelay;
+            limit_req zone=auth_login burst=19 nodelay;
             access_by_lua_file /usr/local/openresty/nginx/lua/csrf_access.lua;
             proxy_pass http://$profile_upstream;
         }
 
         location = /api/auth/token {
-            limit_req zone=auth_login burst=4 nodelay;
+            limit_req zone=auth_login burst=19 nodelay;
             access_by_lua_file /usr/local/openresty/nginx/lua/csrf_access.lua;
             proxy_pass http://$profile_upstream;
         }
 
         location ~ ^/api/auth/(register|resend-registration-code|forgot-password|reset-password)$ {
-            limit_req zone=auth_recovery burst=2 nodelay;
+            limit_req zone=auth_recovery burst=19 nodelay;
             access_by_lua_file /usr/local/openresty/nginx/lua/csrf_access.lua;
             proxy_pass http://$profile_upstream;
         }
 
         location ~ ^/api/auth/(confirm-registration|verify-email)$ {
-            limit_req zone=auth_confirmation burst=9 nodelay;
+            limit_req zone=auth_confirmation burst=19 nodelay;
             access_by_lua_file /usr/local/openresty/nginx/lua/csrf_access.lua;
             proxy_pass http://$profile_upstream;
         }
@@ -141,7 +152,7 @@ http {
         }
 
         location ~ ^/api/auth/public-verification/(request|confirm)$ {
-            limit_req zone=auth_confirmation burst=9 nodelay;
+            limit_req zone=auth_confirmation burst=19 nodelay;
             access_by_lua_file /usr/local/openresty/nginx/lua/csrf_access.lua;
             proxy_pass http://$profile_upstream;
         }
@@ -158,7 +169,7 @@ http {
         }
 
         location = /api/users/me/avatar {
-            limit_req zone=avatar_upload burst=9 nodelay;
+            limit_req zone=avatar_upload burst=19 nodelay;
             access_by_lua_file /usr/local/openresty/nginx/lua/jwt_auth.lua;
             proxy_pass http://$profile_upstream;
         }

@@ -9,14 +9,21 @@ import profile.infrastructure.db.User
 import profile.infrastructure.db.UserRepository
 import profile.infrastructure.db.VerificationToken
 import profile.infrastructure.db.VerificationTokenRepository
+import profile.infrastructure.db.PendingEmailChange
+import profile.infrastructure.db.PendingEmailChangeRepository
+import profile.infrastructure.db.AuditRepository
+import profile.infrastructure.config.SecurityConfig
 import profile.infrastructure.events.EventPublisher
 import profile.infrastructure.events.PasswordResetEmailPayload
 import profile.infrastructure.events.VerificationEmailPayload
+import profile.infrastructure.events.SecurityNotificationPayload
 import profile.infrastructure.jwt.JwtIssuer
 import profile.infrastructure.redis.PendingRegistration
 import profile.infrastructure.redis.PendingRegistrationStore
+import profile.infrastructure.redis.RedisManager
 import profile.infrastructure.security.PasswordHasher
 import profile.infrastructure.security.TokenHasher
+import profile.infrastructure.security.EmailNormalizer
 import profile.search.SearchService
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
@@ -24,8 +31,6 @@ import java.security.SecureRandom
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Base64
-import java.util.Locale
-import java.util.UUID
 
 class AuthService(
     private val userRepository: UserRepository,
@@ -35,7 +40,11 @@ class AuthService(
     private val searchService: SearchService,
     private val jwtIssuer: JwtIssuer,
     private val eventPublisher: EventPublisher,
-    private val sessionConfig: SessionConfig
+    private val sessionConfig: SessionConfig,
+    private val securityConfig: SecurityConfig,
+    private val pendingEmailChangeRepository: PendingEmailChangeRepository,
+    private val redisManager: RedisManager,
+    private val auditRepository: AuditRepository
 ) {
     private val random = SecureRandom()
 
@@ -57,16 +66,14 @@ class AuthService(
             passwordHash = PasswordHasher.hash(password),
             firstName = firstName?.trim()?.takeIf { it.isNotBlank() },
             lastName = lastName?.trim()?.takeIf { it.isNotBlank() },
-            codeHash = TokenHasher.hash(code)
+            codeHash = TokenHasher.challenge(securityConfig.otpHmacSecret, "REGISTRATION", normalizedEmail, code)
         )
 
         pendingRegistrationStore.create(pending)
         publishVerificationEmail(normalizedEmail, code)
 
         return RegistrationStartedResponse(
-            email = normalizedEmail,
-            expiresInSeconds = pendingRegistrationStore.ttlSeconds,
-            message = "Verification code sent"
+            expiresInSeconds = 900
         )
     }
 
@@ -80,11 +87,8 @@ class AuthService(
         val pendingForIdentifier = pendingRegistrationStore.findByIdentifier(identifier)
             ?: apiError(ApiErrorCode.AUTH_PENDING_REGISTRATION_NOT_FOUND, "identifier")
         val normalizedEmail = pendingForIdentifier.email
-        val codeHash = TokenHasher.hash(code.trim())
-        val emailForCode = pendingRegistrationStore.findEmailByCodeHash(codeHash)
-            ?: apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-
-        if (emailForCode != normalizedEmail) apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
+        val codeHash = TokenHasher.challenge(securityConfig.otpHmacSecret, "REGISTRATION", normalizedEmail, code.trim())
+        pendingRegistrationStore.verifyCode(normalizedEmail, codeHash)
 
         val pending = pendingRegistrationStore.findByEmail(normalizedEmail)
             ?: apiError(ApiErrorCode.AUTH_PENDING_REGISTRATION_NOT_FOUND, "identifier")
@@ -92,7 +96,6 @@ class AuthService(
         ensureUserCanBeCreated(pending.email, pending.username)
 
         val user = User(
-            id = UUID.randomUUID().toString(),
             email = pending.email,
             username = pending.username,
             passwordHash = pending.passwordHash,
@@ -101,27 +104,26 @@ class AuthService(
             lastName = pending.lastName
         )
 
-        userRepository.create(user)
+        val createdUser = userRepository.create(user)
         pendingRegistrationStore.delete(normalizedEmail)
-        searchService.indexUser(user)
-        eventPublisher.publish("user.created", user.id)
+        searchService.indexUser(createdUser)
+        eventPublisher.publish("user.created", createdUser.id)
 
-        return createSession(user, deviceId, userAgent, ipAddress)
+        return createSession(createdUser, deviceId, userAgent, ipAddress)
     }
 
     fun resendRegistrationCode(identifier: String): RegistrationStartedResponse {
+        enforcePublicRate("registration-resend", identifier)
         val pending = pendingRegistrationStore.findByIdentifier(identifier)
             ?: apiError(ApiErrorCode.AUTH_PENDING_REGISTRATION_NOT_FOUND, "identifier")
         val normalizedEmail = pending.email
 
         val code = generateVerificationCode()
-        pendingRegistrationStore.refreshCode(normalizedEmail, TokenHasher.hash(code))
+        pendingRegistrationStore.refreshCode(normalizedEmail, TokenHasher.challenge(securityConfig.otpHmacSecret, "REGISTRATION", normalizedEmail, code))
         publishVerificationEmail(pending.email, code)
 
         return RegistrationStartedResponse(
-            email = pending.email,
-            expiresInSeconds = pendingRegistrationStore.ttlSeconds,
-            message = "Verification code resent"
+            expiresInSeconds = 900
         )
     }
 
@@ -129,41 +131,35 @@ class AuthService(
         val user = userRepository.findById(userId) ?: return
         if (user.emailVerified) return
 
+        enforceCodeCooldown(userId, "EMAIL_VERIFICATION")
         val code = generateVerificationCode()
         val token = VerificationToken(
-            id = UUID.randomUUID().toString(),
             userId = userId,
-            tokenHash = TokenHasher.hash(code),
+            tokenHash = challengeHash("EMAIL_VERIFICATION", userId, code),
             purpose = "EMAIL_VERIFICATION",
-            expiresAt = Instant.now().plus(1, ChronoUnit.HOURS)
+            expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)
         )
         verificationTokenRepository.create(token)
         publishVerificationEmail(user.email, code)
     }
 
     fun verifyEmail(userId: String, code: String) {
-        val hash = TokenHasher.hash(code.trim())
-        val token = verificationTokenRepository.findByHash(hash)
-            ?: apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-
-        if (token.userId != userId) apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-        if (token.purpose != "EMAIL_VERIFICATION") apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-        if (token.expiresAt.isBefore(Instant.now())) apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
+        verificationTokenRepository.verify(userId, "EMAIL_VERIFICATION", challengeHash("EMAIL_VERIFICATION", userId, code.trim()))
 
         userRepository.updateEmailVerified(userId, true)
-        verificationTokenRepository.markAsUsed(token.id)
     }
 
     fun forgotPassword(identifier: String) {
+        enforcePublicRate("password-reset", identifier)
         val user = findUserByIdentifier(identifier) ?: return
 
+        enforceCodeCooldown(user.id, "PASSWORD_RESET")
         val resetCode = generateVerificationCode()
         val token = VerificationToken(
-            id = UUID.randomUUID().toString(),
             userId = user.id,
-            tokenHash = TokenHasher.hash(resetCode),
+            tokenHash = challengeHash("PASSWORD_RESET", user.id, resetCode),
             purpose = "PASSWORD_RESET",
-            expiresAt = Instant.now().plus(1, ChronoUnit.HOURS)
+            expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)
         )
         verificationTokenRepository.create(token)
 
@@ -174,20 +170,15 @@ class AuthService(
     }
 
     fun resetPassword(identifier: String, resetCode: String, newPassword: String) {
-        val hash = TokenHasher.hash(resetCode.trim())
-        val token = verificationTokenRepository.findByHash(hash)
-            ?: apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-
-        if (token.purpose != "PASSWORD_RESET") apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-        if (token.expiresAt.isBefore(Instant.now())) apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-
         val user = findUserByIdentifier(identifier) ?: apiError(ApiErrorCode.AUTH_ACCOUNT_NOT_FOUND, "identifier")
-        if (user.id != token.userId) apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
+        verificationTokenRepository.verify(user.id, "PASSWORD_RESET", challengeHash("PASSWORD_RESET", user.id, resetCode.trim()))
 
         val newPasswordHash = PasswordHasher.hash(newPassword)
-        userRepository.updatePassword(token.userId, newPasswordHash)
-        verificationTokenRepository.markAsUsed(token.id)
-        sessionRepository.revokeAllForUser(token.userId)
+        userRepository.updatePassword(user.id, newPasswordHash)
+        verificationTokenRepository.invalidateAll(user.id, "PASSWORD_RESET")
+        revokeCachedSessions(user.id)
+        sessionRepository.revokeAllForUser(user.id)
+        auditRepository.record(user.id, "PASSWORD_RESET", "SUCCESS")
     }
 
     fun changePassword(userId: String, currentPassword: String, newPassword: String) {
@@ -197,7 +188,9 @@ class AuthService(
         }
 
         userRepository.updatePassword(userId, PasswordHasher.hash(newPassword))
+        revokeCachedSessions(userId)
         sessionRepository.revokeAllForUser(userId)
+        auditRepository.record(userId, "PASSWORD_CHANGED", "SUCCESS")
     }
 
     fun deleteAccount(userId: String, password: String) {
@@ -229,7 +222,6 @@ class AuthService(
         val refreshTokenHash = TokenHasher.hash(refreshToken)
 
         val session = Session(
-            id = UUID.randomUUID().toString(),
             userId = user.id,
             refreshTokenHash = refreshTokenHash,
             deviceId = deviceId?.takeIf { it.isNotBlank() },
@@ -237,11 +229,12 @@ class AuthService(
             ipAddress = ipAddress,
             expiresAt = Instant.now().plus(sessionConfig.refreshTokenExpDays, ChronoUnit.DAYS)
         )
-        sessionRepository.create(session)
+        val sessionId = sessionRepository.create(session)
+        redisManager.activateSession(sessionId, user.id, sessionConfig.refreshTokenExpDays * 86400)
 
-        val accessToken = jwtIssuer.createToken(user.id, session.id, user.role)
+        val accessToken = jwtIssuer.createToken(user.id, sessionId, user.role)
 
-        return LoginResult(accessToken, refreshToken, session.id, user)
+        return LoginResult(accessToken, refreshToken, sessionId, user)
     }
 
     fun refresh(refreshToken: String, allowPreviousToken: Boolean = false): RefreshResult {
@@ -284,10 +277,14 @@ class AuthService(
         val refreshTokenHash = TokenHasher.hash(refreshToken)
         val session = sessionRepository.findByTokenHash(refreshTokenHash) ?: return
         sessionRepository.revoke(session.id)
+        redisManager.revokeSession(session.id)
+        auditRepository.record(session.userId, "SESSION_REVOKED", "SUCCESS")
     }
 
     fun logoutAll(userId: String) {
+        revokeCachedSessions(userId)
         sessionRepository.revokeAllForUser(userId)
+        auditRepository.record(userId, "SESSIONS_REVOKED_ALL", "SUCCESS")
     }
 
     fun isUsernameAvailable(username: String): Boolean {
@@ -310,6 +307,10 @@ class AuthService(
     fun lookupAccount(identifier: String): AccountLookupResponse {
         val normalized = identifier.trim()
         if (normalized.isBlank()) apiError(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
+        if (normalized.contains("@")) {
+            EmailNormalizer.normalize(normalized, "identifier")
+            return AccountLookupResponse("EMAIL_LOGIN", "")
+        }
         val pending = pendingRegistrationStore.findByIdentifier(normalized)
         if (pending != null) {
             return AccountLookupResponse("PENDING_REGISTRATION", normalized, pending.username)
@@ -325,6 +326,7 @@ class AuthService(
     }
 
     fun requestPublicEmailVerification(identifier: String) {
+        enforcePublicRate("public-verification", identifier)
         val user = findUserByIdentifier(identifier) ?: apiError(ApiErrorCode.AUTH_ACCOUNT_NOT_FOUND, "identifier")
         if (user.status != "ACTIVE") apiError(ApiErrorCode.AUTH_ACCOUNT_BLOCKED, "identifier")
         if (!user.emailVerified) requestEmailVerification(user.id)
@@ -349,7 +351,53 @@ class AuthService(
         eventPublisher.publish("email.verify", Json.encodeToString(VerificationEmailPayload(email, code)))
     }
 
-    private fun normalizeEmail(email: String): String = email.trim().lowercase(Locale.ROOT)
+    fun requestEmailChange(userId: String, currentPassword: String, newEmailRaw: String) {
+        val user = userRepository.findById(userId) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
+        if (!PasswordHasher.verify(user.passwordHash, currentPassword)) apiError(ApiErrorCode.AUTH_INVALID_PASSWORD, "currentPassword")
+        val newEmail = EmailNormalizer.normalize(newEmailRaw, "newEmail")
+        if (newEmail == user.email || userRepository.findByEmail(newEmail) != null) apiError(ApiErrorCode.AUTH_EMAIL_IN_USE, "newEmail")
+        pendingEmailChangeRepository.upsert(PendingEmailChange(userId, newEmail, Instant.now().plus(15, ChronoUnit.MINUTES)))
+        val code = generateVerificationCode()
+        verificationTokenRepository.create(VerificationToken(userId = userId, tokenHash = challengeHash("EMAIL_CHANGE", userId, code), purpose = "EMAIL_CHANGE", expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)))
+        eventPublisher.publish("email.email_change", Json.encodeToString(VerificationEmailPayload(newEmail, code)))
+    }
+
+    fun confirmEmailChange(userId: String, sessionId: String, code: String) {
+        val oldEmail = userRepository.findById(userId)?.email ?: apiError(ApiErrorCode.USER_NOT_FOUND)
+        val pending = pendingEmailChangeRepository.find(userId) ?: apiError(ApiErrorCode.AUTH_EMAIL_CHANGE_NOT_FOUND)
+        verificationTokenRepository.verify(userId, "EMAIL_CHANGE", challengeHash("EMAIL_CHANGE", userId, code.trim()))
+        if (userRepository.findByEmail(pending.newEmail) != null) apiError(ApiErrorCode.AUTH_EMAIL_IN_USE, "newEmail")
+        userRepository.updateEmail(userId, pending.newEmail)
+        pendingEmailChangeRepository.delete(userId)
+        sessionRepository.findActiveByUserId(userId).filter { it.id != sessionId }.forEach { redisManager.revokeSession(it.id) }
+        sessionRepository.revokeAllExcept(userId, sessionId)
+        auditRepository.record(userId, "EMAIL_CHANGED", "SUCCESS")
+        eventPublisher.publish("email.security_notice", Json.encodeToString(SecurityNotificationPayload(oldEmail, "Your account email address was changed.")))
+    }
+
+    fun cancelEmailChange(userId: String) {
+        pendingEmailChangeRepository.delete(userId)
+        verificationTokenRepository.invalidateAll(userId, "EMAIL_CHANGE")
+    }
+
+    private fun enforceCodeCooldown(userId: String, purpose: String) {
+        val latest = verificationTokenRepository.latest(userId, purpose)
+        if (latest != null && latest.createdAt.isAfter(Instant.now().minusSeconds(60))) apiError(ApiErrorCode.AUTH_CODE_RESEND_TOO_SOON)
+    }
+
+    private fun challengeHash(purpose: String, subjectId: String, code: String) =
+        TokenHasher.challenge(securityConfig.otpHmacSecret, purpose, subjectId, code)
+
+    private fun enforcePublicRate(scope: String, identifier: String) {
+        val key = TokenHasher.challenge(securityConfig.otpHmacSecret, "RATE", scope, identifier.trim().lowercase())
+        if (!redisManager.checkRateLimit(scope, key, 20, 3600)) apiError(ApiErrorCode.INFRASTRUCTURE_RATE_LIMITED)
+    }
+
+    private fun revokeCachedSessions(userId: String) {
+        sessionRepository.findActiveByUserId(userId).forEach { redisManager.revokeSession(it.id) }
+    }
+
+    private fun normalizeEmail(email: String): String = EmailNormalizer.normalize(email)
 
     private fun normalizeUsername(username: String): String = username.trim()
 

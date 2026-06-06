@@ -1,57 +1,49 @@
 package profile.infrastructure.events
 
-import io.lettuce.core.pubsub.RedisPubSubAdapter
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import profile.infrastructure.redis.RedisManager
 import org.slf4j.LoggerFactory
+import java.time.Instant
+import java.util.UUID
+import javax.sql.DataSource
 
-class EmailEventConsumer(
-    private val redisManager: RedisManager,
-    private val emailSender: SmtpEmailSender
-) {
-    private val logger = LoggerFactory.getLogger(EmailEventConsumer::class.java)
+class EmailEventConsumer(private val dataSource: DataSource, private val publisher: EventPublisher, private val sender: SmtpEmailSender) {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     fun start() {
-        val pubSubConn = redisManager.pubSubConnection() ?: run {
-            logger.warn("Redis PubSub connection not available. Email consumer disabled.")
-            return
-        }
-
-        pubSubConn.addListener(object : RedisPubSubAdapter<String, String>() {
-            override fun message(channel: String, message: String) {
-                if (channel == "identity_events") {
-                    handleEvent(message)
-                }
+        Thread({
+            while (!Thread.currentThread().isInterrupted) {
+                runCatching { processBatch() }.onFailure { log.error("Outbox worker failed", it) }
+                Thread.sleep(1_000)
             }
-        })
-
-        pubSubConn.async().subscribe("identity_events")
-        logger.info("Email event consumer started (listening to identity_events)")
+        }, "email-outbox-worker").apply { isDaemon = true; start() }
     }
 
-    private fun handleEvent(json: String) {
-        try {
-            val event = Json.parseToJsonElement(json).jsonObject
-            val type = event["type"]?.jsonPrimitive?.content ?: return
-            val payloadStr = event["payload"]?.jsonPrimitive?.content ?: return
-            
-            when (type) {
-                "email.verify" -> {
-                    val payload = Json.decodeFromString<VerificationEmailPayload>(payloadStr)
-                    emailSender.sendVerificationCode(payload.email, payload.code)
-                    logger.info("Sent verification email to ${payload.email}")
-                }
-                "email.password_reset" -> {
-                    val payload = Json.decodeFromString<PasswordResetEmailPayload>(payloadStr)
-                    emailSender.sendPasswordReset(payload.email, payload.code)
-                    logger.info("Sent password reset email to ${payload.email}")
-                }
+    internal fun processBatch() {
+        dataSource.connection.use { conn ->
+            val rows = conn.prepareStatement("SELECT id,event_type,payload,attempts,expires_at FROM email_outbox WHERE status='PENDING' AND next_attempt_at<=CURRENT_TIMESTAMP ORDER BY created_at LIMIT 10 FOR UPDATE SKIP LOCKED").use {
+                val rs=it.executeQuery(); buildList { while(rs.next()) add(arrayOf(rs.getObject("id").toString(),rs.getString("event_type"),rs.getString("payload"),rs.getInt("attempts"),rs.getTimestamp("expires_at").toInstant())) }
             }
-        } catch (e: Exception) {
-            logger.error("Failed to process email event: ${e.message}")
+            rows.forEach { row ->
+                val id=row[0] as String; val attempts=row[3] as Int; val expires=row[4] as Instant
+                if (expires.isBefore(Instant.now())) update(conn,id,"DEAD",attempts+1,"expired")
+                else runCatching { deliver(row[1] as String, publisher.decrypt(row[2] as String)) }
+                    .onSuccess { update(conn,id,"SENT",attempts,null) }
+                    .onFailure { update(conn,id,if(attempts+1>=5)"DEAD" else "PENDING",attempts+1,it.message?.take(500)) }
+            }
+            conn.commit()
+        }
+    }
+
+    private fun deliver(type: String, payload: String) = when(type) {
+        "email.verify", "email.email_change" -> Json.decodeFromString<VerificationEmailPayload>(payload).let { sender.sendVerificationCode(it.email,it.code) }
+        "email.password_reset" -> Json.decodeFromString<PasswordResetEmailPayload>(payload).let { sender.sendPasswordReset(it.email,it.code) }
+        "email.security_notice" -> Json.decodeFromString<SecurityNotificationPayload>(payload).let { sender.sendSecurityNotification(it.email,it.message) }
+        else -> Unit
+    }
+    private fun update(conn: java.sql.Connection,id:String,status:String,attempts:Int,error:String?) {
+        conn.prepareStatement("UPDATE email_outbox SET status=?,attempts=?,last_error=?,next_attempt_at=CURRENT_TIMESTAMP + (? * INTERVAL '1 second'),sent_at=CASE WHEN ?='SENT' THEN CURRENT_TIMESTAMP ELSE sent_at END WHERE id=?").use {
+            it.setString(1,status);it.setInt(2,attempts);it.setString(3,error);it.setInt(4,(1 shl attempts.coerceAtMost(8)));it.setString(5,status);it.setObject(6,UUID.fromString(id));it.executeUpdate()
         }
     }
 }

@@ -7,7 +7,9 @@ data class AppConfig(
     val postgres: PostgresConfig,
     val redis: RedisConfig,
     val smtp: SmtpConfig,
-    val s3: S3Config
+    val s3: S3Config,
+    val security: SecurityConfig,
+    val environment: String
 )
 
 data class JwtConfig(
@@ -42,7 +44,15 @@ data class RedisConfig(
 data class SmtpConfig(
     val host: String,
     val port: Int,
-    val from: String
+    val from: String,
+    val username: String?,
+    val password: String?,
+    val startTls: Boolean
+)
+
+data class SecurityConfig(
+    val otpHmacSecret: String,
+    val internalAuthSecret: String
 )
 
 data class S3Config(

@@ -1,104 +1,34 @@
 package profile.infrastructure.events
 
+import jakarta.mail.Authenticator
+import jakarta.mail.Message
+import jakarta.mail.PasswordAuthentication
+import jakarta.mail.Session
+import jakarta.mail.Transport
+import jakarta.mail.internet.InternetAddress
+import jakarta.mail.internet.MimeMessage
 import profile.infrastructure.config.SmtpConfig
-import java.io.BufferedReader
-import java.io.BufferedWriter
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
-import java.net.Socket
-import java.nio.charset.StandardCharsets
+import profile.infrastructure.security.EmailNormalizer
+import java.util.Properties
 
 class SmtpEmailSender(private val config: SmtpConfig) {
-    fun sendVerificationCode(email: String, code: String) {
-        send(
-            to = email,
-            subject = "Account email verification",
-            body = """
-                Your Account verification code is:
-
-                $code
-
-                The code expires in 1 hour.
-            """.trimIndent()
-        )
-    }
-
-    fun sendPasswordReset(email: String, code: String) {
-        send(
-            to = email,
-            subject = "Account password reset",
-            body = """
-                Use this reset code to set a new Account password:
-
-                $code
-
-                The code expires in 1 hour.
-            """.trimIndent()
-        )
-    }
+    fun sendVerificationCode(email: String, code: String) = send(email, "Account email verification", "Your verification code is:\n\n$code\n\nThe code expires in 15 minutes.")
+    fun sendPasswordReset(email: String, code: String) = send(email, "Account password reset", "Your password reset code is:\n\n$code\n\nThe code expires in 15 minutes.")
+    fun sendSecurityNotification(email: String, message: String) = send(email, "Account security notification", message)
 
     private fun send(to: String, subject: String, body: String) {
-        Socket(config.host, config.port).use { socket ->
-            socket.soTimeout = 5_000
-            val reader = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
-            val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8))
-
-            readResponse(reader, "220")
-            sendCommand(writer, reader, "EHLO account.local", "250")
-            sendCommand(writer, reader, "MAIL FROM:<${config.from}>", "250")
-            sendCommand(writer, reader, "RCPT TO:<$to>", "250", "251")
-            sendCommand(writer, reader, "DATA", "354")
-            writer.write(renderMessage(to, subject, body))
-            writer.write("\r\n.\r\n")
-            writer.flush()
-            readResponse(reader, "250")
-            sendCommand(writer, reader, "QUIT", "221")
+        val recipient = EmailNormalizer.normalize(to)
+        val from = EmailNormalizer.normalize(config.from, "from")
+        val properties = Properties().apply {
+            put("mail.smtp.host", config.host); put("mail.smtp.port", config.port.toString())
+            put("mail.smtp.starttls.enable", config.startTls.toString()); put("mail.smtp.auth", (config.username != null).toString())
         }
-    }
-
-    private fun renderMessage(to: String, subject: String, body: String): String {
-        val escapedBody = body
-            .lineSequence()
-            .joinToString("\r\n") { line -> if (line.startsWith(".")) ".$line" else line }
-
-        return """
-            From: ${config.from}
-            To: $to
-            Subject: $subject
-            MIME-Version: 1.0
-            Content-Type: text/plain; charset=UTF-8
-
-            $escapedBody
-        """.trimIndent().replace("\n", "\r\n")
-    }
-
-    private fun sendCommand(
-        writer: BufferedWriter,
-        reader: BufferedReader,
-        command: String,
-        vararg expectedPrefixes: String
-    ) {
-        writer.write(command)
-        writer.write("\r\n")
-        writer.flush()
-        readResponse(reader, *expectedPrefixes)
-    }
-
-    private fun readResponse(reader: BufferedReader, vararg expectedPrefixes: String): String {
-        var line = reader.readLine() ?: throw IllegalStateException("SMTP server closed the connection")
-        val response = StringBuilder(line)
-        val code = line.take(3)
-
-        while (line.length > 3 && line[3] == '-') {
-            line = reader.readLine() ?: break
-            response.append('\n').append(line)
-            if (!line.startsWith("$code-")) break
-        }
-
-        val text = response.toString()
-        if (expectedPrefixes.none { text.startsWith(it) }) {
-            throw IllegalStateException("Unexpected SMTP response: $text")
-        }
-        return text
+        val session = Session.getInstance(properties, if (config.username != null) object : Authenticator() {
+            override fun getPasswordAuthentication() = PasswordAuthentication(config.username, config.password.orEmpty())
+        } else null)
+        Transport.send(MimeMessage(session).apply {
+            setFrom(InternetAddress(from)); setRecipient(Message.RecipientType.TO, InternetAddress(recipient))
+            setSubject(subject, Charsets.UTF_8.name()); setText(body, Charsets.UTF_8.name())
+        })
     }
 }

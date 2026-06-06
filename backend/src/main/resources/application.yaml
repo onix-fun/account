@@ -6,8 +6,17 @@ ktor:
       - profile.AppKt.module
 
 identity:
+  security:
+    otp_hmac_secret: "$IDENTITY_OTP_HMAC_SECRET:development-only-otp-secret"
+    internal_auth_secret: "$IDENTITY_INTERNAL_AUTH_SECRET:development-only-internal-secret"
   grpc:
     port: "$IDENTITY_GRPC_PORT:9097"
+    enabled: "$IDENTITY_GRPC_ENABLED:false"
+    reflection: "$IDENTITY_GRPC_REFLECTION:false"
+    certificate: "$IDENTITY_GRPC_CERTIFICATE:"
+    private_key: "$IDENTITY_GRPC_PRIVATE_KEY:"
+    client_ca: "$IDENTITY_GRPC_CLIENT_CA:"
+    allowed_client_sans: "$IDENTITY_GRPC_ALLOWED_CLIENT_SANS:"
   jwt:
     issuer: "$IDENTITY_JWT_ISSUER:account-service"
     audience: "$IDENTITY_JWT_AUDIENCE:account"
@@ -34,6 +43,12 @@ smtp:
   host: "$IDENTITY_SMTP_HOST:localhost"
   port: "$IDENTITY_SMTP_PORT:1025"
   from: "$IDENTITY_SMTP_FROM:no-reply@account.local"
+  username: "$IDENTITY_SMTP_USERNAME:"
+  password: "$IDENTITY_SMTP_PASSWORD:"
+  start_tls: "$IDENTITY_SMTP_STARTTLS:false"
+
+app:
+  environment: "$APP_ENV:development"
 
 s3:
   endpoint: "$IDENTITY_S3_ENDPOINT:http://localhost:9000"
