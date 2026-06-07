@@ -9,41 +9,23 @@
 
 **Критические проблемы**
 
-1. **Уязвимые Docker-образы**
-    - Gateway: **2 CRITICAL + 33 HIGH**.
-    - Backend: **16 HIGH**, включая 7 уязвимостей Netty: request smuggling и HTTP/2 DoS.
-    - Причина: устаревшие версии Ktor/Netty и базовых образов, плавающие теги контейнеров и отсутствие автоматического контроля уязвимостей.
-    - Решение:
-        1. Обновить Ktor/Netty и базовые образы до поддерживаемых версий без известных CRITICAL/HIGH уязвимостей.
-        2. Закрепить версии всех production-образов и отказаться от тегов `latest`.
-        3. Добавить Trivy-проверку зависимостей и собранных образов в pull request и release workflow.
-        4. Блокировать релиз при CRITICAL/HIGH; исключения хранить во временном allowlist с причиной, владельцем и сроком действия.
-    - Критерий готовности: Trivy не находит незарегистрированных CRITICAL/HIGH уязвимостей, а CI запрещает публикацию небезопасного образа.
+🔴 Уровень 2 — Race Conditions / Data Integrity
+4. TOCTOU race condition при регистрации AuthService.confirmRegistration() вызывает ensureUserCanBeCreated(), затем userRepository.create(). При REPEATABLE READ isolation два конкурентных запроса с одинаковым email увидят snapshot без этого email и оба попытаются выполнить INSERT. UserRepository.create() (UserRepository.kt:52-72) не обрабатывает SQLException с sqlState == "23505" (unique violation). Результат: пользователь получает HTTP 500 вместо внятной ошибки.
 
-2. **Релизы создаются без тестов**
-    - Backend собирается с `-DskipTests`.
-    - Gateway-тесты вообще не запускаются.
-    - Нет CI с тестами для pull request.
-    - [release.yml](/Users/docup/Projects/Unlim/account/.github/workflows/release.yml:82)
-    - Причина: release workflow сразу собирает и публикует образы, не имея обязательного общего этапа проверки.
-    - Решение:
-        1. Добавить обязательный pull request workflow: frontend test/build, backend test/package и gateway Lua-тесты.
-        2. Убрать `-DskipTests` из backend release job.
-        3. Перед публикацией каждого frontend/backend/gateway образа запускать тот же набор проверок.
-        4. Публиковать образ только после успешного завершения всех обязательных тестов.
-    - Критерий готовности: намеренно сломанный тест блокирует pull request и публикацию любого затронутого release-образа.
+5. Race condition в сбросе пароля VerificationTokenRepository.verify() использует SELECT ... FOR UPDATE с LIMIT 1 без ORDER BY. При конкурентных запросах сброса могут быть выбраны разные токены. Успешная верификация одного токена не блокирует остальные. Потенциально два разных кода могут сбросить пароль дважды (хотя invalidateAll и revokeAllForUser смягчают последствия).
 
-3. **Backend integration-тесты сломаны**
-    - Из 7 тестов: 3 прошли, 4 завершились ошибкой.
-    - Причина: миграция использует PostgreSQL `uuidv7()`, который не поддерживается тестовой H2.
-    - [V1__init_schema.sql](/Users/docup/Projects/Unlim/account/backend/src/main/resources/db/migration/V1__init_schema.sql:2)
-    - Причина: integration-тесты запускаются на H2, хотя production-схема и SQL используют возможности PostgreSQL.
-    - Решение:
-        1. Заменить H2 в integration-тестах на PostgreSQL 18 через Testcontainers.
-        2. Запускать в тестах настоящие Flyway-миграции без отдельных H2-совместимых веток.
-        3. Подключить эти integration-тесты к обязательному pull request и release workflow.
-    - Критерий готовности: все backend integration-тесты стабильно проходят локально и в CI на чистом контейнере PostgreSQL 18.
+6. Redis cache invalidation при удалении аккаунта AuthService.deleteAccount() (AuthService.kt:205-212) вызывает только userRepository.delete(userId). Не вызывает revokeCachedSessions(userId) — Redis-кэш сессий не очищается. Если access token ещё жив (до 15 мин), gateway найдёт сессию в Redis и пропустит запрос (хотя _internal/session-check проверит статус пользователя как fallback).
 
+7. Gateway Redis + Backend Redis — могут быть разными gateway/lua/session_status.lua:15 читает IDENTITY_REDIS_HOST, а бэкенд читает redis.url из application.yaml. Если gateway смотрит в другой Redis, отзыв сессии через бэкенд не дойдёт до gateway → сессия останется валидной до expiry.
+
+🔴 Уровень 3 — Логические ошибки
+8. Gateway session_status.lua: соединение без пула session_status.lua:13-15 создаёт новое TCP-соединение к Redis на каждый запрос. Нет повторного использования (pooling). При высокой нагрузке это приведёт к исчерпанию сокетов и падению gateway.
+
+9. Rate limit plugin не отличает пользователей RateLimitPlugin.kt:35-37 использует X-Real-IP как ключ rate limit'а. Если несколько пользователей за одним NAT, все будут заблокированы из-за одного. И наоборот — атакующий с разных IP может делать по 20 запросов с каждого.
+
+10. Обработка X-Real-IP без верификации AuthController.clientIpAddress() и RateLimitPlugin доверяют заголовку X-Real-IP. При прямом доступе к бэкенду (минуя gateway) клиент может подделать IP и обойти rate limiting.
+
+11. pending_email_changes.new_email — UNIQUE без учета expires_at В схеме V1__init_schema.sql:65: new_email TEXT NOT NULL UNIQUE. Если пользователь A запросил смену на x@y.com, пользователь B не сможет запросить ту же почту, пока запись не протухнет или не будет отменена. При этом висит expires_at, но уникальность не учитывает срок действия.
 **Высокий риск**
 
 4. **Публичное определение существования аккаунтов**
