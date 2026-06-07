@@ -4,6 +4,7 @@ import { useAuthStore } from "@/infra/store";
 import { useAuthFlow } from "@/features/auth/model/useAuthFlow";
 import LocaleSwitcher from "@/shared/ui/LocaleSwitcher.vue";
 import VerificationCodeInput from "@/shared/ui/VerificationCodeInput.vue";
+import PasswordInput from "@/shared/ui/PasswordInput.vue";
 
 const authStore = useAuthStore();
 const { t } = useI18n();
@@ -78,10 +79,9 @@ const steps = [
         </div>
         <label class="field">
           <span>{{ t("auth.password") }}</span>
-          <input
+          <PasswordInput
             v-model="flow.loginPassword.value"
             class="input xl"
-            type="password"
             autocomplete="current-password"
             required
             autofocus
@@ -152,10 +152,9 @@ const steps = [
         </label>
         <label class="field">
           <span>{{ t("auth.password") }}</span>
-          <input
+          <PasswordInput
             v-model="flow.registerForm.value.password"
             class="input xl"
-            type="password"
             autocomplete="new-password"
             required
             minlength="8"
@@ -166,10 +165,9 @@ const steps = [
         </label>
         <label class="field">
           <span>{{ t("auth.confirmPassword") }}</span>
-          <input
+          <PasswordInput
             v-model="flow.registerForm.value.confirmPassword"
             class="input xl"
-            type="password"
             autocomplete="new-password"
             required
             minlength="8"
@@ -319,10 +317,9 @@ const steps = [
         </label>
         <label class="field">
           <span>{{ t("auth.newPassword") }}</span>
-          <input
+          <PasswordInput
             v-model="flow.resetPassword.value"
             class="input xl"
-            type="password"
             autocomplete="new-password"
             required
             minlength="8"

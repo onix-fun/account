@@ -2,7 +2,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
 
     email TEXT NOT NULL UNIQUE,
-    username TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL,
 
     password_hash TEXT NOT NULL,
 
@@ -96,7 +96,7 @@ CREATE TABLE audit_logs (
 );
 
 CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_username ON users(username);
+CREATE UNIQUE INDEX uq_users_username_lower ON users (LOWER(username));
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
 CREATE INDEX idx_sessions_previous_refresh_token_hash ON sessions(previous_refresh_token_hash);

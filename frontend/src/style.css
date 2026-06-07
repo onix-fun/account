@@ -10,17 +10,20 @@
   -moz-osx-font-smoothing: grayscale;
   --bg: #f4f6f8;
   --surface: #ffffff;
-  --surface-muted: #f8fafc;
-  --border: #dce3ea;
-  --border-strong: #c8d2dc;
+  --surface-muted: #edf0f2;
+  --surface-raised: #ffffff;
+  --surface-active: #e1e5e8;
+  --border: transparent;
+  --border-strong: transparent;
   --text: #172033;
   --muted: #667085;
   --subtle: #98a2b3;
-  --accent: #2563eb;
+  --accent: #30363d;
+  --focus-ring: rgba(48, 54, 61, 0.2);
   --success: #159a73;
   --warning: #b7791f;
   --danger: #c24141;
-  --shadow: 0 18px 42px rgba(22, 34, 51, 0.14);
+  --shadow: 0 18px 42px rgba(22, 34, 51, 0.16);
 }
 
 * {
@@ -55,6 +58,15 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible,
+.btn:focus-visible,
+.icon-button:focus-visible,
+.link-button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
 }
 
 button:disabled {
@@ -204,18 +216,18 @@ button:disabled {
 .input,
 .textarea {
   width: 100%;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: #fff;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-muted);
   color: var(--text);
   font-size: 14px;
   outline: none;
-  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+  transition: box-shadow 140ms ease, background 140ms ease, transform 140ms ease;
 }
 
 .input {
-  min-height: 40px;
-  padding: 8px 11px;
+  min-height: 44px;
+  padding: 10px 13px;
 }
 
 .input.xl {
@@ -225,14 +237,36 @@ button:disabled {
 
 .textarea {
   min-height: 112px;
-  padding: 10px 11px;
+  padding: 12px 13px;
   resize: vertical;
 }
 
 .input:focus,
 .textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 3px var(--focus-ring), var(--shadow-soft, 0 8px 22px rgba(22, 34, 51, 0.08));
+}
+
+.input:hover:not(:disabled),
+.textarea:hover:not(:disabled) {
+  background: #e7ebee;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--subtle);
+}
+
+.input:disabled,
+.textarea:disabled {
+  background: #f0f2f4;
+  color: var(--subtle);
+}
+
+.input[aria-invalid="true"],
+.textarea[aria-invalid="true"] {
+  background: #fdf0f0;
+  box-shadow: 0 0 0 2px rgba(194, 65, 65, 0.16);
 }
 
 .input.readonly,
@@ -278,12 +312,12 @@ button:disabled {
 
 .btn {
   padding: 0 14px;
-  border-color: var(--border-strong);
-  background: var(--surface);
+  border-color: transparent;
+  background: var(--surface-muted);
 }
 
 .btn-primary {
-  border-color: var(--text);
+  border-color: transparent;
   background: var(--text);
   color: #fff;
 }
@@ -297,7 +331,7 @@ button:disabled {
 .btn-ghost:hover,
 .icon-button.quiet:hover,
 .link-button:hover {
-  background: #eef3f7;
+  background: var(--surface-active);
   color: var(--text);
 }
 
@@ -394,6 +428,41 @@ button:disabled {
   width: 100%;
 }
 
+.password-input {
+  position: relative;
+  width: 100%;
+}
+
+.password-input .input {
+  padding-right: 46px;
+}
+
+.password-visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+}
+
+.password-visibility-toggle:hover {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.password-visibility-toggle:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
 .input-wrapper input {
   padding-right: 42px;
 }
@@ -448,9 +517,9 @@ button:disabled {
   width: 100%;
   aspect-ratio: 1;
   min-width: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--surface);
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface-muted);
   color: var(--text);
   outline: none;
   text-align: center;
@@ -460,12 +529,14 @@ button:disabled {
 }
 
 .verification-code-input input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background: var(--surface-raised);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .verification-code-input.invalid input {
-  border-color: var(--danger);
+  border-color: transparent;
+  background: #fdf0f0;
+  box-shadow: 0 0 0 2px rgba(194, 65, 65, 0.16);
 }
 
 .text-danger {
@@ -495,7 +566,10 @@ button:disabled {
 .locale-switcher {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--surface-muted);
   color: var(--subtle);
   font-size: 11px;
   font-weight: 700;
@@ -503,15 +577,24 @@ button:disabled {
 
 .locale-switcher button {
   border: 0;
+  min-width: 32px;
+  min-height: 28px;
+  border-radius: 7px;
   background: transparent;
-  padding: 2px;
+  padding: 4px 7px;
   color: inherit;
   font-size: inherit;
   font-weight: inherit;
 }
 
-.locale-switcher button.active {
+.locale-switcher button:hover {
+  background: var(--surface-active);
   color: var(--text);
+}
+
+.locale-switcher button.active {
+  background: var(--text);
+  color: #fff;
 }
 
 .profile-page {
@@ -541,8 +624,10 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 22px;
+  border-bottom: 0;
+  background: var(--surface-raised);
+  border-radius: 14px;
+  padding: 18px 20px;
 }
 
 .identity-block {
@@ -635,12 +720,19 @@ button:disabled {
 }
 
 .avatar-edit:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.16);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 3px;
 }
 
 .account-switch-button {
   flex: 0 0 auto;
+}
+
+.profile-hero-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .profile-shell {
@@ -674,14 +766,14 @@ button:disabled {
 }
 
 .profile-icon-tabs button:hover {
-  background: #eef3f7;
+  background: var(--surface-active);
   color: var(--text);
 }
 
 .profile-icon-tabs button.active {
-  border-color: var(--border);
-  background: var(--surface);
-  color: var(--text);
+  border-color: transparent;
+  background: var(--text);
+  color: #fff;
 }
 
 .profile-stage {
@@ -737,7 +829,7 @@ button:disabled {
 
 .row-list {
   display: grid;
-  border-top: 1px solid var(--border);
+  gap: 6px;
 }
 
 .data-row,
@@ -748,16 +840,17 @@ button:disabled {
   align-items: center;
   gap: 14px;
   border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
+  border-bottom: 0;
+  background: var(--surface-raised);
   color: var(--text);
   text-align: left;
-  padding: 12px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
 }
 
 .data-row.selected,
 .account-row.selected {
-  background: #edf3ff;
+  background: var(--surface-active);
 }
 
 .row-icon,
@@ -769,7 +862,7 @@ button:disabled {
   place-items: center;
   color: var(--muted);
   background: var(--surface-muted);
-  border: 1px solid var(--border);
+  border: 0;
   flex: 0 0 auto;
 }
 
@@ -804,16 +897,18 @@ button:disabled {
 }
 
 .empty-row {
-  padding: 36px 0;
+  padding: 36px 14px;
   color: var(--muted);
   font-size: 14px;
   text-align: center;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
+  background: var(--surface-raised);
+  border-radius: 10px;
 }
 
 .profile-detail-list {
   display: grid;
-  border-top: 1px solid var(--border);
+  gap: 6px;
 }
 
 .profile-edit-row {
@@ -822,8 +917,10 @@ button:disabled {
   grid-template-columns: 132px minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
-  border-bottom: 1px solid var(--border);
-  padding: 12px 0;
+  border-bottom: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-raised);
 }
 
 .email-change-row {
@@ -858,6 +955,7 @@ button:disabled {
 
 .profile-edit-row.editing {
   align-items: start;
+  background: var(--surface-active);
 }
 
 .profile-edit-label {
@@ -887,8 +985,8 @@ button:disabled {
 
 .inline-input,
 .inline-textarea {
-  border-color: var(--border);
-  background: var(--surface);
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .inline-textarea {
@@ -917,12 +1015,15 @@ button:disabled {
 .system-section {
   display: grid;
   gap: 16px;
-  border-top: 1px solid var(--border);
-  padding: 20px 0 22px;
+  border-top: 0;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--surface-raised);
+  margin-bottom: 8px;
 }
 
 .system-section:last-child {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
 }
 
 .system-section-head {
@@ -967,40 +1068,103 @@ button:disabled {
 }
 
 .danger-system-section {
-  border-top-color: #efc3c3;
+  background: #fff8f8;
 }
 
 .danger-icon {
   color: var(--danger);
   background: #fef2f2;
-  border-color: #f2caca;
+  border-color: transparent;
 }
 
-.status-badge {
-  width: fit-content;
-  min-height: 30px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  padding: 0 10px;
-  display: inline-flex;
+.username-availability {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.email-change-actions {
+  margin-left: 0;
+}
+
+.profile-toast {
+  position: fixed;
+  z-index: 50;
+  top: max(20px, env(safe-area-inset-top));
+  right: max(20px, env(safe-area-inset-right));
+  width: min(380px, calc(100vw - 40px));
+  min-height: 58px;
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: 0 16px 44px rgba(22, 34, 51, 0.2);
+  padding: 10px 10px 10px 12px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+
+.profile-toast-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-muted);
   color: var(--muted);
 }
 
-.status-badge.success {
+.profile-toast-message {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.profile-toast.success .profile-toast-icon {
+  background: #edf8f4;
   color: var(--success);
 }
 
-.status-badge.warning {
+.profile-toast.warning .profile-toast-icon {
+  background: #fff7e8;
   color: var(--warning);
 }
 
-.status-badge.error {
+.profile-toast.error .profile-toast-icon {
+  background: #fef2f2;
   color: var(--danger);
+}
+
+.profile-toast-close {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.profile-toast-close:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.profile-toast-enter-active,
+.profile-toast-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.profile-toast-enter-from,
+.profile-toast-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 
 .modal-backdrop.minimal {
@@ -1023,8 +1187,8 @@ button:disabled {
   width: min(420px, 100%);
   max-height: calc(100dvh - 36px);
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -1044,7 +1208,8 @@ button:disabled {
 
 .modal-head {
   justify-content: space-between;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
+  background: var(--surface-muted);
 }
 
 .modal-head h2 {
@@ -1053,12 +1218,14 @@ button:disabled {
 }
 
 .modal-foot {
-  border-top: 1px solid var(--border);
+  border-top: 0;
+  background: var(--surface-muted);
 }
 
 .account-list {
   display: grid;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 14px;
 }
 
 .account-row {
@@ -1285,6 +1452,12 @@ button:disabled {
     max-height: calc(100dvh - 24px);
   }
 
+  .profile-toast {
+    top: max(12px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    width: min(380px, calc(100vw - 24px));
+  }
+
   .crop-box {
     width: min(300px, calc(100vw - 52px));
   }
@@ -1352,8 +1525,12 @@ button:disabled {
     gap: 14px;
   }
 
+  .profile-hero-actions {
+    margin-left: auto;
+  }
+
   .identity-block {
-    width: calc(100% - 52px);
+    width: 100%;
     gap: 12px;
   }
 
@@ -1449,7 +1626,7 @@ button:disabled {
   }
 
   .account-switch-button {
-    width: 100%;
+    width: 38px;
   }
 }
 

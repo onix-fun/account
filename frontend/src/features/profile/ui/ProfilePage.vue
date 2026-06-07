@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
+import { AuthService } from "@/api/services/AuthService";
 import { trustedRedirectUrl } from "@/infra/navigation/trustedRedirect";
 import { useAuthStore } from "@/infra/store";
 import AvatarCropper from "@/features/avatar/ui/AvatarCropper.vue";
@@ -10,11 +11,13 @@ import SessionsTab from "@/features/sessions/ui/SessionsTab.vue";
 import SystemTab from "@/features/profile/ui/SystemTab.vue";
 import AccountSwitchModal from "@/features/profile/ui/AccountSwitchModal.vue";
 import { userDisplayName, userInitials } from "@/shared/lib/user";
-import { isEmail, isVerificationCode } from "@/shared/lib/validation";
+import { isUsername } from "@/shared/lib/validation";
+import LocaleSwitcher from "@/shared/ui/LocaleSwitcher.vue";
 
 type ProfileTab = "profile" | "sessions" | "system";
 type MessageTone = "success" | "error" | "warning";
-type EditableProfileField = "firstName" | "lastName" | "bio";
+type EditableProfileField = "username" | "firstName" | "lastName" | "bio";
+type UsernameAvailability = "idle" | "checking" | "available" | "taken" | "invalid";
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -28,16 +31,19 @@ const isAccountModalOpen = ref(false);
 const cropFile = ref<File | null>(null);
 const avatarPreviewUrl = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
-const emailChangeStep = ref<"closed" | "request" | "confirm">("closed");
-const emailChangeForm = reactive({ currentPassword: "", newEmail: "", code: "" });
-const isChangingEmail = ref(false);
+const usernameAvailability = ref<UsernameAvailability>("idle");
+let usernameCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+let usernameCheckSequence = 0;
+let messageTimeout: ReturnType<typeof setTimeout> | null = null;
 
 const profileForm = reactive({
+  username: "",
   firstName: "",
   lastName: "",
   bio: "",
 });
 const editingFields = reactive<Record<EditableProfileField, boolean>>({
+  username: false,
   firstName: false,
   lastName: false,
   bio: false,
@@ -52,24 +58,59 @@ const isProfileDirty = computed(() => {
   return (
     profileForm.firstName !== (user?.firstName || "") ||
     profileForm.lastName !== (user?.lastName || "") ||
-    profileForm.bio !== (user?.bio || "")
+    profileForm.bio !== (user?.bio || "") ||
+    profileForm.username.trim() !== (user?.username || "")
   );
+});
+const canSaveUsername = computed(() => {
+  const username = profileForm.username.trim();
+  if (username.toLowerCase() === authStore.currentUser?.username.toLowerCase()) return true;
+  return usernameAvailability.value === "available";
 });
 const editableProfileFields = computed<
   Array<{ key: EditableProfileField; label: string; type: "text" | "textarea"; autocomplete?: string }>
 >(() => [
+  { key: "username", label: t("auth.username"), type: "text", autocomplete: "username" },
   { key: "firstName", label: t("auth.firstName"), type: "text", autocomplete: "given-name" },
   { key: "lastName", label: t("auth.lastName"), type: "text", autocomplete: "family-name" },
   { key: "bio", label: t("profile.bio"), type: "textarea" },
 ]);
 
 const syncProfileForm = () => {
+  profileForm.username = authStore.currentUser?.username || "";
   profileForm.firstName = authStore.currentUser?.firstName || "";
   profileForm.lastName = authStore.currentUser?.lastName || "";
   profileForm.bio = authStore.currentUser?.bio || "";
 };
 
 watch(() => authStore.currentUser, syncProfileForm, { immediate: true });
+watch(
+  () => profileForm.username,
+  (value) => {
+    if (usernameCheckTimeout) clearTimeout(usernameCheckTimeout);
+    const username = value.trim();
+    const sequence = ++usernameCheckSequence;
+
+    if (username.toLowerCase() === authStore.currentUser?.username.toLowerCase()) {
+      usernameAvailability.value = "idle";
+      return;
+    }
+    if (!isUsername(username)) {
+      usernameAvailability.value = "invalid";
+      return;
+    }
+
+    usernameAvailability.value = "checking";
+    usernameCheckTimeout = setTimeout(async () => {
+      try {
+        const available = await AuthService.isUsernameAvailable(username);
+        if (sequence === usernameCheckSequence) usernameAvailability.value = available ? "available" : "taken";
+      } catch {
+        if (sequence === usernameCheckSequence) usernameAvailability.value = "idle";
+      }
+    }, 450);
+  },
+);
 
 onMounted(async () => {
   await authStore.fetchSessions().catch((cause) => {
@@ -78,12 +119,22 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  if (usernameCheckTimeout) clearTimeout(usernameCheckTimeout);
+  if (messageTimeout) clearTimeout(messageTimeout);
   revokeAvatarPreview();
 });
 
 function setMessage(message: string, tone: MessageTone = "success") {
+  if (messageTimeout) clearTimeout(messageTimeout);
   profileMessage.value = message;
   messageTone.value = tone;
+  messageTimeout = setTimeout(clearMessage, 5000);
+}
+
+function clearMessage() {
+  if (messageTimeout) clearTimeout(messageTimeout);
+  messageTimeout = null;
+  profileMessage.value = "";
 }
 
 const openFieldEdit = (field: EditableProfileField) => {
@@ -91,6 +142,7 @@ const openFieldEdit = (field: EditableProfileField) => {
 };
 
 const confirmFieldEdit = async (field: EditableProfileField) => {
+  if (field === "username" && !canSaveUsername.value) return;
   if (!isProfileDirty.value) {
     editingFields[field] = false;
     return;
@@ -99,6 +151,7 @@ const confirmFieldEdit = async (field: EditableProfileField) => {
 };
 
 const closeFieldEdits = () => {
+  editingFields.username = false;
   editingFields.firstName = false;
   editingFields.lastName = false;
   editingFields.bio = false;
@@ -109,6 +162,7 @@ const saveProfile = async () => {
   profileMessage.value = "";
   try {
     await authStore.updateProfile({
+      username: profileForm.username.trim(),
       firstName: profileForm.firstName,
       lastName: profileForm.lastName,
       bio: profileForm.bio,
@@ -165,33 +219,6 @@ const revokeAvatarPreview = () => {
   avatarPreviewUrl.value = null;
 };
 
-const requestEmailChange = async () => {
-  if (!emailChangeForm.currentPassword || !isEmail(emailChangeForm.newEmail)) return;
-  isChangingEmail.value = true;
-  try {
-    await authStore.requestEmailChange(emailChangeForm.currentPassword, emailChangeForm.newEmail);
-    emailChangeStep.value = "confirm";
-    setMessage(t("profile.emailChangeSent"));
-  } catch (cause) { setMessage(apiErrorMessage(cause), "error"); }
-  finally { isChangingEmail.value = false; }
-};
-
-const confirmEmailChange = async () => {
-  if (!isVerificationCode(emailChangeForm.code)) return;
-  isChangingEmail.value = true;
-  try {
-    await authStore.confirmEmailChange(emailChangeForm.code);
-    emailChangeStep.value = "closed";
-    emailChangeForm.currentPassword = ""; emailChangeForm.newEmail = ""; emailChangeForm.code = "";
-    setMessage(t("profile.emailChanged"));
-  } catch (cause) { setMessage(apiErrorMessage(cause), "error"); }
-  finally { isChangingEmail.value = false; }
-};
-
-const cancelEmailChange = async () => {
-  if (emailChangeStep.value === "confirm") await authStore.cancelEmailChange().catch(() => undefined);
-  emailChangeStep.value = "closed";
-};
 </script>
 
 <template>
@@ -232,18 +259,50 @@ const cancelEmailChange = async () => {
           <p>{{ authStore.currentUser?.email }}</p>
         </div>
       </div>
-      <button
-        class="icon-button quiet account-switch-button"
-        type="button"
-        :aria-label="t('profile.switchAccount')"
-        :title="t('profile.switchAccount')"
-        @click="isAccountModalOpen = true"
-      >
-        <i class="pi pi-users"></i>
-      </button>
+      <div class="profile-hero-actions">
+        <LocaleSwitcher class="profile-locale" />
+        <button
+          class="icon-button quiet account-switch-button"
+          type="button"
+          :aria-label="t('profile.switchAccount')"
+          :title="t('profile.switchAccount')"
+          @click="isAccountModalOpen = true"
+        >
+          <i class="pi pi-users"></i>
+        </button>
+      </div>
     </header>
 
-    <span v-if="profileMessage" class="status-badge" :class="messageTone">{{ profileMessage }}</span>
+    <Transition name="profile-toast">
+      <aside
+        v-if="profileMessage"
+        class="profile-toast"
+        :class="messageTone"
+        :role="messageTone === 'error' ? 'alert' : 'status'"
+        aria-live="polite"
+      >
+        <span class="profile-toast-icon" aria-hidden="true">
+          <i
+            :class="
+              messageTone === 'success'
+                ? 'pi pi-check'
+                : messageTone === 'error'
+                  ? 'pi pi-times'
+                  : 'pi pi-exclamation-triangle'
+            "
+          ></i>
+        </span>
+        <span class="profile-toast-message">{{ profileMessage }}</span>
+        <button
+          class="profile-toast-close"
+          type="button"
+          :aria-label="t('common.close')"
+          @click="clearMessage"
+        >
+          <i class="pi pi-times"></i>
+        </button>
+      </aside>
+    </Transition>
 
     <div class="profile-shell">
       <nav class="profile-icon-tabs" aria-label="Profile sections">
@@ -315,10 +374,32 @@ const cancelEmailChange = async () => {
                   <p v-else :class="{ muted: !profileForm[field.key] }">
                     {{ profileForm[field.key] || t("profile.notSpecified") }}
                   </p>
+                  <span
+                    v-if="field.key === 'username' && editingFields.username && usernameAvailability !== 'idle'"
+                    class="validation-message username-availability"
+                    :class="{
+                      'text-success': usernameAvailability === 'available',
+                      'text-danger': usernameAvailability === 'taken' || usernameAvailability === 'invalid',
+                    }"
+                    aria-live="polite"
+                  >
+                    <i v-if="usernameAvailability === 'checking'" class="pi pi-spinner pi-spin"></i>
+                    <i v-else-if="usernameAvailability === 'available'" class="pi pi-check"></i>
+                    <i v-else class="pi pi-times"></i>
+                    {{
+                      usernameAvailability === "checking"
+                        ? t("profile.usernameChecking")
+                        : usernameAvailability === "available"
+                          ? t("auth.usernameAvailable")
+                          : usernameAvailability === "taken"
+                            ? t("auth.usernameTaken")
+                            : t("errors.VALIDATION_USERNAME_TOO_SHORT")
+                    }}
+                  </span>
                 </div>
                 <button
                   class="icon-button quiet edit-field-button"
-                  :disabled="isSavingProfile"
+                  :disabled="isSavingProfile || (field.key === 'username' && editingFields.username && !canSaveUsername)"
                   type="button"
                   :aria-label="editingFields[field.key] ? t('profile.finishEditing') : t('profile.editField')"
                   :title="editingFields[field.key] ? t('profile.finishEditing') : t('profile.editField')"
@@ -334,38 +415,6 @@ const cancelEmailChange = async () => {
                     "
                   ></i>
                 </button>
-              </article>
-
-              <article class="profile-edit-row readonly-row">
-                <span class="profile-edit-label">{{ t("auth.username") }}</span>
-                <div class="profile-edit-value">
-                  <p>{{ authStore.currentUser?.username || t("common.unknown") }}</p>
-                </div>
-                <span class="readonly-marker">{{ t("profile.readonly") }}</span>
-              </article>
-
-              <article class="profile-edit-row readonly-row">
-                <span class="profile-edit-label">{{ t("auth.email") }}</span>
-                <div class="profile-edit-value">
-                  <p>{{ authStore.currentUser?.email || t("common.unknown") }}</p>
-                </div>
-                <button class="btn btn-ghost" type="button" @click="emailChangeStep = 'request'">{{ t("profile.changeEmail") }}</button>
-              </article>
-              <article v-if="emailChangeStep !== 'closed'" class="profile-edit-row email-change-row">
-                <span class="profile-edit-label">{{ t("profile.changeEmail") }}</span>
-                <div class="profile-edit-value">
-                  <template v-if="emailChangeStep === 'request'">
-                    <input v-model="emailChangeForm.newEmail" class="input inline-input" type="email" :placeholder="t('profile.newEmail')" />
-                    <input v-model="emailChangeForm.currentPassword" class="input inline-input" type="password" :placeholder="t('profile.currentPassword')" />
-                  </template>
-                  <input v-else v-model="emailChangeForm.code" class="input inline-input" inputmode="numeric" maxlength="6" :placeholder="t('auth.verificationCode')" />
-                </div>
-                <div class="profile-email-actions">
-                  <button class="btn btn-primary" type="button" :disabled="isChangingEmail" @click="emailChangeStep === 'request' ? requestEmailChange() : confirmEmailChange()">
-                    {{ t("common.continue") }}
-                  </button>
-                  <button class="btn btn-ghost" type="button" @click="cancelEmailChange">{{ t("common.cancel") }}</button>
-                </div>
               </article>
             </div>
           </form>

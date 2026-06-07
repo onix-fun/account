@@ -20,6 +20,7 @@ import profile.infrastructure.db.VerificationTokenRepository
 import profile.infrastructure.db.UserRepository
 import profile.infrastructure.redis.PendingRegistrationStore
 import profile.infrastructure.security.TokenHasher
+import profile.users.UpdateProfileRequest
 import java.nio.file.Files
 import java.security.KeyPairGenerator
 import java.util.Base64
@@ -274,6 +275,43 @@ class ServerTest {
             bearerAuth(apiAccessToken)
         }
         assertEquals(HttpStatusCode.OK, bearerSessionsResponse.status)
+
+        val renamedResponse = client.patch("/api/users/me") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(apiAccessToken)
+            setBody(UpdateProfileRequest(username = "renameduser"))
+        }
+        assertEquals(HttpStatusCode.OK, renamedResponse.status)
+        assertTrue(renamedResponse.bodyAsText().contains("\"username\":\"renameduser\""))
+        assertTrue(client.get("/api/auth/username-available?username=LOGINUSER").bodyAsText().contains("\"available\":true"))
+        assertTrue(client.get("/api/auth/username-available?username=RENAMEDUSER").bodyAsText().contains("\"available\":false"))
+
+        val unchangedUsernameResponse = client.patch("/api/users/me") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(apiAccessToken)
+            setBody(UpdateProfileRequest(username = "renameduser", firstName = "Renamed"))
+        }
+        assertEquals(HttpStatusCode.OK, unchangedUsernameResponse.status)
+
+        val secondRegisterResponse = client.post("/api/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest("taken@example.com", "takenuser", "password123"))
+        }
+        assertEquals(HttpStatusCode.Accepted, secondRegisterResponse.status)
+        val secondCode = codeForPendingRegistration(pendingRegistrationStore, "taken@example.com")
+        assertEquals(HttpStatusCode.Created, client.post("/api/auth/confirm-registration") {
+            contentType(ContentType.Application.Json)
+            setBody(ConfirmRegistrationRequest("taken@example.com", secondCode))
+        }.status)
+
+        val takenUsernameResponse = client.patch("/api/users/me") {
+            contentType(ContentType.Application.Json)
+            bearerAuth(apiAccessToken)
+            setBody(UpdateProfileRequest(username = "TAKENUSER"))
+        }
+        assertEquals(HttpStatusCode.Conflict, takenUsernameResponse.status)
+        assertTrue(takenUsernameResponse.bodyAsText().contains("\"code\":\"AUTH_USERNAME_IN_USE\""))
+        assertTrue(takenUsernameResponse.bodyAsText().contains("\"field\":\"username\""))
 
         val apiRefreshResponse = client.post("/api/auth/token/refresh") {
             contentType(ContentType.Application.Json)

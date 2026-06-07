@@ -103,7 +103,7 @@ export const useAuthStore = defineStore("auth", () => {
     }
   };
 
-  const updateProfile = async (payload: { firstName?: string; lastName?: string; bio?: string }) => {
+  const updateProfile = async (payload: { username?: string; firstName?: string; lastName?: string; bio?: string }) => {
     currentUser.value = await AuthService.updateProfile(payload);
     syncAccounts();
   };

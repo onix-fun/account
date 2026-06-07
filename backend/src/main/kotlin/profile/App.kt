@@ -54,6 +54,7 @@ import profile.shared.ApiFieldError
 import profile.users.UserController
 import profile.users.RequestEmailChangeRequest
 import profile.users.ConfirmEmailChangeRequest
+import profile.users.UpdateProfileRequest
 import profile.infrastructure.db.SessionRepository
 import profile.infrastructure.config.SecurityConfig
 import profile.infrastructure.ratelimit.RateLimit
@@ -96,7 +97,7 @@ fun Application.module() {
                 request.email.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "email")
                 !request.email.contains("@") -> invalid(ApiErrorCode.VALIDATION_INVALID_EMAIL, "email")
                 request.username.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "username")
-                request.username.length < 3 -> invalid(ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
+                request.username.trim().length < 3 -> invalid(ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
                 request.password.length < 8 -> invalid(ApiErrorCode.VALIDATION_PASSWORD_TOO_SHORT, "password")
                 else -> ValidationResult.Valid
             }
@@ -174,6 +175,15 @@ fun Application.module() {
         }
         validate<ConfirmEmailChangeRequest> { request ->
             if (!request.code.matches(Regex("\\d{6}"))) invalid(ApiErrorCode.VALIDATION_INVALID_CODE, "code") else ValidationResult.Valid
+        }
+        validate<UpdateProfileRequest> { request ->
+            when {
+                request.username != null && request.username.isBlank() ->
+                    invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "username")
+                request.username != null && request.username.trim().length < 3 ->
+                    invalid(ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
+                else -> ValidationResult.Valid
+            }
         }
     }
 

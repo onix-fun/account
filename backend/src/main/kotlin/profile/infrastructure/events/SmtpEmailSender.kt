@@ -6,17 +6,21 @@ import jakarta.mail.PasswordAuthentication
 import jakarta.mail.Session
 import jakarta.mail.Transport
 import jakarta.mail.internet.InternetAddress
+import jakarta.mail.internet.MimeBodyPart
 import jakarta.mail.internet.MimeMessage
+import jakarta.mail.internet.MimeMultipart
 import profile.infrastructure.config.SmtpConfig
 import profile.infrastructure.security.EmailNormalizer
 import java.util.Properties
 
 class SmtpEmailSender(private val config: SmtpConfig) {
-    fun sendVerificationCode(email: String, code: String) = send(email, "Account email verification", "Your verification code is:\n\n$code\n\nThe code expires in 15 minutes.")
-    fun sendPasswordReset(email: String, code: String) = send(email, "Account password reset", "Your password reset code is:\n\n$code\n\nThe code expires in 15 minutes.")
-    fun sendSecurityNotification(email: String, message: String) = send(email, "Account security notification", message)
+    fun sendCode(email: String, code: String, purpose: EmailCodePurpose, locale: EmailLocale) =
+        send(email, EmailContentFactory.code(purpose, code, locale))
 
-    private fun send(to: String, subject: String, body: String) {
+    fun sendSecurityNotification(email: String, type: SecurityNoticeType, locale: EmailLocale) =
+        send(email, EmailContentFactory.security(type, locale))
+
+    private fun send(to: String, content: EmailContent) {
         val recipient = EmailNormalizer.normalize(to)
         val from = EmailNormalizer.normalize(config.from, "from")
         val properties = Properties().apply {
@@ -28,7 +32,11 @@ class SmtpEmailSender(private val config: SmtpConfig) {
         } else null)
         Transport.send(MimeMessage(session).apply {
             setFrom(InternetAddress(from)); setRecipient(Message.RecipientType.TO, InternetAddress(recipient))
-            setSubject(subject, Charsets.UTF_8.name()); setText(body, Charsets.UTF_8.name())
+            setSubject(content.subject, Charsets.UTF_8.name())
+            setContent(MimeMultipart("alternative").apply {
+                addBodyPart(MimeBodyPart().apply { setText(content.text, Charsets.UTF_8.name()) })
+                addBodyPart(MimeBodyPart().apply { setContent(content.html, "text/html; charset=UTF-8") })
+            })
         })
     }
 }

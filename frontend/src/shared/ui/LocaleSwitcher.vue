@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { setLocale, type SupportedLocale } from "@/shared/i18n";
 
-const { locale } = useI18n();
+const { locale, t } = useI18n();
 const currentLocale = computed(() => locale.value as SupportedLocale);
 
 const chooseLocale = (value: SupportedLocale) => {
@@ -12,7 +12,7 @@ const chooseLocale = (value: SupportedLocale) => {
 </script>
 
 <template>
-  <div class="locale-switcher" aria-label="Language">
+  <div class="locale-switcher" role="group" :aria-label="t('auth.language')">
     <button
       type="button"
       :class="{ active: currentLocale === 'ru' }"
@@ -21,7 +21,6 @@ const chooseLocale = (value: SupportedLocale) => {
     >
       RU
     </button>
-    <span aria-hidden="true">|</span>
     <button
       type="button"
       :class="{ active: currentLocale === 'en' }"

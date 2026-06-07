@@ -11,6 +11,7 @@ import profile.infrastructure.db.User
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
 import profile.auth.AuthService
+import profile.infrastructure.events.EmailLocale
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
@@ -37,14 +38,14 @@ class UserController(
     suspend fun requestEmailChange(call: ApplicationCall) {
         val principal = call.principal<JWTPrincipal>()!!
         val request = call.receive<RequestEmailChangeRequest>()
-        authService.requestEmailChange(principal.payload.subject, request.currentPassword, request.newEmail)
+        authService.requestEmailChange(principal.payload.subject, request.currentPassword, request.newEmail, call.emailLocale())
         call.respond(HttpStatusCode.Accepted, profile.auth.CodeSentResponse())
     }
 
     suspend fun confirmEmailChange(call: ApplicationCall) {
         val principal = call.principal<JWTPrincipal>()!!
         val request = call.receive<ConfirmEmailChangeRequest>()
-        authService.confirmEmailChange(principal.payload.subject, principal.payload.getClaim("sid").asString(), request.code)
+        authService.confirmEmailChange(principal.payload.subject, principal.payload.getClaim("sid").asString(), request.code, call.emailLocale())
         call.respond(HttpStatusCode.OK)
     }
 
@@ -113,6 +114,9 @@ class UserController(
 
         return output.toByteArray()
     }
+
+    private fun ApplicationCall.emailLocale(): EmailLocale =
+        EmailLocale.fromHeader(request.headers[HttpHeaders.AcceptLanguage])
 
     private fun validateAvatarSignature(bytes: ByteArray, contentType: String) {
         val valid = when (contentType) {

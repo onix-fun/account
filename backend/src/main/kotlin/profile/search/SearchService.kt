@@ -22,6 +22,12 @@ class SearchService(
         redis.zadd(indexKey, 0.0, entry)
     }
 
+    fun reindexUser(previous: User, updated: User) {
+        val redis = redisManager.sync() ?: return
+        redis.zrem(indexKey, "${previous.username.lowercase()}:${previous.id}")
+        redis.zadd(indexKey, 0.0, "${updated.username.lowercase()}:${updated.id}")
+    }
+
     fun indexAllUsers() {
         val redis = redisManager.sync() ?: return
         val users = userRepository.findAll()

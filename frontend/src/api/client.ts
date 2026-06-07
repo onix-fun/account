@@ -94,6 +94,7 @@ export async function refreshBrowserSession(): Promise<void> {
 
 [domainClient, analyticsClient, profileClient].forEach((client) => {
   client.interceptors.request.use(async (config) => {
+    config.headers.set("Accept-Language", i18n.global.locale.value);
     if (isUnsafeMethod(config.method) && !config.url?.startsWith("/auth/token")) {
       config.headers.set("X-CSRF-Token", await initializeCsrfToken());
     }

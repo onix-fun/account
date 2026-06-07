@@ -36,9 +36,18 @@ class EmailEventConsumer(private val dataSource: DataSource, private val publish
     }
 
     private fun deliver(type: String, payload: String) = when(type) {
-        "email.verify", "email.email_change" -> Json.decodeFromString<VerificationEmailPayload>(payload).let { sender.sendVerificationCode(it.email,it.code) }
-        "email.password_reset" -> Json.decodeFromString<PasswordResetEmailPayload>(payload).let { sender.sendPasswordReset(it.email,it.code) }
-        "email.security_notice" -> Json.decodeFromString<SecurityNotificationPayload>(payload).let { sender.sendSecurityNotification(it.email,it.message) }
+        "email.verify" -> Json.decodeFromString<VerificationEmailPayload>(payload).let {
+            sender.sendCode(it.email, it.code, EmailCodePurpose.VERIFY_EMAIL, it.locale)
+        }
+        "email.email_change" -> Json.decodeFromString<VerificationEmailPayload>(payload).let {
+            sender.sendCode(it.email, it.code, EmailCodePurpose.CHANGE_EMAIL, it.locale)
+        }
+        "email.password_reset" -> Json.decodeFromString<PasswordResetEmailPayload>(payload).let {
+            sender.sendCode(it.email, it.code, EmailCodePurpose.RESET_PASSWORD, it.locale)
+        }
+        "email.security_notice" -> Json.decodeFromString<SecurityNotificationPayload>(payload).let {
+            sender.sendSecurityNotification(it.email, it.type, it.locale)
+        }
         else -> Unit
     }
     private fun update(conn: java.sql.Connection,id:String,status:String,attempts:Int,error:String?) {

@@ -5,6 +5,7 @@ import profile.infrastructure.db.User
 
 @Serializable
 data class UpdateProfileRequest(
+    val username: String? = null,
     val firstName: String? = null,
     val lastName: String? = null,
     val bio: String? = null

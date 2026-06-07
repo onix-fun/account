@@ -7,6 +7,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import profile.infrastructure.config.JwtConfig
+import profile.infrastructure.events.EmailLocale
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
 import profile.users.toProfileDto
@@ -28,7 +29,8 @@ class AuthController(
             request.username,
             request.password,
             request.firstName,
-            request.lastName
+            request.lastName,
+            call.emailLocale()
         )
         call.respond(HttpStatusCode.Accepted, response)
     }
@@ -45,7 +47,7 @@ class AuthController(
 
     suspend fun resendRegistrationCode(call: ApplicationCall) {
         val request = call.receive<ResendRegistrationCodeRequest>()
-        val response = authService.resendRegistrationCode(request.identifier ?: request.email.orEmpty())
+        val response = authService.resendRegistrationCode(request.identifier ?: request.email.orEmpty(), call.emailLocale())
         call.respond(HttpStatusCode.OK, response)
     }
 
@@ -101,7 +103,7 @@ class AuthController(
 
     suspend fun requestPublicVerification(call: ApplicationCall) {
         val request = call.receive<PublicVerificationRequest>()
-        authService.requestPublicEmailVerification(request.identifier)
+        authService.requestPublicEmailVerification(request.identifier, call.emailLocale())
         call.respond(HttpStatusCode.OK)
     }
 
@@ -140,13 +142,13 @@ class AuthController(
 
     suspend fun resendVerification(call: ApplicationCall) {
         val userId = call.principal<JWTPrincipal>()!!.payload.subject
-        authService.requestEmailVerification(userId)
+        authService.requestEmailVerification(userId, call.emailLocale())
         call.respond(HttpStatusCode.OK, mapOf("message" to "Verification code resent"))
     }
 
     suspend fun forgotPassword(call: ApplicationCall) {
         val request = call.receive<ForgotPasswordRequest>()
-        authService.forgotPassword(request.identifier ?: request.email.orEmpty())
+        authService.forgotPassword(request.identifier ?: request.email.orEmpty(), call.emailLocale())
         call.respond(HttpStatusCode.OK, mapOf("message" to "If the account exists, a reset code has been sent"))
     }
 
@@ -155,7 +157,8 @@ class AuthController(
         authService.resetPassword(
             request.identifier ?: request.email.orEmpty(),
             request.code ?: request.token.orEmpty(),
-            request.newPassword
+            request.newPassword,
+            call.emailLocale()
         )
         call.respond(HttpStatusCode.OK, mapOf("message" to "Password has been reset successfully"))
     }
@@ -163,7 +166,7 @@ class AuthController(
     suspend fun changePassword(call: ApplicationCall) {
         val userId = call.principal<JWTPrincipal>()!!.payload.subject
         val request = call.receive<ChangePasswordRequest>()
-        authService.changePassword(userId, request.currentPassword, request.newPassword)
+        authService.changePassword(userId, request.currentPassword, request.newPassword, call.emailLocale())
 
         requestRefreshTokens(call)
             .keys
@@ -398,6 +401,9 @@ class AuthController(
         return request.headers["X-Real-IP"]
             ?: request.local.remoteHost
     }
+
+    private fun ApplicationCall.emailLocale(): EmailLocale =
+        EmailLocale.fromHeader(request.headers[HttpHeaders.AcceptLanguage])
 
     private companion object {
         private const val REFRESH_COOKIE_PREFIX = "refresh_token_"

@@ -4,6 +4,8 @@ import { useI18n } from "vue-i18n";
 import { apiErrorMessage, parseApiError } from "@/api/client";
 import { useAuthStore } from "@/infra/store";
 import VerificationCodeInput from "@/shared/ui/VerificationCodeInput.vue";
+import PasswordInput from "@/shared/ui/PasswordInput.vue";
+import { isEmail, isVerificationCode } from "@/shared/lib/validation";
 
 const emit = defineEmits<{
   message: [message: string, tone?: "success" | "error" | "warning"];
@@ -14,6 +16,9 @@ const { t } = useI18n();
 
 const isResetCodeSent = ref(false);
 const resetCodeError = ref("");
+const emailChangeStep = ref<"request" | "confirm">("request");
+const isChangingEmail = ref(false);
+const emailChangeForm = reactive({ currentPassword: "", newEmail: "", code: "" });
 const directForm = reactive({
   currentPassword: "",
   newPassword: "",
@@ -39,6 +44,46 @@ const resetPasswordMismatch = computed(() => {
 const canDeleteAccount = computed(() => {
   return Boolean(deleteForm.password) && deleteForm.confirmation.trim() === accountEmail.value;
 });
+const canRequestEmailChange = computed(() => {
+  return Boolean(emailChangeForm.currentPassword) && isEmail(emailChangeForm.newEmail);
+});
+
+const requestEmailChange = async () => {
+  if (!canRequestEmailChange.value) return;
+  isChangingEmail.value = true;
+  try {
+    await authStore.requestEmailChange(emailChangeForm.currentPassword, emailChangeForm.newEmail);
+    emailChangeStep.value = "confirm";
+    emit("message", t("profile.emailChangeSent"));
+  } catch (cause) {
+    emit("message", apiErrorMessage(cause), "error");
+  } finally {
+    isChangingEmail.value = false;
+  }
+};
+
+const confirmEmailChange = async () => {
+  if (!isVerificationCode(emailChangeForm.code)) return;
+  isChangingEmail.value = true;
+  try {
+    await authStore.confirmEmailChange(emailChangeForm.code);
+    emailChangeStep.value = "request";
+    emailChangeForm.currentPassword = "";
+    emailChangeForm.newEmail = "";
+    emailChangeForm.code = "";
+    emit("message", t("profile.emailChanged"));
+  } catch (cause) {
+    emit("message", apiErrorMessage(cause), "error");
+  } finally {
+    isChangingEmail.value = false;
+  }
+};
+
+const cancelEmailChange = async () => {
+  if (emailChangeStep.value === "confirm") await authStore.cancelEmailChange().catch(() => undefined);
+  emailChangeStep.value = "request";
+  emailChangeForm.code = "";
+};
 
 const changePassword = async () => {
   if (directForm.newPassword !== directForm.confirmPassword) {
@@ -109,6 +154,47 @@ const deleteAccount = async () => {
 
     <section class="system-section">
       <div class="system-section-head">
+        <i class="pi pi-at row-icon"></i>
+        <div>
+          <h3>{{ t("profile.changeEmail") }}</h3>
+          <p>{{ t("system.changeEmailHint", { email: accountEmail }) }}</p>
+        </div>
+      </div>
+
+      <form v-if="emailChangeStep === 'request'" class="system-form" @submit.prevent="requestEmailChange">
+        <label class="field">
+          <span>{{ t("profile.newEmail") }}</span>
+          <input v-model="emailChangeForm.newEmail" class="input" type="email" autocomplete="email" required />
+        </label>
+        <label class="field">
+          <span>{{ t("system.currentPassword") }}</span>
+          <PasswordInput v-model="emailChangeForm.currentPassword" class="input" autocomplete="current-password" required />
+        </label>
+        <button class="btn btn-primary system-submit" type="submit" :disabled="isChangingEmail || !canRequestEmailChange">
+          <i class="pi pi-send"></i>
+          {{ t("common.continue") }}
+        </button>
+      </form>
+
+      <form v-else class="system-form" @submit.prevent="confirmEmailChange">
+        <label class="field">
+          <span>{{ t("auth.verificationCode") }}</span>
+          <VerificationCodeInput v-model="emailChangeForm.code" autofocus />
+        </label>
+        <div class="system-actions email-change-actions">
+          <button class="btn btn-primary" type="submit" :disabled="isChangingEmail || !isVerificationCode(emailChangeForm.code)">
+            <i class="pi pi-check"></i>
+            {{ t("common.apply") }}
+          </button>
+          <button class="btn btn-ghost" type="button" :disabled="isChangingEmail" @click="cancelEmailChange">
+            {{ t("common.cancel") }}
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section class="system-section">
+      <div class="system-section-head">
         <i class="pi pi-key row-icon"></i>
         <div>
           <h3>{{ t("system.changePassword") }}</h3>
@@ -119,10 +205,9 @@ const deleteAccount = async () => {
       <form class="system-form" @submit.prevent="changePassword">
         <label class="field">
           <span>{{ t("system.currentPassword") }}</span>
-          <input
+          <PasswordInput
             v-model="directForm.currentPassword"
             class="input"
-            type="password"
             autocomplete="current-password"
             required
           />
@@ -130,10 +215,9 @@ const deleteAccount = async () => {
         <div class="field-grid cols-2">
           <label class="field">
             <span>{{ t("auth.newPassword") }}</span>
-            <input
+            <PasswordInput
               v-model="directForm.newPassword"
               class="input"
-              type="password"
               autocomplete="new-password"
               minlength="8"
               required
@@ -141,10 +225,9 @@ const deleteAccount = async () => {
           </label>
           <label class="field">
             <span>{{ t("auth.confirmPassword") }}</span>
-            <input
+            <PasswordInput
               v-model="directForm.confirmPassword"
               class="input"
-              type="password"
               autocomplete="new-password"
               minlength="8"
               required
@@ -193,10 +276,9 @@ const deleteAccount = async () => {
         <div class="field-grid cols-2">
           <label class="field">
             <span>{{ t("auth.newPassword") }}</span>
-            <input
+            <PasswordInput
               v-model="resetForm.newPassword"
               class="input"
-              type="password"
               autocomplete="new-password"
               minlength="8"
               required
@@ -204,10 +286,9 @@ const deleteAccount = async () => {
           </label>
           <label class="field">
             <span>{{ t("auth.confirmPassword") }}</span>
-            <input
+            <PasswordInput
               v-model="resetForm.confirmPassword"
               class="input"
-              type="password"
               autocomplete="new-password"
               minlength="8"
               required
@@ -247,10 +328,9 @@ const deleteAccount = async () => {
         </label>
         <label class="field">
           <span>{{ t("system.currentPassword") }}</span>
-          <input
+          <PasswordInput
             v-model="deleteForm.password"
             class="input"
-            type="password"
             autocomplete="current-password"
             required
           />

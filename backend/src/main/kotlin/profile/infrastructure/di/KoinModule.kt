@@ -119,7 +119,7 @@ fun koinModule(config: ApplicationConfig) = module {
 
     // 3. Services
     single { AuthService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
-    single { UserService(get(), get()) }
+    single { UserService(get(), get(), get(), get()) }
     single { SessionService(get(), get()) }
 
     // 4. Controllers

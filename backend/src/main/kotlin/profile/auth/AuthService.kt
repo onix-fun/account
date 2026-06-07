@@ -17,6 +17,8 @@ import profile.infrastructure.events.EventPublisher
 import profile.infrastructure.events.PasswordResetEmailPayload
 import profile.infrastructure.events.VerificationEmailPayload
 import profile.infrastructure.events.SecurityNotificationPayload
+import profile.infrastructure.events.EmailLocale
+import profile.infrastructure.events.SecurityNoticeType
 import profile.infrastructure.jwt.JwtIssuer
 import profile.infrastructure.redis.PendingRegistration
 import profile.infrastructure.redis.PendingRegistrationStore
@@ -53,10 +55,12 @@ class AuthService(
         username: String,
         password: String,
         firstName: String? = null,
-        lastName: String? = null
+        lastName: String? = null,
+        locale: EmailLocale = EmailLocale.EN
     ): RegistrationStartedResponse {
         val normalizedEmail = normalizeEmail(email)
         val normalizedUsername = normalizeUsername(username)
+        if (normalizedUsername.length < 3) apiError(ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
         ensureUserCanBeCreated(normalizedEmail, normalizedUsername)
 
         val code = generateVerificationCode()
@@ -70,7 +74,7 @@ class AuthService(
         )
 
         pendingRegistrationStore.create(pending)
-        publishVerificationEmail(normalizedEmail, code)
+        publishVerificationEmail(normalizedEmail, code, locale)
 
         return RegistrationStartedResponse(
             expiresInSeconds = 900
@@ -112,7 +116,7 @@ class AuthService(
         return createSession(createdUser, deviceId, userAgent, ipAddress)
     }
 
-    fun resendRegistrationCode(identifier: String): RegistrationStartedResponse {
+    fun resendRegistrationCode(identifier: String, locale: EmailLocale = EmailLocale.EN): RegistrationStartedResponse {
         enforcePublicRate("registration-resend", identifier)
         val pending = pendingRegistrationStore.findByIdentifier(identifier)
             ?: apiError(ApiErrorCode.AUTH_PENDING_REGISTRATION_NOT_FOUND, "identifier")
@@ -120,14 +124,14 @@ class AuthService(
 
         val code = generateVerificationCode()
         pendingRegistrationStore.refreshCode(normalizedEmail, TokenHasher.challenge(securityConfig.otpHmacSecret, "REGISTRATION", normalizedEmail, code))
-        publishVerificationEmail(pending.email, code)
+        publishVerificationEmail(pending.email, code, locale)
 
         return RegistrationStartedResponse(
             expiresInSeconds = 900
         )
     }
 
-    fun requestEmailVerification(userId: String) {
+    fun requestEmailVerification(userId: String, locale: EmailLocale = EmailLocale.EN) {
         val user = userRepository.findById(userId) ?: return
         if (user.emailVerified) return
 
@@ -140,7 +144,7 @@ class AuthService(
             expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)
         )
         verificationTokenRepository.create(token)
-        publishVerificationEmail(user.email, code)
+        publishVerificationEmail(user.email, code, locale)
     }
 
     fun verifyEmail(userId: String, code: String) {
@@ -149,7 +153,7 @@ class AuthService(
         userRepository.updateEmailVerified(userId, true)
     }
 
-    fun forgotPassword(identifier: String) {
+    fun forgotPassword(identifier: String, locale: EmailLocale = EmailLocale.EN) {
         enforcePublicRate("password-reset", identifier)
         val user = findUserByIdentifier(identifier) ?: return
 
@@ -165,11 +169,11 @@ class AuthService(
 
         eventPublisher.publish(
             "email.password_reset",
-            Json.encodeToString(PasswordResetEmailPayload(user.email, resetCode))
+            Json.encodeToString(PasswordResetEmailPayload(user.email, resetCode, locale))
         )
     }
 
-    fun resetPassword(identifier: String, resetCode: String, newPassword: String) {
+    fun resetPassword(identifier: String, resetCode: String, newPassword: String, locale: EmailLocale = EmailLocale.EN) {
         val user = findUserByIdentifier(identifier) ?: apiError(ApiErrorCode.AUTH_ACCOUNT_NOT_FOUND, "identifier")
         verificationTokenRepository.verify(user.id, "PASSWORD_RESET", challengeHash("PASSWORD_RESET", user.id, resetCode.trim()))
 
@@ -181,11 +185,11 @@ class AuthService(
         auditRepository.record(user.id, "PASSWORD_RESET", "SUCCESS")
         val userEmail = userRepository.findById(user.id)?.email
         if (userEmail != null) {
-            eventPublisher.publish("email.security_notice", Json.encodeToString(SecurityNotificationPayload(userEmail, "Your password has been reset.")))
+            publishSecurityNotice(userEmail, SecurityNoticeType.PASSWORD_RESET, locale)
         }
     }
 
-    fun changePassword(userId: String, currentPassword: String, newPassword: String) {
+    fun changePassword(userId: String, currentPassword: String, newPassword: String, locale: EmailLocale = EmailLocale.EN) {
         val user = userRepository.findById(userId) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
         if (!PasswordHasher.verify(user.passwordHash, currentPassword)) {
             apiError(ApiErrorCode.AUTH_INVALID_PASSWORD, "currentPassword")
@@ -195,7 +199,7 @@ class AuthService(
         revokeCachedSessions(userId)
         sessionRepository.revokeAllForUser(userId)
         auditRepository.record(userId, "PASSWORD_CHANGED", "SUCCESS")
-        eventPublisher.publish("email.security_notice", Json.encodeToString(SecurityNotificationPayload(user.email, "Your password has been changed.")))
+        publishSecurityNotice(user.email, SecurityNoticeType.PASSWORD_CHANGED, locale)
     }
 
     fun deleteAccount(userId: String, password: String) {
@@ -341,11 +345,11 @@ class AuthService(
         return AccountLookupResponse(state, lookupIdentifier, user.avatarUrl)
     }
 
-    fun requestPublicEmailVerification(identifier: String) {
+    fun requestPublicEmailVerification(identifier: String, locale: EmailLocale = EmailLocale.EN) {
         enforcePublicRate("public-verification", identifier)
         val user = findUserByIdentifier(identifier) ?: apiError(ApiErrorCode.AUTH_ACCOUNT_NOT_FOUND, "identifier")
         if (user.status != "ACTIVE") apiError(ApiErrorCode.AUTH_ACCOUNT_BLOCKED, "identifier")
-        if (!user.emailVerified) requestEmailVerification(user.id)
+        if (!user.emailVerified) requestEmailVerification(user.id, locale)
     }
 
     fun confirmPublicEmailVerification(identifier: String, code: String) {
@@ -363,11 +367,11 @@ class AuthService(
         }
     }
 
-    private fun publishVerificationEmail(email: String, code: String) {
-        eventPublisher.publish("email.verify", Json.encodeToString(VerificationEmailPayload(email, code)))
+    private fun publishVerificationEmail(email: String, code: String, locale: EmailLocale) {
+        eventPublisher.publish("email.verify", Json.encodeToString(VerificationEmailPayload(email, code, locale)))
     }
 
-    fun requestEmailChange(userId: String, currentPassword: String, newEmailRaw: String) {
+    fun requestEmailChange(userId: String, currentPassword: String, newEmailRaw: String, locale: EmailLocale = EmailLocale.EN) {
         val user = userRepository.findById(userId) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
         if (!PasswordHasher.verify(user.passwordHash, currentPassword)) apiError(ApiErrorCode.AUTH_INVALID_PASSWORD, "currentPassword")
         val newEmail = EmailNormalizer.normalize(newEmailRaw, "newEmail")
@@ -375,10 +379,10 @@ class AuthService(
         pendingEmailChangeRepository.upsert(PendingEmailChange(userId, newEmail, Instant.now().plus(15, ChronoUnit.MINUTES)))
         val code = generateVerificationCode()
         verificationTokenRepository.create(VerificationToken(userId = userId, tokenHash = challengeHash("EMAIL_CHANGE", userId, code), purpose = "EMAIL_CHANGE", expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)))
-        eventPublisher.publish("email.email_change", Json.encodeToString(VerificationEmailPayload(newEmail, code)))
+        eventPublisher.publish("email.email_change", Json.encodeToString(VerificationEmailPayload(newEmail, code, locale)))
     }
 
-    fun confirmEmailChange(userId: String, sessionId: String, code: String) {
+    fun confirmEmailChange(userId: String, sessionId: String, code: String, locale: EmailLocale = EmailLocale.EN) {
         val oldEmail = userRepository.findById(userId)?.email ?: apiError(ApiErrorCode.USER_NOT_FOUND)
         val pending = pendingEmailChangeRepository.find(userId) ?: apiError(ApiErrorCode.AUTH_EMAIL_CHANGE_NOT_FOUND)
         verificationTokenRepository.verify(userId, "EMAIL_CHANGE", challengeHash("EMAIL_CHANGE", userId, code.trim()))
@@ -388,8 +392,8 @@ class AuthService(
         sessionRepository.findActiveByUserId(userId).filter { it.id != sessionId }.forEach { redisManager.revokeSession(it.id) }
         sessionRepository.revokeAllExcept(userId, sessionId)
         auditRepository.record(userId, "EMAIL_CHANGED", "SUCCESS")
-        eventPublisher.publish("email.security_notice", Json.encodeToString(SecurityNotificationPayload(oldEmail, "Your account email address was changed.")))
-        eventPublisher.publish("email.security_notice", Json.encodeToString(SecurityNotificationPayload(pending.newEmail, "This email address was added to your account.")))
+        publishSecurityNotice(oldEmail, SecurityNoticeType.EMAIL_CHANGED, locale)
+        publishSecurityNotice(pending.newEmail, SecurityNoticeType.EMAIL_ADDED, locale)
     }
 
     fun cancelEmailChange(userId: String) {
@@ -412,6 +416,10 @@ class AuthService(
 
     private fun revokeCachedSessions(userId: String) {
         sessionRepository.findActiveByUserId(userId).forEach { redisManager.revokeSession(it.id) }
+    }
+
+    private fun publishSecurityNotice(email: String, type: SecurityNoticeType, locale: EmailLocale) {
+        eventPublisher.publish("email.security_notice", Json.encodeToString(SecurityNotificationPayload(email, type, locale)))
     }
 
     private fun normalizeEmail(email: String): String = EmailNormalizer.normalize(email)

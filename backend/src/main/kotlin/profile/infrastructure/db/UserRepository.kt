@@ -3,9 +3,12 @@ package profile.infrastructure.db
 import kotlinx.serialization.Serializable
 import profile.shared.InstantSerializer
 import java.sql.Connection
+import java.sql.SQLException
 import java.time.Instant
 import java.util.*
 import javax.sql.DataSource
+import profile.shared.ApiErrorCode
+import profile.shared.apiError
 
 @Serializable
 data class User(
@@ -33,7 +36,7 @@ class UserRepository(private val dataSource: DataSource) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *
         """
-        private const val UPDATE_PROFILE_SQL = "UPDATE users SET first_name = ?, last_name = ?, bio = ?, updated_at = ? WHERE id = ?"
+        private const val UPDATE_PROFILE_SQL = "UPDATE users SET username = ?, first_name = ?, last_name = ?, bio = ?, updated_at = ? WHERE id = ?"
         private const val UPDATE_EMAIL_SQL = "UPDATE users SET email = ?, email_verified = TRUE, updated_at = ? WHERE id = ?"
         private const val UPDATE_AVATAR_SQL = "UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?"
         private const val FIND_BY_EMAIL_SQL = "SELECT * FROM users WHERE LOWER(email) = LOWER(?)"
@@ -68,17 +71,30 @@ class UserRepository(private val dataSource: DataSource) {
         }
     }
 
-    fun updateProfile(userId: String, firstName: String?, lastName: String?, bio: String?) {
+    fun updateProfile(userId: String, username: String, firstName: String?, lastName: String?, bio: String?) {
         dataSource.connection.use { conn ->
-            conn.prepareStatement(UPDATE_PROFILE_SQL).use { stmt ->
-                stmt.setString(1, firstName)
-                stmt.setString(2, lastName)
-                stmt.setString(3, bio)
-                stmt.setTimestamp(4, java.sql.Timestamp.from(Instant.now()))
-                stmt.setObject(5, UUID.fromString(userId))
-                stmt.executeUpdate()
+            try {
+                conn.prepareStatement(UPDATE_PROFILE_SQL).use { stmt ->
+                    stmt.setString(1, username)
+                    stmt.setString(2, firstName)
+                    stmt.setString(3, lastName)
+                    stmt.setString(4, bio)
+                    stmt.setTimestamp(5, java.sql.Timestamp.from(Instant.now()))
+                    stmt.setObject(6, UUID.fromString(userId))
+                    stmt.executeUpdate()
+                }
+                conn.commit()
+            } catch (error: SQLException) {
+                conn.rollback()
+                val constraint = error.message.orEmpty()
+                if (
+                    error.sqlState == "23505" &&
+                    (constraint.contains("uq_users_username_lower") || constraint.contains("users_username_key"))
+                ) {
+                    apiError(ApiErrorCode.AUTH_USERNAME_IN_USE, "username")
+                }
+                throw error
             }
-            conn.commit()
         }
     }
 
