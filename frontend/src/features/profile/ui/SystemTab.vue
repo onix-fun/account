@@ -6,6 +6,7 @@ import { useAuthStore } from "@/infra/store";
 import VerificationCodeInput from "@/shared/ui/VerificationCodeInput.vue";
 import PasswordInput from "@/shared/ui/PasswordInput.vue";
 import { isEmail, isVerificationCode } from "@/shared/lib/validation";
+import LocaleSwitcher from "@/shared/ui/LocaleSwitcher.vue";
 
 const emit = defineEmits<{
   message: [message: string, tone?: "success" | "error" | "warning"];
@@ -151,6 +152,17 @@ const deleteAccount = async () => {
     <div class="section-toolbar">
       <h2>{{ t("system.title") }}</h2>
     </div>
+
+    <section class="system-section">
+      <div class="system-section-head">
+        <i class="pi pi-language row-icon"></i>
+        <div>
+          <h3>{{ t("system.interface") }}</h3>
+          <p>{{ t("system.languageHint") }}</p>
+        </div>
+      </div>
+      <LocaleSwitcher variant="dropdown" />
+    </section>
 
     <section class="system-section">
       <div class="system-section-head">

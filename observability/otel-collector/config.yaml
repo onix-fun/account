@@ -3,72 +3,133 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
-        auth:
-          authenticator: bearertokenauth/otel
       http:
         endpoint: 0.0.0.0:4318
-        auth:
-          authenticator: bearertokenauth/otel
-
-  file_log/account-gateway:
-    include:
-      - /var/log/account/account-gateway/*.log
-    start_at: beginning
-    include_file_path: true
+  file_log/gateway:
+    include: [/var/log/account/account-gateway/*.log]
+    start_at: end
     resource:
       service.name: account-gateway
       service.namespace: account
-
   file_log/profile:
-    include:
-      - /var/log/account/profile/*.log
-    start_at: beginning
-    include_file_path: true
+    include: [/var/log/account/profile/*.log]
+    start_at: end
     multiline:
       line_start_pattern: '^\d{4}-\d{2}-\d{2} '
     resource:
       service.name: profile
       service.namespace: account
+  host_metrics:
+    collection_interval: 30s
+    scrapers:
+      cpu: {}
+      memory: {}
+      disk: {}
+      filesystem: {}
+      load: {}
+      network: {}
+  redis:
+    endpoint: ${env:IDENTITY_REDIS_HOST}:6379
+    password: ${env:IDENTITY_REDIS_PASSWORD}
+    collection_interval: 30s
+  postgresql:
+    endpoint: account-postgres:5432
+    username: ${env:POSTGRES_USER}
+    password: ${env:POSTGRES_PASSWORD}
+    databases: [account]
+    tls:
+      insecure: true
+  nginx:
+    endpoint: http://account-gateway:8090/nginx_status
+    collection_interval: 30s
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: minio
+          scrape_interval: 30s
+          metrics_path: /minio/v2/metrics/cluster
+          static_configs:
+            - targets: [account-minio:9000]
+        - job_name: clickhouse
+          scrape_interval: 30s
+          metrics_path: /metrics
+          static_configs:
+            - targets: [account-clickhouse:9363]
 
 processors:
-  batch:
-    timeout: 1s
+  memory_limiter:
+    check_interval: 2s
+    limit_mib: 384
+  resource/common:
+    attributes:
+      - key: service.namespace
+        value: account
+        action: upsert
+      - key: deployment.environment
+        value: ${env:DEPLOYMENT_ENVIRONMENT}
+        action: upsert
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    policies:
+      - name: errors
+        type: status_code
+        status_code: {status_codes: [ERROR]}
+      - name: slow
+        type: latency
+        latency: {threshold_ms: 500}
+      - name: baseline
+        type: probabilistic
+        probabilistic: {sampling_percentage: 10}
 
 exporters:
-  otlphttp/central:
-    endpoint: ${env:CENTRAL_OTEL_EXPORTER_OTLP_ENDPOINT}
+  clickhouse/logs:
+    endpoint: tcp://account-clickhouse:9000
+    database: otel
+    username: ${env:CLICKHOUSE_USER}
+    password: ${env:CLICKHOUSE_PASSWORD}
+    ttl: 720h
+    create_schema: true
+    async_insert: true
+    sending_queue: {enabled: true, queue_size: 2000, num_consumers: 4}
+    retry_on_failure: {enabled: true, max_elapsed_time: 300s}
+  clickhouse/traces:
+    endpoint: tcp://account-clickhouse:9000
+    database: otel
+    username: ${env:CLICKHOUSE_USER}
+    password: ${env:CLICKHOUSE_PASSWORD}
+    ttl: 336h
+    create_schema: true
+    async_insert: true
+    sending_queue: {enabled: true, queue_size: 2000, num_consumers: 4}
+    retry_on_failure: {enabled: true, max_elapsed_time: 300s}
+  clickhouse/metrics:
+    endpoint: tcp://account-clickhouse:9000
+    database: otel
+    username: ${env:CLICKHOUSE_USER}
+    password: ${env:CLICKHOUSE_PASSWORD}
+    ttl: 2160h
+    create_schema: true
+    async_insert: true
+    sending_queue: {enabled: true, queue_size: 2000, num_consumers: 4}
+    retry_on_failure: {enabled: true, max_elapsed_time: 300s}
 
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
-  bearertokenauth/otel:
-    token: "${env:OTEL_AUTH_TOKEN}"
 
 service:
-  extensions:
-    - health_check
-    - bearertokenauth/otel
+  extensions: [health_check]
   pipelines:
     traces:
-      receivers:
-        - otlp
-      processors:
-        - batch
-      exporters:
-        - otlphttp/central
+      receivers: [otlp]
+      processors: [memory_limiter, resource/common, tail_sampling]
+      exporters: [clickhouse/traces]
     metrics:
-      receivers:
-        - otlp
-      processors:
-        - batch
-      exporters:
-        - otlphttp/central
+      receivers: [otlp, host_metrics, redis, postgresql, nginx, prometheus]
+      processors: [memory_limiter, resource/common]
+      exporters: [clickhouse/metrics]
     logs:
-      receivers:
-        - otlp
-        - file_log/account-gateway
-        - file_log/profile
-      processors:
-        - batch
-      exporters:
-        - otlphttp/central
+      receivers: [otlp, file_log/gateway, file_log/profile]
+      processors: [memory_limiter, resource/common]
+      exporters: [clickhouse/logs]

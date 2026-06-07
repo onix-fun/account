@@ -1,7 +1,8 @@
 # Kubernetes
 
-Production-пример содержит frontend, gateway, backend, PostgreSQL, Redis,
-MinIO, Services, PVC, TLS Ingress и NetworkPolicy.
+Production-пример содержит Kustomize base и production overlay для frontend,
+gateway, backend, PostgreSQL, Redis, MinIO, Services, PVC, TLS Ingress и
+NetworkPolicy.
 
 ## Файлы
 
@@ -43,11 +44,10 @@ cp secret.example.yaml secret.yaml
 ```sh
 kubectl create namespace account
 kubectl apply -f secret.yaml
-kubectl apply -f network-policy.yaml
 kubectl -n account create secret tls account-ingress-tls \
   --cert=tls.crt \
   --key=tls.key
-kubectl apply -f deployment.yaml
+kubectl apply -k overlays/production
 kubectl -n account rollout status deployment/profile
 kubectl -n account rollout status deployment/account-gateway
 ```

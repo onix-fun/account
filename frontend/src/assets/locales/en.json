@@ -103,6 +103,8 @@
   },
   "system": {
     "title": "System",
+    "interface": "Interface",
+    "languageHint": "Choose the language used by the interface and emails.",
     "changeEmailHint": "Current email: {email}. A confirmation code will be sent to the new address.",
     "changePassword": "Change password",
     "changePasswordHint": "Enter the current password and a new password. The current session will end after the change.",

@@ -1,0 +1,78 @@
+{
+  "uid": "account-infrastructure",
+  "title": "Infrastructure",
+  "description": "Host, PostgreSQL, Redis and MinIO operational health.",
+  "tags": ["account", "infrastructure"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "PostgreSQL backends",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT argMax(Value, TimeUnix) AS backends FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName = 'postgresql.backends'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Redis clients",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT argMax(Value, TimeUnix) AS clients FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName = 'redis.clients.connected'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "id": 3, "type": "stat", "title": "MinIO capacity free",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "bytes", "color": {"mode": "fixed-color", "fixedColor": "green"}}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT argMax(Value, TimeUnix) AS free FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND ServiceName = 'minio' AND MetricName = 'minio_cluster_capacity_usable_free_bytes'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "id": 4, "type": "stat", "title": "MinIO cluster health",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"1": {"text": "Healthy", "color": "green"}, "0": {"text": "Unhealthy", "color": "red"}}}], "color": {"mode": "thresholds"}}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT argMax(Value, TimeUnix) AS health FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND ServiceName = 'minio' AND MetricName = 'minio_cluster_health_status'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "System memory by state",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, Attributes['state'] AS state, avg(Value) AS bytes FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName = 'system.memory.usage' GROUP BY time, state ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Network throughput",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, concat(Attributes['device'], ' ', Attributes['direction']) AS series, max(Value)-min(Value) AS bytes FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName = 'system.network.io' GROUP BY time, series ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "PostgreSQL commits and rollbacks",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, MetricName, max(Value)-min(Value) AS operations FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName IN ('postgresql.commits','postgresql.rollbacks') GROUP BY time, MetricName ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Redis memory",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, avg(Value) AS memory FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND MetricName = 'redis.memory.used' GROUP BY time ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "Redis cache hits and misses",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, MetricName, max(Value)-min(Value) AS requests FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName IN ('redis.keyspace.hits','redis.keyspace.misses') GROUP BY time, MetricName ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20}
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "MinIO storage usage",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, MetricName, avg(Value) AS bytes FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND ServiceName = 'minio' AND MetricName IN ('minio_cluster_usage_total_bytes','minio_cluster_capacity_usable_free_bytes') GROUP BY time, MetricName ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20}
+    }
+  ]
+}

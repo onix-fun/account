@@ -1,48 +1,46 @@
-# Docker Compose
+# Docker Compose — локальный тестовый запуск
 
-Production-пример для одного сервера. TLS должен завершаться на доверенном
-reverse proxy, который пересылает запросы во внутренний `account-gateway:8089`.
+Собирает все сервисы из исходников и запускает полный стек.
 
-## Подготовка
+## Быстрый старт
+
+```sh
+./generate-keys.sh
+docker compose up --build
+```
+
+| Сервис | URL |
+|---|---|
+| Frontend | `http://localhost:5174` |
+| Gateway / API | `http://localhost:8089` |
+| Swagger UI | `http://localhost:8089/swagger-ui` |
+| MailHog (email) | `http://localhost:8026` |
+| MinIO Console | `http://localhost:9011` |
+
+## Переменные окружения
+
+Скопируйте `.env.example` в `.env` и при необходимости измените порты:
 
 ```sh
 cp .env.example .env
-mkdir -p secrets
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 \
-  -out secrets/account-jwt-private.pem
-openssl rsa -pubout -in secrets/account-jwt-private.pem \
-  -out secrets/account-jwt-public.pem
 ```
 
-Замените все `CHANGE_ME` в `.env`. Особенно важны:
-
-- `PUBLIC_BASE_URL` и точный `ACCOUNT_ALLOWED_ORIGINS`;
-- `ACCOUNT_TRUSTED_PROXY_CIDRS`;
-- `IDENTITY_OTP_HMAC_SECRET` и `IDENTITY_INTERNAL_AUTH_SECRET`;
-- database, SMTP STARTTLS и S3 credentials.
-
-## Запуск
+## Остановка
 
 ```sh
-docker compose config
-docker compose up -d
-docker compose ps
+docker compose down        # остановить контейнеры
+docker compose down -v     # остановить и удалить volumes (БД, Redis, MinIO)
 ```
 
-Gateway имеет только внутренний `expose`. Настройте reverse proxy в той же сети
-или явно добавьте безопасную публикацию порта только для доверенного ingress.
+## Production
 
-## Обновление и остановка
+Для production используйте образы из GHCR:
 
-```sh
-docker compose pull
-docker compose up -d
-docker compose down
+```text
+ghcr.io/onix-fun/accaunt/frontend
+ghcr.io/onix-fun/accaunt/backend
+ghcr.io/onix-fun/accaunt/gateway
 ```
 
-`docker compose down -v` необратимо удаляет PostgreSQL, Redis и MinIO volumes.
-
-## Ограничения
-
-Пример удобен для небольшого single-host deployment, но не обеспечивает HA.
-Не публикуйте backend, PostgreSQL, Redis или MinIO напрямую.
+Требования: HTTPS, Secure cookies, CORS allowlist, SMTP STARTTLS,
+секреты длиной не менее 32 символов.

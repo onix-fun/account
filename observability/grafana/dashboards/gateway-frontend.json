@@ -1,0 +1,76 @@
+{
+  "uid": "account-gateway-frontend",
+  "title": "Gateway & Frontend Experience",
+  "description": "NGINX traffic, gateway errors, browser errors and Core Web Vitals.",
+  "tags": ["account", "gateway", "frontend"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Active NGINX connections",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT sum(value) AS connections FROM (SELECT Attributes, argMax(Value, TimeUnix) AS value FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName = 'nginx.connections_current' GROUP BY Attributes)"}],
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2, "type": "stat", "title": "NGINX requests",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT argMax(Value, TimeUnix) AS requests FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName = 'nginx.requests'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Frontend errors",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT sum(Value) AS errors FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND ServiceName = 'profile' AND MetricName = 'frontend.errors'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Gateway 5xx",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT count() AS errors FROM otel.otel_logs WHERE $__timeFilter(Timestamp) AND ServiceName = 'account-gateway' AND match(Body, 'status=5[0-9][0-9]')"}],
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "NGINX current connections",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, Attributes['state'] AS state, avg(Value) AS connections FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName = 'nginx.connections_current' GROUP BY time, state ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "NGINX request growth",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, max(Value)-min(Value) AS requests FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND MetricName = 'nginx.requests' GROUP BY time ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Web Vitals latency",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "ms", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 2500}, {"color": "red", "value": 4000}]}}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, Attributes['frontend.name'] AS vital, sum(Sum)/sum(Count) AS value FROM otel.otel_metrics_histogram WHERE $__timeFilter(TimeUnix) AND MetricName = 'frontend.web_vital' AND Attributes['frontend.name'] IN ('LCP','FCP','INP','TTFB') AND Count > 0 GROUP BY time, vital ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Cumulative Layout Shift",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "none", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 0.1}, {"color": "red", "value": 0.25}]}}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, sum(Sum)/sum(Count) AS cls FROM otel.otel_metrics_histogram WHERE $__timeFilter(TimeUnix) AND MetricName = 'frontend.web_vital' AND Attributes['frontend.name'] = 'CLS' AND Count > 0 GROUP BY time ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+    },
+    {
+      "id": 9, "type": "table", "title": "Recent frontend telemetry",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT Timestamp, Body, TraceId FROM otel.otel_logs WHERE $__timeFilter(Timestamp) AND ServiceName = 'profile' AND position(Body, 'frontend_telemetry') > 0 ORDER BY Timestamp DESC LIMIT 100"}],
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 20}
+    },
+    {
+      "id": 10, "type": "table", "title": "Recent gateway errors",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT Timestamp, Body, TraceId FROM otel.otel_logs WHERE $__timeFilter(Timestamp) AND ServiceName = 'account-gateway' AND (position(Body, ' ERROR ') > 0 OR position(Body, ' WARN ') > 0 OR match(Body, 'status=5[0-9][0-9]')) ORDER BY Timestamp DESC LIMIT 100"}],
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 20}
+    }
+  ]
+}

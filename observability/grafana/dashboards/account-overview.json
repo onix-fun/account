@@ -1,0 +1,76 @@
+{
+  "uid": "account-overview",
+  "title": "Account Service Overview",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Spans",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT count() AS spans FROM otel.otel_traces WHERE $__timeFilter(Timestamp)"}],
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Logs",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT count() AS logs FROM otel.otel_logs WHERE $__timeFilter(Timestamp)"}],
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error spans",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT count() AS errors FROM otel.otel_traces WHERE $__timeFilter(Timestamp) AND StatusCode IN ('Error', 'STATUS_CODE_ERROR')"}],
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "P95 latency",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "ms"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT round(quantile(0.95)(Duration) / 1000000, 2) AS p95_ms FROM otel.otel_traces WHERE $__timeFilter(Timestamp)"}],
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Spans by service",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(Timestamp) AS time, ServiceName, count() AS spans FROM otel.otel_traces WHERE $__timeFilter(Timestamp) GROUP BY time, ServiceName ORDER BY time ASC"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "P95 latency by service",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "ms"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(Timestamp) AS time, ServiceName, quantile(0.95)(Duration) / 1000000 AS p95_ms FROM otel.otel_traces WHERE $__timeFilter(Timestamp) GROUP BY time, ServiceName ORDER BY time ASC"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Recent HTTP requests",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT * FROM (SELECT Timestamp, SpanName AS request, StatusCode, round(Duration / 1000000, 2) AS duration_ms, TraceId FROM otel.otel_traces WHERE $__timeFilter(Timestamp) AND SpanKind = 'Server' ORDER BY Timestamp DESC LIMIT 100) ORDER BY Timestamp ASC"}],
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 12}
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Recent logs",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT Timestamp, ServiceName, SeverityText, Body, TraceId FROM otel.otel_logs WHERE $__timeFilter(Timestamp) ORDER BY Timestamp DESC LIMIT 100"}],
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 12}
+    }
+  ]
+}

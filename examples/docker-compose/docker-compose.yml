@@ -1,36 +1,37 @@
 services:
   account-gateway:
-    image: ghcr.io/onix-fun/accaunt/gateway:${TAG:-latest}
+    image: ${ACCOUNT_GATEWAY_IMAGE:?Set ACCOUNT_GATEWAY_IMAGE to an immutable GHCR tag}
     environment:
       IDENTITY_JWT_PUBLIC_KEY_PATH: /run/secrets/account-jwt-public.pem
       IDENTITY_JWT_ISSUER: account-service
       IDENTITY_JWT_AUDIENCE: account
-      APP_ENV: production
-      ACCOUNT_ALLOWED_ORIGINS: ${ACCOUNT_ALLOWED_ORIGINS:?required}
-      ACCOUNT_HSTS_HEADER: "max-age=31536000; includeSubDomains"
-      IDENTITY_INTERNAL_AUTH_SECRET: ${IDENTITY_INTERNAL_AUTH_SECRET:?required}
-      ACCOUNT_SWAGGER_UI_ENABLED: "false"
-      ACCOUNT_TRUSTED_PROXY_CIDRS: ${ACCOUNT_TRUSTED_PROXY_CIDRS:?required}
-      ACCOUNT_DNS_RESOLVER: "127.0.0.11"
-    expose:
-      - "8089"
+      ACCOUNT_TRUSTED_BASE_DOMAIN: localhost
+      ACCOUNT_SWAGGER_UI_ENABLED: "true"
+      IDENTITY_INTERNAL_AUTH_SECRET: ${IDENTITY_INTERNAL_AUTH_SECRET:-local-test-internal-secret-32chars!}
+      IDENTITY_REDIS_PASSWORD: ${IDENTITY_REDIS_PASSWORD:-account-redis-secret}
+      IDENTITY_REDIS_URL: redis://:${IDENTITY_REDIS_PASSWORD:-account-redis-secret}@account-redis:6379
+    ports:
+      - "${ACCOUNT_GATEWAY_HTTP_PORT:-8089}:8089"
     volumes:
       - ./secrets/account-jwt-public.pem:/run/secrets/account-jwt-public.pem:ro
+      - account_gateway_logs:/var/log/account/account-gateway
     depends_on:
-      - profile
-      - frontend
+      profile:
+        condition: service_started
+      account-minio:
+        condition: service_started
     networks:
       - account-network
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/onix-fun/accaunt/frontend:${TAG:-latest}
-    restart: unless-stopped
+    image: ${ACCOUNT_FRONTEND_IMAGE:?Set ACCOUNT_FRONTEND_IMAGE to an immutable GHCR tag}
     networks:
       - account-network
+    restart: unless-stopped
 
   profile:
-    image: ghcr.io/onix-fun/accaunt/backend:${TAG:-latest}
+    image: ${ACCOUNT_BACKEND_IMAGE:?Set ACCOUNT_BACKEND_IMAGE to an immutable GHCR tag}
     environment:
       PROFILE_PORT: "8080"
       IDENTITY_JWT_ISSUER: account-service
@@ -39,28 +40,36 @@ services:
       IDENTITY_JWT_PUBLIC_KEY_PATH: /run/secrets/account-jwt-public.pem
       IDENTITY_ACCESS_TOKEN_EXP_MINUTES: "15"
       IDENTITY_REFRESH_TOKEN_EXP_DAYS: "30"
-      IDENTITY_REFRESH_COOKIE_SECURE: "true"
-      APP_ENV: production
-      IDENTITY_OTP_HMAC_SECRET: ${IDENTITY_OTP_HMAC_SECRET:?required}
-      IDENTITY_INTERNAL_AUTH_SECRET: ${IDENTITY_INTERNAL_AUTH_SECRET:?required}
-      IDENTITY_SMTP_STARTTLS: "true"
-      IDENTITY_DATABASE_JDBC_URL: ${DB_URL:-jdbc:postgresql://account-postgres:5432/account}
-      IDENTITY_DATABASE_USERNAME: ${DB_USER:-account}
-      IDENTITY_DATABASE_PASSWORD: ${DB_PASSWORD:-account}
-      IDENTITY_REDIS_URL: redis://account-redis:6379
-      IDENTITY_SMTP_HOST: ${IDENTITY_SMTP_HOST:?required}
-      IDENTITY_SMTP_PORT: ${IDENTITY_SMTP_PORT:-587}
-      IDENTITY_SMTP_FROM: ${IDENTITY_SMTP_FROM:?required}
-      IDENTITY_SMTP_USERNAME: ${IDENTITY_SMTP_USERNAME:?required}
-      IDENTITY_SMTP_PASSWORD: ${IDENTITY_SMTP_PASSWORD:?required}
+      IDENTITY_OTP_HMAC_SECRET: ${IDENTITY_OTP_HMAC_SECRET:-local-test-otp-secret-32chars!!}
+      IDENTITY_INTERNAL_AUTH_SECRET: ${IDENTITY_INTERNAL_AUTH_SECRET:-local-test-internal-secret-32chars!}
+      IDENTITY_TRUSTED_PROXY_CIDRS: 172.16.0.0/12
+      IDENTITY_REFRESH_COOKIE_SECURE: "false"
+      IDENTITY_COOKIE_DOMAIN: ""
+      IDENTITY_DATABASE_JDBC_URL: jdbc:postgresql://account-postgres:5432/account
+      IDENTITY_DATABASE_USERNAME: ${POSTGRES_USER:-account}
+      IDENTITY_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-account}
+      IDENTITY_REDIS_URL: redis://:${IDENTITY_REDIS_PASSWORD:-account-redis-secret}@account-redis:6379
+      IDENTITY_SMTP_HOST: account-mail
+      IDENTITY_SMTP_PORT: "1025"
       IDENTITY_S3_ENDPOINT: http://account-minio:9000
-      IDENTITY_S3_PUBLIC_URL: ${PUBLIC_BASE_URL:?required}/api/avatars
+      IDENTITY_S3_PUBLIC_URL: http://localhost:${ACCOUNT_GATEWAY_HTTP_PORT:-8089}/api/avatars
       IDENTITY_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-account-minio}
       IDENTITY_S3_SECRET_KEY: ${S3_SECRET_KEY:-account-minio-secret}
       IDENTITY_S3_BUCKET: avatars
+      JAVA_TOOL_OPTIONS: -javaagent:/otel/opentelemetry-javaagent.jar
+      OTEL_SERVICE_NAME: profile
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://account-otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=account,deployment.environment=production
+      LOG_DIR: /var/log/account/profile
     volumes:
       - ./secrets/account-jwt-private.pem:/run/secrets/account-jwt-private.pem:ro
       - ./secrets/account-jwt-public.pem:/run/secrets/account-jwt-public.pem:ro
+      - profile_logs:/var/log/account/profile
+    expose:
+      - "8080"
     depends_on:
       account-postgres:
         condition: service_healthy
@@ -68,6 +77,10 @@ services:
         condition: service_healthy
       account-minio-init:
         condition: service_completed_successfully
+      account-mail:
+        condition: service_started
+      account-otel-collector:
+        condition: service_started
     networks:
       - account-network
     restart: unless-stopped
@@ -75,13 +88,13 @@ services:
   account-postgres:
     image: postgres:18
     environment:
-      POSTGRES_DB: ${DB_NAME:-account}
-      POSTGRES_USER: ${DB_USER:-account}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-account}
+      POSTGRES_DB: ${POSTGRES_DB:-account}
+      POSTGRES_USER: ${POSTGRES_USER:-account}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-account}
     volumes:
       - account_postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-account} -d ${DB_NAME:-account}"]
+      test: ["CMD-SHELL", "pg_isready -U account -d account"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -91,7 +104,7 @@ services:
 
   account-redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass "${IDENTITY_REDIS_PASSWORD:-account-redis-secret}"
     volumes:
       - account_redis_data:/data
     healthcheck:
@@ -104,11 +117,14 @@ services:
     restart: unless-stopped
 
   account-minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:-account-minio}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-account-minio-secret}
+    ports:
+      - "${MINIO_API_PORT:-9010}:9000"
+      - "${MINIO_CONSOLE_PORT:-9011}:9001"
     volumes:
       - account_minio_data:/data
     networks:
@@ -116,7 +132,7 @@ services:
     restart: unless-stopped
 
   account-minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
     depends_on:
       - account-minio
     entrypoint: >
@@ -128,10 +144,79 @@ services:
     networks:
       - account-network
 
+  account-mail:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "${MAIL_SMTP_PORT:-1026}:1025"
+      - "${MAIL_UI_PORT:-8026}:8025"
+    networks:
+      - account-network
+    restart: unless-stopped
+
+  account-clickhouse:
+    image: clickhouse/clickhouse-server:25.3.6.56-alpine
+    environment:
+      CLICKHOUSE_DB: otel
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-otel}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD}
+    volumes:
+      - account_clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user $${CLICKHOUSE_USER} --password $${CLICKHOUSE_PASSWORD} --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [account-network]
+    restart: unless-stopped
+
+  account-otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.151.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    environment:
+      DEPLOYMENT_ENVIRONMENT: production
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-otel}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD}
+      IDENTITY_REDIS_HOST: account-redis
+      IDENTITY_REDIS_PASSWORD: ${IDENTITY_REDIS_PASSWORD:-account-redis-secret}
+      POSTGRES_USER: ${POSTGRES_USER:-account}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-account}
+    volumes:
+      - ../../observability/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - account_gateway_logs:/var/log/account/account-gateway:ro
+      - profile_logs:/var/log/account/profile:ro
+    depends_on:
+      account-clickhouse:
+        condition: service_healthy
+    networks: [account-network]
+    restart: unless-stopped
+
+  account-grafana:
+    image: grafana/grafana:12.0.2
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-otel}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD}
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ../../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - account_grafana_data:/var/lib/grafana
+    depends_on:
+      account-clickhouse:
+        condition: service_healthy
+    networks: [account-network]
+    restart: unless-stopped
+
 volumes:
+  account_gateway_logs:
+  profile_logs:
   account_postgres_data:
   account_redis_data:
   account_minio_data:
+  account_clickhouse_data:
+  account_grafana_data:
 
 networks:
   account-network:

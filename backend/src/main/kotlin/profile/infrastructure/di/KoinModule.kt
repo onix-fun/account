@@ -77,7 +77,9 @@ fun koinModule(config: ApplicationConfig) = module {
         ),
         security = SecurityConfig(
             otpHmacSecret = config.propertyOrNull("identity.security.otp_hmac_secret")?.getString() ?: throw IllegalStateException("IDENTITY_OTP_HMAC_SECRET is not configured"),
-            internalAuthSecret = config.propertyOrNull("identity.security.internal_auth_secret")?.getString() ?: throw IllegalStateException("IDENTITY_INTERNAL_AUTH_SECRET is not configured")
+            internalAuthSecret = config.propertyOrNull("identity.security.internal_auth_secret")?.getString() ?: throw IllegalStateException("IDENTITY_INTERNAL_AUTH_SECRET is not configured"),
+            trustedProxyCidrs = config.propertyOrNull("identity.security.trusted_proxy_cidrs")?.getString()
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("127.0.0.1/32", "::1/128")
         ),
         environment = config.propertyOrNull("app.environment")?.getString() ?: "development"
     )
@@ -123,7 +125,7 @@ fun koinModule(config: ApplicationConfig) = module {
     single { SessionService(get(), get()) }
 
     // 4. Controllers
-    single { AuthController(get(), get(), get()) }
+    single { AuthController(get(), get(), get(), get()) }
     single { UserController(get(), get()) }
     single { SearchController(get()) }
     single { SessionController(get()) }

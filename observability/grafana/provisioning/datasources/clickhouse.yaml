@@ -1,0 +1,25 @@
+apiVersion: 1
+prune: true
+datasources:
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    uid: account-clickhouse
+    access: proxy
+    isDefault: true
+    jsonData:
+      host: account-clickhouse
+      port: 9000
+      protocol: native
+      username: ${CLICKHOUSE_USER}
+      defaultDatabase: otel
+      defaultTable: otel_metrics_sum
+      logs:
+        defaultDatabase: otel
+        defaultTable: otel_logs
+        otelEnabled: true
+      traces:
+        defaultDatabase: otel
+        defaultTable: otel_traces
+        otelEnabled: true
+    secureJsonData:
+      password: ${CLICKHOUSE_PASSWORD}

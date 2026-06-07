@@ -7,6 +7,7 @@ import java.sql.SQLException
 import java.time.Instant
 import java.util.*
 import javax.sql.DataSource
+import org.postgresql.util.PSQLException
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
 
@@ -51,23 +52,28 @@ class UserRepository(private val dataSource: DataSource) {
 
     fun create(user: User): User {
         dataSource.connection.use { conn ->
-            val created = conn.prepareStatement(CREATE_SQL).use { stmt ->
-                stmt.setString(1, user.email)
-                stmt.setString(2, user.username)
-                stmt.setString(3, user.passwordHash)
-                stmt.setBoolean(4, user.emailVerified)
-                stmt.setString(5, user.firstName)
-                stmt.setString(6, user.lastName)
-                stmt.setString(7, user.role)
-                stmt.setString(8, user.status)
-                stmt.setTimestamp(9, java.sql.Timestamp.from(user.createdAt))
-                stmt.setTimestamp(10, java.sql.Timestamp.from(user.updatedAt))
-                val rs = stmt.executeQuery()
-                rs.next()
-                mapRow(rs)
+            try {
+                val created = conn.prepareStatement(CREATE_SQL).use { stmt ->
+                    stmt.setString(1, user.email)
+                    stmt.setString(2, user.username)
+                    stmt.setString(3, user.passwordHash)
+                    stmt.setBoolean(4, user.emailVerified)
+                    stmt.setString(5, user.firstName)
+                    stmt.setString(6, user.lastName)
+                    stmt.setString(7, user.role)
+                    stmt.setString(8, user.status)
+                    stmt.setTimestamp(9, java.sql.Timestamp.from(user.createdAt))
+                    stmt.setTimestamp(10, java.sql.Timestamp.from(user.updatedAt))
+                    val rs = stmt.executeQuery()
+                    rs.next()
+                    mapRow(rs)
+                }
+                conn.commit()
+                return created
+            } catch (error: SQLException) {
+                conn.rollback()
+                throwUniqueConflict(error)
             }
-            conn.commit()
-            return created
         }
     }
 
@@ -86,7 +92,7 @@ class UserRepository(private val dataSource: DataSource) {
                 conn.commit()
             } catch (error: SQLException) {
                 conn.rollback()
-                val constraint = error.message.orEmpty()
+                val constraint = error.constraintName()
                 if (
                     error.sqlState == "23505" &&
                     (constraint.contains("uq_users_username_lower") || constraint.contains("users_username_key"))
@@ -100,13 +106,18 @@ class UserRepository(private val dataSource: DataSource) {
 
     fun updateEmail(userId: String, email: String) {
         dataSource.connection.use { conn ->
-            conn.prepareStatement(UPDATE_EMAIL_SQL).use { stmt ->
-                stmt.setString(1, email)
-                stmt.setTimestamp(2, java.sql.Timestamp.from(Instant.now()))
-                stmt.setObject(3, UUID.fromString(userId))
-                stmt.executeUpdate()
+            try {
+                conn.prepareStatement(UPDATE_EMAIL_SQL).use { stmt ->
+                    stmt.setString(1, email)
+                    stmt.setTimestamp(2, java.sql.Timestamp.from(Instant.now()))
+                    stmt.setObject(3, UUID.fromString(userId))
+                    stmt.executeUpdate()
+                }
+                conn.commit()
+            } catch (error: SQLException) {
+                conn.rollback()
+                throwUniqueConflict(error, emailField = "newEmail")
             }
-            conn.commit()
         }
     }
 
@@ -213,6 +224,22 @@ class UserRepository(private val dataSource: DataSource) {
             }
         }
     }
+
+    private fun throwUniqueConflict(error: SQLException, emailField: String = "email"): Nothing {
+        if (error.sqlState == "23505") {
+            val constraint = error.constraintName()
+            when {
+                constraint.contains("uq_users_email_lower") || constraint.contains("users_email_key") ->
+                    apiError(ApiErrorCode.AUTH_EMAIL_IN_USE, emailField)
+                constraint.contains("uq_users_username_lower") || constraint.contains("users_username_key") ->
+                    apiError(ApiErrorCode.AUTH_USERNAME_IN_USE, "username")
+            }
+        }
+        throw error
+    }
+
+    private fun SQLException.constraintName(): String =
+        (this as? PSQLException)?.serverErrorMessage?.constraint.orEmpty()
 
     private fun mapRow(rs: java.sql.ResultSet): User {
         return User(

@@ -14,6 +14,24 @@ set -eu
 : "${APP_ENV:=development}"
 : "${ACCOUNT_ALLOWED_ORIGINS:=}"
 : "${IDENTITY_INTERNAL_AUTH_SECRET:=}"
+: "${IDENTITY_REDIS_URL:=redis://account-redis:6379}"
+: "${IDENTITY_REDIS_POOL_SIZE:=50}"
+: "${IDENTITY_REDIS_POOL_BACKLOG:=100}"
+: "${IDENTITY_REDIS_KEEPALIVE_MS:=10000}"
+
+case "$IDENTITY_REDIS_URL" in
+  redis://*) IDENTITY_REDIS_TLS=false; redis_address=${IDENTITY_REDIS_URL#redis://} ;;
+  rediss://*) IDENTITY_REDIS_TLS=true; redis_address=${IDENTITY_REDIS_URL#rediss://} ;;
+  *) echo "IDENTITY_REDIS_URL must use redis:// or rediss://"; exit 1 ;;
+esac
+redis_hostport=${redis_address##*@}
+[ "$redis_hostport" != "$redis_address" ] && redis_credentials=${redis_address%@*} || redis_credentials=""
+IDENTITY_REDIS_HOST=${redis_hostport%:*}
+IDENTITY_REDIS_PORT=${redis_hostport##*:}
+IDENTITY_REDIS_PASSWORD=${redis_credentials#:}
+[ -n "$IDENTITY_REDIS_HOST" ] && [ "$IDENTITY_REDIS_PORT" -gt 0 ] 2>/dev/null || {
+  echo "IDENTITY_REDIS_URL must include host and numeric port"; exit 1;
+}
 
 if [ "$APP_ENV" = "production" ]; then
   [ -n "$ACCOUNT_ALLOWED_ORIGINS" ] || { echo "ACCOUNT_ALLOWED_ORIGINS is required"; exit 1; }
@@ -44,6 +62,8 @@ export ACCOUNT_CSP
 export ACCOUNT_HSTS_HEADER
 export ACCOUNT_DNS_RESOLVER
 export APP_ENV
+export IDENTITY_REDIS_HOST IDENTITY_REDIS_PORT IDENTITY_REDIS_PASSWORD IDENTITY_REDIS_TLS
+export IDENTITY_REDIS_POOL_SIZE IDENTITY_REDIS_POOL_BACKLOG IDENTITY_REDIS_KEEPALIVE_MS
 
 envsubst '${ACCOUNT_LOGIN_RATE} ${ACCOUNT_RECOVERY_RATE} ${ACCOUNT_CONFIRMATION_RATE} ${ACCOUNT_USERNAME_RATE} ${ACCOUNT_SESSION_RATE} ${ACCOUNT_AVATAR_RATE} ${ACCOUNT_CSP} ${ACCOUNT_HSTS_HEADER} ${ACCOUNT_DNS_RESOLVER} ${IDENTITY_INTERNAL_AUTH_SECRET}' \
     < /usr/local/openresty/nginx/conf/nginx.conf.template \

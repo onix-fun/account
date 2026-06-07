@@ -12,7 +12,6 @@ import SystemTab from "@/features/profile/ui/SystemTab.vue";
 import AccountSwitchModal from "@/features/profile/ui/AccountSwitchModal.vue";
 import { userDisplayName, userInitials } from "@/shared/lib/user";
 import { isUsername } from "@/shared/lib/validation";
-import LocaleSwitcher from "@/shared/ui/LocaleSwitcher.vue";
 
 type ProfileTab = "profile" | "sessions" | "system";
 type MessageTone = "success" | "error" | "warning";
@@ -259,18 +258,15 @@ const revokeAvatarPreview = () => {
           <p>{{ authStore.currentUser?.email }}</p>
         </div>
       </div>
-      <div class="profile-hero-actions">
-        <LocaleSwitcher class="profile-locale" />
-        <button
-          class="icon-button quiet account-switch-button"
-          type="button"
-          :aria-label="t('profile.switchAccount')"
-          :title="t('profile.switchAccount')"
-          @click="isAccountModalOpen = true"
-        >
-          <i class="pi pi-users"></i>
-        </button>
-      </div>
+      <button
+        class="icon-button quiet account-switch-button"
+        type="button"
+        :aria-label="t('profile.switchAccount')"
+        :title="t('profile.switchAccount')"
+        @click="isAccountModalOpen = true"
+      >
+        <i class="pi pi-users"></i>
+      </button>
     </header>
 
     <Transition name="profile-toast">

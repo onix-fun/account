@@ -10,6 +10,8 @@ class RedisManager(config: ApplicationConfig) {
     private val client: RedisClient?
     private val connection: StatefulRedisConnection<String, String>?
     private val memoryRateLimit = ConcurrentHashMap<String, Long>()
+    val requiresAvailability: Boolean =
+        config.propertyOrNull("app.environment")?.getString()?.equals("production", ignoreCase = true) == true
 
     init {
         val url = config.propertyOrNull("redis.url")?.getString()
@@ -35,13 +37,17 @@ class RedisManager(config: ApplicationConfig) {
         sync()?.setex("profile:session:$sessionId", ttlSeconds, userId)
     }
 
-    fun revokeSession(sessionId: String) { sync()?.del("profile:session:$sessionId") }
+    fun revokeSession(sessionId: String): Boolean {
+        val redis = sync() ?: return false
+        return runCatching { redis.del("profile:session:$sessionId"); true }.getOrDefault(false)
+    }
 
     fun checkRateLimit(scope: String, key: String, max: Long, windowSeconds: Long): Boolean {
         val redis = sync()
         if (redis != null) {
             return redisCheckRateLimit(redis, scope, key, max, windowSeconds)
         }
+        if (requiresAvailability) throw IllegalStateException("Redis is required for rate limiting")
         return memoryCheckRateLimit(scope, key, max, windowSeconds)
     }
 

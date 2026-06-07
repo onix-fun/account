@@ -4,6 +4,9 @@ local last_message = nil
 local last_exit = nil
 local original_getenv = os.getenv
 os.getenv = function(name)
+    if name == "APP_ENV" then
+        return "development"
+    end
     if name == "ACCOUNT_ALLOWED_ORIGINS" then
         return "https://account.example.com,https://app.example.com"
     end

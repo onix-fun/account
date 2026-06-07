@@ -5,8 +5,11 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import org.koin.ktor.ext.inject
+import profile.infrastructure.config.AppConfig
 import profile.infrastructure.redis.RedisManager
+import profile.infrastructure.security.TrustedProxy
 import profile.shared.ApiErrorResponse
+import java.security.MessageDigest
 
 data class RateLimitRule(
     val max: Long,
@@ -23,6 +26,7 @@ class RateLimitConfig {
 
 val RateLimit = createApplicationPlugin("RateLimit", ::RateLimitConfig) {
     val redisManager = application.inject<RedisManager>().value
+    val appConfig = application.inject<AppConfig>().value
     val rules = pluginConfig.rules
 
     onCall { call ->
@@ -32,16 +36,25 @@ val RateLimit = createApplicationPlugin("RateLimit", ::RateLimitConfig) {
         }?.value
 
         if (matchedRule != null) {
-            val clientIp = call.request.headers["X-Real-IP"]
-                ?: call.request.local.remoteHost
-                ?: "unknown"
-            val allowed = redisManager.checkRateLimit(
-                scope = "ratelimit:${matchedRule.hashCode()}",
-                key = clientIp,
-                max = matchedRule.max,
-                windowSeconds = matchedRule.windowSeconds
-            )
+            val trustedGateway = TrustedProxy.contains(call.request.local.remoteHost, appConfig.security.trustedProxyCidrs) &&
+                call.request.headers["X-Internal-Auth"]?.let {
+                MessageDigest.isEqual(it.toByteArray(), appConfig.security.internalAuthSecret.toByteArray())
+            } == true
+            val clientIp = if (trustedGateway) call.request.headers["X-Real-IP"] else null
+            val ipKey = clientIp ?: call.request.local.remoteHost
+            val clientId = if (trustedGateway) call.request.headers["X-Client-Id"]?.takeIf { it.isNotBlank() } else null
+            val allowed = runCatching {
+                redisManager.checkRateLimit("ratelimit:${matchedRule.hashCode()}:ip", ipKey, matchedRule.max, matchedRule.windowSeconds) &&
+                    (clientId == null || redisManager.checkRateLimit("ratelimit:${matchedRule.hashCode()}:client", clientId, matchedRule.max, matchedRule.windowSeconds))
+            }.getOrElse {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    ApiErrorResponse("INFRASTRUCTURE_SERVICE_UNAVAILABLE", 5001, "Service temporarily unavailable")
+                )
+                return@onCall
+            }
             if (!allowed) {
+                call.response.headers.append(HttpHeaders.RetryAfter, matchedRule.windowSeconds.toString())
                 call.respond(
                     HttpStatusCode(429, "Too Many Requests"),
                     ApiErrorResponse(
@@ -51,6 +64,7 @@ val RateLimit = createApplicationPlugin("RateLimit", ::RateLimitConfig) {
                         fieldErrors = emptyList()
                     )
                 )
+                return@onCall
             }
         }
     }

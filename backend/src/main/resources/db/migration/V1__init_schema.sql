@@ -1,7 +1,7 @@
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuidv7(),
 
-    email TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL,
     username TEXT NOT NULL,
 
     password_hash TEXT NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE verification_tokens (
 
 CREATE TABLE pending_email_changes (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    new_email TEXT NOT NULL UNIQUE,
+    new_email TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NOT NULL
 );
@@ -95,11 +95,15 @@ CREATE TABLE audit_logs (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_users_email ON users(email);
+CREATE UNIQUE INDEX uq_users_email_lower ON users (LOWER(email));
 CREATE UNIQUE INDEX uq_users_username_lower ON users (LOWER(username));
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
 CREATE INDEX idx_sessions_previous_refresh_token_hash ON sessions(previous_refresh_token_hash);
 CREATE INDEX idx_verification_tokens_token_hash ON verification_tokens(token_hash);
 CREATE INDEX idx_verification_challenge_subject ON verification_tokens(user_id, purpose, consumed_at);
+CREATE UNIQUE INDEX uq_verification_active_purpose
+    ON verification_tokens(user_id, purpose)
+    WHERE consumed_at IS NULL AND used_at IS NULL;
+CREATE UNIQUE INDEX uq_pending_email_changes_new_email_lower ON pending_email_changes (LOWER(new_email));
 CREATE INDEX idx_email_outbox_pending ON email_outbox(status, next_attempt_at);

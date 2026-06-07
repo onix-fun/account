@@ -1,0 +1,78 @@
+{
+  "uid": "account-clickhouse-capacity",
+  "title": "ClickHouse & Telemetry Capacity",
+  "description": "ClickHouse runtime health and observability storage growth.",
+  "tags": ["account", "clickhouse", "observability"],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "ClickHouse scrape",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"1": {"text": "UP", "color": "green"}, "0": {"text": "DOWN", "color": "red"}}}]}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT argMax(Value, TimeUnix) AS up FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND ServiceName = 'clickhouse' AND MetricName = 'up'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Memory tracking",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT argMax(Value, TimeUnix) AS memory FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND ServiceName = 'clickhouse' AND MetricName = 'ClickHouseMetrics_MemoryTracking'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Telemetry storage",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT sum(bytes_on_disk) AS bytes FROM system.parts WHERE active AND database = 'otel'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Active parts",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT count() AS parts FROM system.parts WHERE active AND database = 'otel'"}],
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "ClickHouse memory",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, avg(Value) AS memory FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND ServiceName = 'clickhouse' AND MetricName = 'ClickHouseMetrics_MemoryTracking' GROUP BY time ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Queries and inserts",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, MetricName, max(Value)-min(Value) AS operations FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND ServiceName = 'clickhouse' AND MetricName IN ('ClickHouseProfileEvents_Query','ClickHouseProfileEvents_InsertQuery','ClickHouseProfileEvents_SelectQuery') GROUP BY time, MetricName ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Scrape duration",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, ServiceName, avg(Value) AS duration FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND MetricName = 'scrape_duration_seconds' GROUP BY time, ServiceName ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Scraped samples",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "timeseries", "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, ServiceName, avg(Value) AS samples FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) AND MetricName = 'scrape_samples_scraped' GROUP BY time, ServiceName ORDER BY time"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+    },
+    {
+      "id": 9, "type": "table", "title": "OTel tables by disk usage",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "fieldConfig": {"defaults": {"custom": {"align": "auto"}}},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT table, sum(rows) AS rows, formatReadableSize(sum(bytes_on_disk)) AS disk, count() AS parts FROM system.parts WHERE active AND database = 'otel' GROUP BY table ORDER BY sum(bytes_on_disk) DESC"}],
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 20}
+    },
+    {
+      "id": 10, "type": "table", "title": "Latest ClickHouse errors",
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "account-clickhouse"},
+      "targets": [{"refId": "A", "editorType": "sql", "queryType": "table", "rawSql": "SELECT replaceOne(MetricName, 'ClickHouseErrorMetric_', '') AS error, argMax(Value, TimeUnix) AS total FROM otel.otel_metrics_sum WHERE $__timeFilter(TimeUnix) AND ServiceName = 'clickhouse' AND startsWith(MetricName, 'ClickHouseErrorMetric_') AND Value > 0 GROUP BY MetricName ORDER BY total DESC LIMIT 50"}],
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 20}
+    }
+  ]
+}

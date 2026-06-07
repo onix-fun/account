@@ -22,6 +22,7 @@ data:
   IDENTITY_DATABASE_JDBC_URL: jdbc:postgresql://account-postgres:5432/account
   IDENTITY_DATABASE_USERNAME: account
   IDENTITY_REDIS_URL: redis://account-redis:6379
+  IDENTITY_TRUSTED_PROXY_CIDRS: 10.0.0.0/8
   IDENTITY_SMTP_HOST: smtp.example.com
   IDENTITY_SMTP_PORT: "587"
   IDENTITY_SMTP_FROM: no-reply@example.com
@@ -36,8 +37,6 @@ data:
   ACCOUNT_TRUSTED_PROXY_CIDRS: 10.0.0.0/8
   ACCOUNT_DNS_RESOLVER: 10.96.0.10
   ACCOUNT_SWAGGER_UI_ENABLED: "false"
-  IDENTITY_REDIS_HOST: account-redis
-  IDENTITY_REDIS_PORT: "6379"
   POSTGRES_DB: account
   POSTGRES_USER: account
   MINIO_ROOT_USER: account-minio
@@ -93,7 +92,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16
+          image: postgres:18
           ports:
             - name: postgres
               containerPort: 5432
@@ -217,7 +216,7 @@ spec:
     spec:
       containers:
         - name: minio
-          image: minio/minio:latest
+          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
           args: [server, /data, --console-address, ":9001"]
           envFrom:
             - configMapRef:
@@ -285,7 +284,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/onix-fun/accaunt/frontend:latest
+          image: ghcr.io/onix-fun/accaunt/frontend:1.0.0
           ports:
             - name: http
               containerPort: 80
@@ -338,7 +337,7 @@ spec:
     spec:
       initContainers:
         - name: initialize-avatar-bucket
-          image: minio/mc:latest
+          image: minio/mc:RELEASE.2025-04-16T18-13-26Z
           envFrom:
             - configMapRef:
                 name: account-config
@@ -353,7 +352,7 @@ spec:
               mc anonymous set download local/avatars
       containers:
         - name: profile
-          image: ghcr.io/onix-fun/accaunt/backend:latest
+          image: ghcr.io/onix-fun/accaunt/backend:1.0.0
           envFrom:
             - configMapRef:
                 name: account-config
@@ -419,7 +418,7 @@ spec:
     spec:
       containers:
         - name: account-gateway
-          image: ghcr.io/onix-fun/accaunt/gateway:latest
+          image: ghcr.io/onix-fun/accaunt/gateway:1.0.0
           envFrom:
             - configMapRef:
                 name: account-config
