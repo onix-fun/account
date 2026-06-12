@@ -208,6 +208,11 @@ class AuthService(
             apiError(ApiErrorCode.AUTH_INVALID_PASSWORD, "password")
         }
 
+        val activeSessions = sessionRepository.findActiveByUserId(userId)
+        val cacheCleared = activeSessions.all { redisManager.revokeSession(it.id) }
+        if (!cacheCleared && redisManager.requiresAvailability) {
+            apiError(ApiErrorCode.INFRASTRUCTURE_SERVICE_UNAVAILABLE)
+        }
         userRepository.delete(userId)
     }
 

@@ -166,9 +166,8 @@ export function useAuthFlow() {
       openRegistrationForIdentifier(identifier);
     } else if (lookup.state === "PENDING_REGISTRATION") {
       pendingRegistrationEmail.value = lookup.identifier;
-      await AuthService.resendRegistrationCode(lookup.identifier);
       mode.value = "confirm";
-      authMessage.value = t("auth.verificationResent");
+      authMessage.value = "";
     } else if (lookup.state === "EMAIL_UNVERIFIED") {
       await AuthService.requestPublicVerification(identifier);
       publicVerificationCode.value = "";

@@ -8,6 +8,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import profile.infrastructure.config.JwtConfig
 import profile.infrastructure.events.EmailLocale
+import profile.infrastructure.security.TrustedProxy
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
 import profile.users.toProfileDto
@@ -18,7 +19,8 @@ import java.util.UUID
 class AuthController(
     private val authService: AuthService,
     private val sessionConfig: profile.infrastructure.config.SessionConfig,
-    private val jwtConfig: JwtConfig
+    private val jwtConfig: JwtConfig,
+    private val securityConfig: profile.infrastructure.config.SecurityConfig
 ) {
     private val random = SecureRandom()
 
@@ -398,8 +400,11 @@ class AuthController(
     }
 
     private fun ApplicationCall.clientIpAddress(): String {
-        return request.headers["X-Real-IP"]
-            ?: request.local.remoteHost
+        val trustedGateway = TrustedProxy.contains(request.local.remoteHost, securityConfig.trustedProxyCidrs) &&
+            request.headers["X-Internal-Auth"]?.let {
+            java.security.MessageDigest.isEqual(it.toByteArray(), securityConfig.internalAuthSecret.toByteArray())
+        } == true
+        return if (trustedGateway) request.headers["X-Real-IP"] ?: request.local.remoteHost else request.local.remoteHost
     }
 
     private fun ApplicationCall.emailLocale(): EmailLocale =

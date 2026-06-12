@@ -25,6 +25,7 @@ import java.nio.file.Files
 import java.security.KeyPairGenerator
 import java.util.Base64
 import kotlin.test.*
+import org.testcontainers.containers.PostgreSQLContainer
 
 class ServerTest {
 
@@ -42,9 +43,9 @@ class ServerTest {
                 "identity.registration.pending_ttl_seconds" to "3600",
                 "identity.registration.allow_in_memory_fallback" to "true",
                 "identity.background.enabled" to "false",
-                "postgres.url" to "jdbc:h2:mem:test-${System.nanoTime()};DB_CLOSE_DELAY=-1;MODE=PostgreSQL",
-                "postgres.user" to "sa",
-                "postgres.password" to "",
+                "postgres.url" to postgres.jdbcUrl,
+                "postgres.user" to postgres.username,
+                "postgres.password" to postgres.password,
                 "redis.url" to "redis://localhost:6379",
                 "smtp.host" to "localhost",
                 "smtp.port" to "2500",
@@ -492,6 +493,12 @@ class ServerTest {
     }
 
     private companion object {
+        private val postgres = PostgreSQLContainer<Nothing>("postgres:18").apply {
+            withDatabaseName("account_test")
+            withUsername("account")
+            withPassword("account")
+            start()
+        }
         private val testKeyPaths by lazy {
             val generator = KeyPairGenerator.getInstance("RSA")
             generator.initialize(2048)

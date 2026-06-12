@@ -19,13 +19,15 @@ const steps = [
 </script>
 
 <template>
-  <section class="auth-screen">
-    <main class="auth-flow" aria-live="polite">
-      <nav v-if="flow.showRegistrationSteps.value" class="auth-stepper" aria-label="Authentication steps">
+  <section class="min-h-screen bg-[var(--bg)] grid place-items-center p-4 sm:p-8 relative">
+    <main class="w-full max-w-[420px] grid gap-6" aria-live="polite">
+      <nav v-if="flow.showRegistrationSteps.value" class="flex items-center justify-between gap-3 relative" aria-label="Authentication steps">
+        <div class="absolute left-5 right-5 top-[19px] h-px bg-[var(--surface-muted)] z-0"></div>
         <span
           v-for="step in steps"
           :key="step.key"
-          :class="{ active: flow.activeStep.value === step.key }"
+          class="w-10 h-10 rounded-full bg-[var(--surface)] border flex items-center justify-center relative z-10 text-sm transition-colors"
+          :class="flow.activeStep.value === step.key ? 'bg-[var(--text)] border-[var(--text)] text-white' : 'text-[var(--subtle)] border-[var(--surface-muted)]'"
           :aria-label="t(step.label)"
           :title="t(step.label)"
         >
@@ -34,305 +36,229 @@ const steps = [
         </span>
       </nav>
 
-      <div class="auth-title-row">
-        <button
+      <div class="flex items-center gap-3 min-h-[46px]">
+        <PButton
           v-if="flow.mode.value !== 'identifier' && flow.mode.value !== 'name' && flow.mode.value !== 'register'"
-          class="icon-button quiet"
-          type="button"
+          icon="pi pi-arrow-left"
+          variant="text"
+          severity="secondary"
+          class="w-9 h-9"
           :aria-label="t('common.back')"
           @click="flow.showIdentifierStep"
-        >
-          <i class="pi pi-arrow-left"></i>
-        </button>
-        <h1>{{ flow.title.value }}</h1>
+        />
+        <h1 class="text-3xl font-bold m-0 leading-tight text-[var(--text)]">{{ flow.title.value }}</h1>
       </div>
 
-      <form v-if="flow.mode.value === 'identifier'" class="account-form" @submit.prevent="flow.continueToPassword">
-        <label class="field">
-          <span>{{ t("auth.emailOrUsername") }}</span>
-          <input v-model="flow.loginIdentifier.value" class="input xl" autocomplete="username" required autofocus />
-          <span v-if="flow.loginIdentifier.value && flow.identifierError.value" class="validation-message text-danger">
+      <form v-if="flow.mode.value === 'identifier'" class="grid gap-4" @submit.prevent="flow.continueToPassword">
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.emailOrUsername") }}</span>
+          <PInputText v-model="flow.loginIdentifier.value" autocomplete="username" required autofocus class="w-full" />
+          <PMessage v-if="flow.loginIdentifier.value && flow.identifierError.value" severity="error" variant="simple">
             {{ flow.identifierError.value }}
-          </span>
-          <span v-else-if="flow.fieldErrors.value.identifier" class="validation-message text-danger">
+          </PMessage>
+          <PMessage v-else-if="flow.fieldErrors.value.identifier" severity="error" variant="simple">
             {{ flow.fieldErrors.value.identifier }}
-          </span>
-        </label>
-        <div class="auth-actions split">
-          <button class="link-button" type="button" @click="flow.mode.value = 'register'">
-            {{ t("auth.createAccount") }}
-          </button>
-          <button class="btn btn-primary" type="submit" :disabled="flow.isLookupLoading.value || Boolean(flow.identifierError.value)">
-            {{ t("common.continue") }}
-          </button>
+          </PMessage>
         </div>
-        <button class="link-button subtle-link" type="button" @click="flow.showForgotStep">
-          {{ t("auth.forgotPassword") }}
-        </button>
+        <div class="flex items-center justify-between gap-3 pt-1">
+          <PButton :label="t('auth.createAccount')" variant="text" severity="secondary" @click="flow.mode.value = 'register'" />
+          <PButton type="submit" :label="t('common.continue')" :disabled="flow.isLookupLoading.value || Boolean(flow.identifierError.value)" :loading="flow.isLookupLoading.value" />
+        </div>
+        <PButton :label="t('auth.forgotPassword')" variant="text" severity="secondary" size="small" class="self-start -ml-2" @click="flow.showForgotStep" />
       </form>
 
-      <form v-else-if="flow.mode.value === 'password'" class="account-form" @submit.prevent="flow.login">
-        <div class="account-chip">
-          <img v-if="flow.accountAvatarUrl.value" class="account-chip-avatar" :src="flow.accountAvatarUrl.value" alt="" />
+      <form v-else-if="flow.mode.value === 'password'" class="grid gap-4" @submit.prevent="flow.login">
+        <div class="flex items-center gap-2 bg-[var(--surface-muted)] rounded-full px-3 py-1.5 w-fit max-w-full text-sm font-bold text-[var(--muted)]">
+          <img v-if="flow.accountAvatarUrl.value" class="w-6 h-6 rounded-full object-cover shrink-0" :src="flow.accountAvatarUrl.value" alt="" />
           <i v-else class="pi pi-user"></i>
-          <span>{{ flow.accountDisplayName.value }}</span>
+          <span class="truncate">{{ flow.accountDisplayName.value }}</span>
         </div>
-        <label class="field">
-          <span>{{ t("auth.password") }}</span>
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.password") }}</span>
           <PasswordInput
             v-model="flow.loginPassword.value"
-            class="input xl"
             autocomplete="current-password"
             required
             autofocus
           />
-          <span v-if="flow.fieldErrors.value.password" class="validation-message text-danger">
+          <PMessage v-if="flow.fieldErrors.value.password" severity="error" variant="simple">
             {{ flow.fieldErrors.value.password }}
-          </span>
-        </label>
-        <div class="auth-actions split">
-          <button class="link-button" type="button" @click="flow.showForgotStep">
-            {{ t("auth.forgotPassword") }}
-          </button>
-          <button class="btn btn-primary" type="submit" :disabled="authStore.isLoading">
-            {{ t("auth.signIn") }}
-          </button>
+          </PMessage>
+        </div>
+        <div class="flex items-center justify-between gap-3 pt-1">
+          <PButton :label="t('auth.forgotPassword')" variant="text" severity="secondary" @click="flow.showForgotStep" />
+          <PButton type="submit" :label="t('auth.signIn')" :disabled="authStore.isLoading" :loading="authStore.isLoading" />
         </div>
       </form>
 
-      <form v-else-if="flow.mode.value === 'register'" class="account-form" @submit.prevent="flow.register">
-        <label class="field">
-          <span>{{ t("auth.username") }}</span>
-          <div class="input-wrapper">
-            <input v-model="flow.registerForm.value.username" class="input xl" autocomplete="username" required />
-            <span v-if="flow.isCheckingUsername.value" class="input-suffix">
-              <i class="pi pi-spinner pi-spin"></i>
-            </span>
-            <span
-              v-else-if="flow.usernameCheckTouched.value && flow.registerForm.value.username"
-              class="input-suffix"
-              :class="flow.isUsernameTaken.value ? 'text-danger' : 'text-success'"
-            >
-              <i :class="flow.isUsernameTaken.value ? 'pi pi-times' : 'pi pi-check'"></i>
-            </span>
+      <form v-else-if="flow.mode.value === 'register'" class="grid gap-4" @submit.prevent="flow.register">
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.username") }}</span>
+          <div class="relative w-full">
+            <PInputText v-model="flow.registerForm.value.username" autocomplete="username" required class="w-full" />
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+              <i v-if="flow.isCheckingUsername.value" class="pi pi-spinner pi-spin text-[var(--muted)]"></i>
+              <i v-else-if="flow.usernameCheckTouched.value && flow.registerForm.value.username" 
+                 :class="[flow.isUsernameTaken.value ? 'pi pi-times text-[var(--danger)]' : 'pi pi-check text-[var(--success)]']"></i>
+            </div>
           </div>
-          <span v-if="flow.registerForm.value.username && flow.registrationErrors.value.username" class="validation-message text-danger">
+          <PMessage v-if="flow.registerForm.value.username && flow.registrationErrors.value.username" severity="error" variant="simple">
             {{ flow.registrationErrors.value.username }}
-          </span>
-          <span v-else-if="flow.fieldErrors.value.username" class="validation-message text-danger">
+          </PMessage>
+          <PMessage v-else-if="flow.fieldErrors.value.username" severity="error" variant="simple">
             {{ flow.fieldErrors.value.username }}
-          </span>
-          <span
-            v-if="flow.usernameCheckTouched.value && flow.registerForm.value.username && flow.isUsernameTaken.value"
-            class="validation-message text-danger"
-          >
+          </PMessage>
+          <PMessage v-if="flow.usernameCheckTouched.value && flow.registerForm.value.username && flow.isUsernameTaken.value" severity="error" variant="simple">
             {{ t("auth.usernameTaken") }}
-          </span>
-          <span
-            v-else-if="
-              flow.usernameCheckTouched.value &&
-              flow.registerForm.value.username &&
-              !flow.isCheckingUsername.value &&
-              !flow.isUsernameTaken.value
-            "
-            class="validation-message text-success"
-          >
+          </PMessage>
+          <PMessage v-else-if="flow.usernameCheckTouched.value && flow.registerForm.value.username && !flow.isCheckingUsername.value && !flow.isUsernameTaken.value" severity="success" variant="simple">
             {{ t("auth.usernameAvailable") }}
-          </span>
-        </label>
-        <label class="field">
-          <span>{{ t("auth.email") }}</span>
-          <input v-model="flow.registerForm.value.email" class="input xl" type="email" autocomplete="email" required />
-          <span v-if="flow.registerForm.value.email && flow.registrationErrors.value.email" class="validation-message text-danger">
+          </PMessage>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.email") }}</span>
+          <PInputText v-model="flow.registerForm.value.email" type="email" autocomplete="email" required class="w-full" />
+          <PMessage v-if="flow.registerForm.value.email && flow.registrationErrors.value.email" severity="error" variant="simple">
             {{ flow.registrationErrors.value.email }}
-          </span>
-          <span v-else-if="flow.fieldErrors.value.email" class="validation-message text-danger">
+          </PMessage>
+          <PMessage v-else-if="flow.fieldErrors.value.email" severity="error" variant="simple">
             {{ flow.fieldErrors.value.email }}
-          </span>
-        </label>
-        <label class="field">
-          <span>{{ t("auth.password") }}</span>
+          </PMessage>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.password") }}</span>
           <PasswordInput
             v-model="flow.registerForm.value.password"
-            class="input xl"
             autocomplete="new-password"
             required
             minlength="8"
           />
-          <span v-if="flow.fieldErrors.value.password" class="validation-message text-danger">
+          <PMessage v-if="flow.fieldErrors.value.password" severity="error" variant="simple">
             {{ flow.fieldErrors.value.password }}
-          </span>
-        </label>
-        <label class="field">
-          <span>{{ t("auth.confirmPassword") }}</span>
+          </PMessage>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.confirmPassword") }}</span>
           <PasswordInput
             v-model="flow.registerForm.value.confirmPassword"
-            class="input xl"
             autocomplete="new-password"
             required
             minlength="8"
             :aria-invalid="flow.registerPasswordMismatch.value"
           />
-        </label>
-        <div class="password-requirements" aria-live="polite">
-          <span class="validation-message" :class="flow.registerPasswordValid.value ? 'text-success' : 'text-danger'">
+        </div>
+
+        <div class="grid gap-1.5 pt-1" aria-live="polite">
+          <div class="flex items-center gap-2 text-xs font-semibold transition-colors" :class="flow.registerPasswordValid.value ? 'text-[var(--success)]' : 'text-[var(--danger)]'">
             <i :class="flow.registerPasswordValid.value ? 'pi pi-check' : 'pi pi-times'"></i>
             {{ t("errors.VALIDATION_PASSWORD_TOO_SHORT") }}
-          </span>
-          <span class="validation-message" :class="flow.registerPasswordsMatch.value ? 'text-success' : 'text-danger'">
+          </div>
+          <div class="flex items-center gap-2 text-xs font-semibold transition-colors" :class="flow.registerPasswordsMatch.value ? 'text-[var(--success)]' : 'text-[var(--danger)]'">
             <i :class="flow.registerPasswordsMatch.value ? 'pi pi-check' : 'pi pi-times'"></i>
             {{ t("auth.passwordsMatchRequirement") }}
-          </span>
+          </div>
         </div>
-        <div class="auth-actions split">
-          <button class="link-button" type="button" @click="flow.showIdentifierStep">
-            {{ t("auth.backToSignIn") }}
-          </button>
-          <button
-            class="btn btn-primary"
+
+        <div class="flex items-center justify-between gap-3 pt-2">
+          <PButton :label="t('auth.backToSignIn')" variant="text" severity="secondary" @click="flow.showIdentifierStep" />
+          <PButton
             type="submit"
-            :disabled="
-              authStore.isLoading ||
-              flow.isCheckingUsername.value ||
-              flow.isUsernameTaken.value ||
-              !flow.canRegister.value
-            "
-          >
-            {{ t("auth.sendCode") }}
-          </button>
+            :label="t('auth.sendCode')"
+            :disabled="authStore.isLoading || flow.isCheckingUsername.value || flow.isUsernameTaken.value || !flow.canRegister.value"
+            :loading="authStore.isLoading"
+          />
         </div>
       </form>
 
-      <form v-else-if="flow.mode.value === 'verify'" class="account-form" @submit.prevent="flow.confirmPublicVerification">
-        <div class="account-chip">
-          <img v-if="flow.accountAvatarUrl.value" class="account-chip-avatar" :src="flow.accountAvatarUrl.value" alt="" />
-          <i v-else class="pi pi-envelope"></i>
-          <span>{{ flow.accountDisplayName.value }}</span>
+      <form v-else-if="flow.mode.value === 'verify' || flow.mode.value === 'confirm'" class="grid gap-4" @submit.prevent="flow.mode.value === 'verify' ? flow.confirmPublicVerification() : flow.confirmRegistration()">
+        <div class="flex items-center gap-2 bg-[var(--surface-muted)] rounded-full px-3 py-1.5 w-fit max-w-full text-sm font-bold text-[var(--muted)]">
+          <img v-if="flow.accountAvatarUrl.value" class="w-6 h-6 rounded-full object-cover shrink-0" :src="flow.accountAvatarUrl.value" alt="" />
+          <i v-else-if="flow.mode.value === 'verify'" class="pi pi-envelope"></i>
+          <i v-else class="pi pi-user"></i>
+          <span class="truncate">{{ flow.mode.value === 'confirm' ? flow.pendingRegistrationEmail.value : flow.accountDisplayName.value }}</span>
         </div>
-        <label class="field">
-          <span>{{ t("auth.verificationCode") }}</span>
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.verificationCode") }}</span>
           <VerificationCodeInput
+            v-if="flow.mode.value === 'verify'"
             v-model="flow.publicVerificationCode.value"
             :autofocus="true"
-            :error="
-              flow.fieldErrors.value.code ||
-              (flow.publicVerificationCode.value && !/^\d{6}$/.test(flow.publicVerificationCode.value)
-                ? t('errors.VALIDATION_INVALID_CODE')
-                : '')
-            "
+            :error="flow.fieldErrors.value.code"
           />
-        </label>
-        <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading || !/^\d{6}$/.test(flow.publicVerificationCode.value)">
-          {{ t("auth.confirmEmail") }}
-        </button>
-      </form>
-
-      <form v-else-if="flow.mode.value === 'confirm'" class="account-form" @submit.prevent="flow.confirmRegistration">
-        <div class="account-chip">
-          <i class="pi pi-envelope"></i>
-          <span>{{ flow.accountDisplayName.value }}</span>
-        </div>
-        <label class="field">
-          <span>{{ t("auth.verificationCode") }}</span>
           <VerificationCodeInput
+            v-else
             v-model="flow.registrationCode.value"
             :autofocus="true"
-            :error="
-              flow.fieldErrors.value.code ||
-              (flow.registrationCode.value && !/^\d{6}$/.test(flow.registrationCode.value)
-                ? t('errors.VALIDATION_INVALID_CODE')
-                : '')
-            "
+            :error="flow.fieldErrors.value.code"
           />
-        </label>
-        <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading || !/^\d{6}$/.test(flow.registrationCode.value)">
-          {{ t("auth.confirmEmail") }}
-        </button>
-        <div class="auth-actions center">
-          <button class="link-button" type="button" :disabled="authStore.isLoading" @click="flow.resendRegistrationCode">
-            {{ t("auth.resendCode") }}
-          </button>
-          <button class="link-button" type="button" @click="flow.mode.value = 'register'">
-            {{ t("auth.editRegistration") }}
-          </button>
+        </div>
+        <PButton 
+          type="submit" 
+          class="w-full"
+          :label="t('auth.confirmEmail')"
+          :disabled="authStore.isLoading || !(flow.mode.value === 'verify' ? /^\d{6}$/.test(flow.publicVerificationCode.value) : /^\d{6}$/.test(flow.registrationCode.value))"
+          :loading="authStore.isLoading"
+        />
+        <div v-if="flow.mode.value === 'confirm'" class="flex justify-center gap-3 pt-2">
+          <PButton :label="t('auth.resendCode')" variant="text" severity="secondary" size="small" :disabled="authStore.isLoading" @click="flow.resendRegistrationCode" />
+          <PButton :label="t('auth.editRegistration')" variant="text" severity="secondary" size="small" @click="flow.mode.value = 'register'" />
         </div>
       </form>
 
-      <form v-else-if="flow.mode.value === 'name'" class="account-form" @submit.prevent="flow.completeNameStep">
-        <div class="account-chip">
-          <img v-if="flow.accountAvatarUrl.value" class="account-chip-avatar" :src="flow.accountAvatarUrl.value" alt="" />
+      <form v-else-if="flow.mode.value === 'name'" class="grid gap-4" @submit.prevent="flow.completeNameStep">
+        <div class="flex items-center gap-2 bg-[var(--surface-muted)] border rounded-full px-3 py-1.5 w-fit max-w-full text-sm font-bold text-[var(--muted)]">
+          <img v-if="flow.accountAvatarUrl.value" class="w-6 h-6 rounded-full object-cover shrink-0" :src="flow.accountAvatarUrl.value" alt="" />
           <i v-else class="pi pi-check-circle"></i>
-          <span>{{ authStore.currentUser?.username }}</span>
+          <span class="truncate">{{ authStore.currentUser?.username }}</span>
         </div>
-        <label class="field">
-          <span>{{ t("auth.firstName") }}</span>
-          <input v-model="flow.nameForm.value.firstName" class="input xl" autocomplete="given-name" required />
-        </label>
-        <label class="field">
-          <span>{{ t("auth.lastName") }}</span>
-          <input v-model="flow.nameForm.value.lastName" class="input xl" autocomplete="family-name" required />
-        </label>
-        <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading">
-          {{ t("common.continue") }}
-        </button>
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.firstName") }}</span>
+          <PInputText v-model="flow.nameForm.value.firstName" autocomplete="given-name" required class="w-full" />
+        </div>
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.lastName") }}</span>
+          <PInputText v-model="flow.nameForm.value.lastName" autocomplete="family-name" required class="w-full" />
+        </div>
+        <PButton type="submit" class="w-full" :label="t('common.continue')" :loading="authStore.isLoading" />
       </form>
 
-      <form v-else-if="flow.mode.value === 'forgot'" class="account-form" @submit.prevent="flow.forgotPassword">
-        <label class="field">
-          <span>{{ t("auth.emailOrUsername") }}</span>
-          <input v-model="flow.forgotIdentifier.value" class="input xl" autocomplete="username" required autofocus />
-          <span v-if="flow.forgotIdentifier.value && flow.forgotIdentifierError.value" class="validation-message text-danger">
+      <form v-else-if="flow.mode.value === 'forgot'" class="grid gap-4" @submit.prevent="flow.forgotPassword">
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.emailOrUsername") }}</span>
+          <PInputText v-model="flow.forgotIdentifier.value" autocomplete="username" required autofocus class="w-full" />
+          <PMessage v-if="flow.forgotIdentifier.value && flow.forgotIdentifierError.value" severity="error" variant="simple">
             {{ flow.forgotIdentifierError.value }}
-          </span>
-          <span v-else-if="flow.fieldErrors.value.identifier" class="validation-message text-danger">
+          </PMessage>
+          <PMessage v-else-if="flow.fieldErrors.value.identifier" severity="error" variant="simple">
             {{ flow.fieldErrors.value.identifier }}
-          </span>
-        </label>
-        <button
-          class="btn btn-primary full"
-          type="submit"
-          :disabled="authStore.isLoading || flow.isLookupLoading.value || Boolean(flow.forgotIdentifierError.value)"
-        >
-          {{ t("auth.sendCode") }}
-        </button>
-      </form>
-
-      <form v-else class="account-form" @submit.prevent="flow.submitResetPassword">
-        <div class="account-chip">
-          <img v-if="flow.accountAvatarUrl.value" class="account-chip-avatar" :src="flow.accountAvatarUrl.value" alt="" />
-          <i v-else class="pi pi-user"></i>
-          <span>{{ flow.accountDisplayName.value }}</span>
+          </PMessage>
         </div>
-        <label class="field">
-          <span>{{ t("auth.verificationCode") }}</span>
-          <VerificationCodeInput
-            v-model="flow.resetCode.value"
-            :error="
-              flow.fieldErrors.value.code ||
-              (flow.resetCode.value && !/^\d{6}$/.test(flow.resetCode.value)
-                ? t('errors.VALIDATION_INVALID_CODE')
-                : '')
-            "
-          />
-        </label>
-        <label class="field">
-          <span>{{ t("auth.newPassword") }}</span>
-          <PasswordInput
-            v-model="flow.resetPassword.value"
-            class="input xl"
-            autocomplete="new-password"
-            required
-            minlength="8"
-          />
-        </label>
-        <button class="btn btn-primary full" type="submit" :disabled="authStore.isLoading || !/^\d{6}$/.test(flow.resetCode.value)">
-          {{ t("auth.resetPassword") }}
-        </button>
+        <PButton type="submit" class="w-full" :label="t('auth.sendCode')" :disabled="authStore.isLoading || flow.isLookupLoading.value || Boolean(flow.forgotIdentifierError.value)" :loading="authStore.isLoading" />
       </form>
 
-      <p v-if="flow.authMessage.value" class="form-message">{{ flow.authMessage.value }}</p>
+      <form v-else class="grid gap-4" @submit.prevent="flow.submitResetPassword">
+        <div class="flex items-center gap-2 bg-[var(--surface-muted)] border rounded-full px-3 py-1.5 w-fit max-w-full text-sm font-bold text-[var(--muted)]">
+          <img v-if="flow.accountAvatarUrl.value" class="w-6 h-6 rounded-full object-cover shrink-0" :src="flow.accountAvatarUrl.value" alt="" />
+          <i v-else class="pi pi-user"></i>
+          <span class="truncate">{{ flow.accountDisplayName.value }}</span>
+        </div>
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.verificationCode") }}</span>
+          <VerificationCodeInput v-model="flow.resetCode.value" :error="flow.fieldErrors.value.code" />
+        </div>
+        <div class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.newPassword") }}</span>
+          <PasswordInput v-model="flow.resetPassword.value" autocomplete="new-password" required minlength="8" />
+        </div>
+        <PButton type="submit" class="w-full" :label="t('auth.resetPassword')" :disabled="authStore.isLoading || !/^\d{6}$/.test(flow.resetCode.value)" :loading="authStore.isLoading" />
+      </form>
+
+      <p v-if="flow.authMessage.value" class="m-0 text-sm text-[var(--muted)] text-center">{{ flow.authMessage.value }}</p>
     </main>
 
-    <LocaleSwitcher class="auth-locale" />
+    <LocaleSwitcher class="fixed left-1/2 bottom-[max(18px,env(safe-area-inset-bottom))] -translate-x-1/2" />
   </section>
 </template>

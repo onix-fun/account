@@ -54,47 +54,74 @@ const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleS
 </script>
 
 <template>
-  <section class="tab-panel">
-    <div class="section-toolbar">
-      <h2>{{ t("profile.sessions") }}</h2>
-      <div class="toolbar-actions">
-        <button class="btn btn-ghost" type="button" :disabled="isLoadingSessions" @click="refreshSessions">
-          <i class="pi pi-refresh"></i>
-          {{ t("profile.refresh") }}
-        </button>
-        <button class="btn btn-ghost danger" type="button" @click="logoutAll">
-          <i class="pi pi-sign-out"></i>
-          {{ t("profile.logoutAll") }}
-        </button>
+  <section class="grid gap-4">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 min-h-[40px]">
+      <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.sessions") }}</h2>
+      <div class="flex gap-2 w-full sm:w-auto">
+        <PButton
+          icon="pi pi-refresh"
+          :label="t('profile.refresh')"
+          variant="text"
+          severity="secondary"
+          size="small"
+          class="flex-1 sm:flex-initial"
+          :loading="isLoadingSessions"
+          @click="refreshSessions"
+        />
+        <PButton
+          icon="pi pi-sign-out"
+          :label="t('profile.logoutAll')"
+          variant="text"
+          severity="danger"
+          size="small"
+          class="flex-1 sm:flex-initial"
+          @click="logoutAll"
+        />
       </div>
     </div>
 
-    <div class="row-list">
-      <div v-if="!authStore.sessions.length" class="empty-row">{{ t("profile.noSessions") }}</div>
+    <div class="grid gap-1.5">
+      <div v-if="!authStore.sessions.length" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] border border-[var(--surface-muted)] rounded-xl">
+        {{ t("profile.noSessions") }}
+      </div>
       <article
         v-for="session in authStore.sessions"
         :key="session.id"
-        class="data-row session-data-row"
-        :class="{ selected: session.isCurrent }"
+        class="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3.5 rounded-xl transition-colors bg-[var(--surface)] border-0"
+        :class="{ '!bg-[var(--surface-active)]': session.isCurrent }"
       >
-        <i class="pi pi-desktop row-icon"></i>
-        <div class="row-main">
-          <strong>
+        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+          <i class="pi pi-desktop text-lg"></i>
+        </div>
+        <div class="flex-1 min-w-0 grid gap-0.5">
+          <strong class="text-sm font-bold text-[var(--text)] truncate">
             {{ sessionDevice(session) }}
-            <span v-if="session.isCurrent" class="inline-muted">({{ t("common.current") }})</span>
+            <span v-if="session.isCurrent" class="text-[var(--muted)] font-medium">({{ t("common.current") }})</span>
           </strong>
-          <small>
+          <small class="text-[13px] text-[var(--muted)]">
             {{ session.ipAddress || t("common.unknown") }} · {{ t("profile.lastActive") }}
             {{ formatDate(session.lastUsedAt) }}
           </small>
         </div>
-        <span class="row-meta">{{ t("profile.expires") }} {{ formatDate(session.expiresAt) }}</span>
-        <button v-if="session.isCurrent" class="btn btn-ghost danger" type="button" @click="logoutCurrent">
-          {{ t("profile.logout") }}
-        </button>
-        <button v-else class="btn btn-ghost danger" type="button" @click="revokeSession(session)">
-          {{ t("profile.revoke") }}
-        </button>
+        <span class="text-[13px] text-[var(--muted)] whitespace-nowrap">{{ t("profile.expires") }} {{ formatDate(session.expiresAt) }}</span>
+        <PButton
+          v-if="session.isCurrent"
+          :label="t('profile.logout')"
+          variant="text"
+          severity="danger"
+          size="small"
+          class="self-end sm:self-center"
+          @click="logoutCurrent"
+        />
+        <PButton
+          v-else
+          :label="t('profile.revoke')"
+          variant="text"
+          severity="danger"
+          size="small"
+          class="self-end sm:self-center"
+          @click="revokeSession(session)"
+        />
       </article>
     </div>
   </section>

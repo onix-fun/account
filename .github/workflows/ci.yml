@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: frontend}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "22", cache: npm, cache-dependency-path: frontend/package-lock.json}
+      - run: npm ci
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_API_VERSION: "1.44"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {java-version: "23", distribution: temurin, cache: maven}
+      - run: mvn --batch-mode clean verify
+        working-directory: backend
+
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          docker build -t account-gateway:test gateway
+          docker run --rm --entrypoint sh \
+            -v "$PWD/gateway/tests:/work/tests:ro" -v "$PWD/gateway/lua:/work/lua:ro" -w /work \
+            account-gateway:test -c 'for test in tests/test_browser_security.lua tests/test_jwt_auth.lua tests/test_session_status.lua; do resty "$test"; done'
+      - run: docker compose -f examples/docker-compose/docker-compose.yml config --quiet
+        env:
+          ACCOUNT_GATEWAY_IMAGE: ghcr.io/example/gateway:test
+          ACCOUNT_FRONTEND_IMAGE: ghcr.io/example/frontend:test
+          ACCOUNT_BACKEND_IMAGE: ghcr.io/example/backend:test
+          SIGNOZ_TOKENIZER_JWT_SECRET: test-signoz-tokenizer-secret-at-least-32-characters
+      - run: touch dev/.env && docker compose -f dev/docker-compose.yml config --quiet
+      - run: |
+          jq empty observability/signoz/dashboards/*.json
+          sh -n observability/signoz/import-dashboards.sh
+          sh -n observability/signoz/smoke-test.sh
+
+  observability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: touch dev/.env
+      - run: docker compose -f dev/docker-compose.yml up -d account-otel-collector signoz
+      - run: ./observability/signoz/smoke-test.sh
+      - if: always()
+        run: docker compose -f dev/docker-compose.yml down -v
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true

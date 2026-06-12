@@ -1,4 +1,4 @@
-.PHONY: setup up down clean
+.PHONY: setup up down clean reset-db
 
 setup:
 	@echo "Checking development keys..."
@@ -19,3 +19,7 @@ down:
 clean: down
 	@echo "Cleaning up volumes..."
 	cd dev && docker compose down -v
+
+reset-db:
+	@echo "Recreating only the development PostgreSQL database..."
+	cd dev && ./scripts/reset-dev-db.sh

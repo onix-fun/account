@@ -11,7 +11,9 @@
     "current": "current",
     "unknown": "Unknown",
     "verified": "Verified",
-    "notVerified": "Not verified"
+    "notVerified": "Not verified",
+    "success": "Success",
+    "error": "Error"
   },
   "auth": {
     "steps": {
@@ -103,6 +105,15 @@
   },
   "system": {
     "title": "System",
+    "interface": "Interface",
+    "languageHint": "Choose the language used by the interface and emails.",
+    "theme": "Theme",
+    "themeHint": "Choose between light and dark themes.",
+    "themes": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
     "changeEmailHint": "Current email: {email}. A confirmation code will be sent to the new address.",
     "changePassword": "Change password",
     "changePasswordHint": "Enter the current password and a new password. The current session will end after the change.",

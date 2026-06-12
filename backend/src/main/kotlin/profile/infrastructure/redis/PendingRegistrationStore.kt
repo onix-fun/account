@@ -41,12 +41,23 @@ class PendingRegistrationStore(
         if (redis != null) {
             val pendingKey = pendingKey(pending.email)
             val usernameKey = usernameKey(pending.username)
-            if (redis.exists(pendingKey) > 0) apiError(ApiErrorCode.AUTH_REGISTRATION_PENDING, "email")
-            if (redis.exists(usernameKey) > 0) apiError(ApiErrorCode.AUTH_REGISTRATION_PENDING, "username")
-
-            redis.setex(pendingKey, ttlSeconds, json.encodeToString(pending))
-            redis.setex(codeKey(pending.codeHash), ttlSeconds, pending.email)
-            redis.setex(usernameKey, ttlSeconds, pending.email)
+            val result = redis.eval<Long>(
+                """
+                if redis.call('EXISTS', KEYS[1]) == 1 then return 1 end
+                if redis.call('EXISTS', KEYS[2]) == 1 then return 2 end
+                redis.call('SETEX', KEYS[1], ARGV[1], ARGV[2])
+                redis.call('SETEX', KEYS[2], ARGV[1], ARGV[3])
+                redis.call('SETEX', KEYS[3], ARGV[1], ARGV[3])
+                return 0
+                """.trimIndent(),
+                io.lettuce.core.ScriptOutputType.INTEGER,
+                arrayOf(pendingKey, usernameKey, codeKey(pending.codeHash)),
+                ttlSeconds.toString(),
+                json.encodeToString(pending),
+                pending.email
+            )
+            if (result == 1L) apiError(ApiErrorCode.AUTH_REGISTRATION_PENDING, "email")
+            if (result == 2L) apiError(ApiErrorCode.AUTH_REGISTRATION_PENDING, "username")
             return
         }
 
@@ -56,7 +67,7 @@ class PendingRegistrationStore(
 
         pruneMemory()
         if (pendingByEmail.containsKey(pending.email)) apiError(ApiErrorCode.AUTH_REGISTRATION_PENDING, "email")
-        if (emailByUsername.containsKey(pending.username)) apiError(ApiErrorCode.AUTH_REGISTRATION_PENDING, "username")
+        if (emailByUsername.containsKey(pending.username.lowercase())) apiError(ApiErrorCode.AUTH_REGISTRATION_PENDING, "username")
         writeMemory(pending)
     }
 
@@ -79,7 +90,7 @@ class PendingRegistrationStore(
         }
         if (!config.allowInMemoryFallback) return null
         pruneMemory()
-        val email = emailByUsername[normalized]?.value ?: return null
+        val email = emailByUsername[normalized.lowercase()]?.value ?: return null
         return findByEmail(email)
     }
 
@@ -98,7 +109,7 @@ class PendingRegistrationStore(
 
         if (!config.allowInMemoryFallback) return false
         pruneMemory()
-        return emailByUsername.containsKey(username)
+        return emailByUsername.containsKey(username.lowercase())
     }
 
     fun refreshCode(email: String, codeHash: String): PendingRegistration {
@@ -151,7 +162,7 @@ class PendingRegistrationStore(
         pendingByEmail.remove(email)
         existing?.let {
             emailByCodeHash.remove(it.codeHash)
-            emailByUsername.remove(it.username)
+            emailByUsername.remove(it.username.lowercase())
         }
     }
 
@@ -159,7 +170,7 @@ class PendingRegistrationStore(
         val expiresAtMillis = System.currentTimeMillis() + ttlSeconds * 1000
         pendingByEmail[pending.email] = MemoryEntry(json.encodeToString(pending), expiresAtMillis)
         emailByCodeHash[pending.codeHash] = MemoryEntry(pending.email, expiresAtMillis)
-        emailByUsername[pending.username] = MemoryEntry(pending.email, expiresAtMillis)
+        emailByUsername[pending.username.lowercase()] = MemoryEntry(pending.email, expiresAtMillis)
     }
 
     private fun pruneMemory() {
@@ -171,5 +182,5 @@ class PendingRegistrationStore(
 
     private fun pendingKey(email: String) = "profile:pending-registration:$email"
     private fun codeKey(codeHash: String) = "profile:registration-code:$codeHash"
-    private fun usernameKey(username: String) = "profile:pending-registration-username:$username"
+    private fun usernameKey(username: String) = "profile:pending-registration-username:${username.lowercase()}"
 }

@@ -1,31 +1,5 @@
-**Общая оценка**
-
-- Архитектура: **7/10**
-- Работоспособность: **6/10**
-- Безопасность текущей версии: **5/10**
-- Готовность к production: **4/10**
-
 Основные пользовательские сценарии работают, но выпускать систему в production сейчас рискованно.
 
-**Критические проблемы**
-
-🔴 Уровень 2 — Race Conditions / Data Integrity
-4. TOCTOU race condition при регистрации AuthService.confirmRegistration() вызывает ensureUserCanBeCreated(), затем userRepository.create(). При REPEATABLE READ isolation два конкурентных запроса с одинаковым email увидят snapshot без этого email и оба попытаются выполнить INSERT. UserRepository.create() (UserRepository.kt:52-72) не обрабатывает SQLException с sqlState == "23505" (unique violation). Результат: пользователь получает HTTP 500 вместо внятной ошибки.
-
-5. Race condition в сбросе пароля VerificationTokenRepository.verify() использует SELECT ... FOR UPDATE с LIMIT 1 без ORDER BY. При конкурентных запросах сброса могут быть выбраны разные токены. Успешная верификация одного токена не блокирует остальные. Потенциально два разных кода могут сбросить пароль дважды (хотя invalidateAll и revokeAllForUser смягчают последствия).
-
-6. Redis cache invalidation при удалении аккаунта AuthService.deleteAccount() (AuthService.kt:205-212) вызывает только userRepository.delete(userId). Не вызывает revokeCachedSessions(userId) — Redis-кэш сессий не очищается. Если access token ещё жив (до 15 мин), gateway найдёт сессию в Redis и пропустит запрос (хотя _internal/session-check проверит статус пользователя как fallback).
-
-7. Gateway Redis + Backend Redis — могут быть разными gateway/lua/session_status.lua:15 читает IDENTITY_REDIS_HOST, а бэкенд читает redis.url из application.yaml. Если gateway смотрит в другой Redis, отзыв сессии через бэкенд не дойдёт до gateway → сессия останется валидной до expiry.
-
-🔴 Уровень 3 — Логические ошибки
-8. Gateway session_status.lua: соединение без пула session_status.lua:13-15 создаёт новое TCP-соединение к Redis на каждый запрос. Нет повторного использования (pooling). При высокой нагрузке это приведёт к исчерпанию сокетов и падению gateway.
-
-9. Rate limit plugin не отличает пользователей RateLimitPlugin.kt:35-37 использует X-Real-IP как ключ rate limit'а. Если несколько пользователей за одним NAT, все будут заблокированы из-за одного. И наоборот — атакующий с разных IP может делать по 20 запросов с каждого.
-
-10. Обработка X-Real-IP без верификации AuthController.clientIpAddress() и RateLimitPlugin доверяют заголовку X-Real-IP. При прямом доступе к бэкенду (минуя gateway) клиент может подделать IP и обойти rate limiting.
-
-11. pending_email_changes.new_email — UNIQUE без учета expires_at В схеме V1__init_schema.sql:65: new_email TEXT NOT NULL UNIQUE. Если пользователь A запросил смену на x@y.com, пользователь B не сможет запросить ту же почту, пока запись не протухнет или не будет отменена. При этом висит expires_at, но уникальность не учитывает срок действия.
 **Высокий риск**
 
 4. **Публичное определение существования аккаунтов**

@@ -3,6 +3,7 @@ package profile.infrastructure.db
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
 import java.time.Instant
+import java.sql.SQLException
 import java.util.UUID
 import javax.sql.DataSource
 
@@ -20,6 +21,9 @@ data class VerificationToken(
 class VerificationTokenRepository(private val dataSource: DataSource) {
     fun create(token: VerificationToken) {
         dataSource.connection.use { conn ->
+            conn.prepareStatement("SELECT pg_advisory_xact_lock(hashtext(?))").use {
+                it.setString(1, "${token.userId}:${token.purpose}"); it.execute()
+            }
             conn.prepareStatement("UPDATE verification_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE user_id = ? AND purpose = ? AND consumed_at IS NULL AND used_at IS NULL").use {
                 it.setObject(1, UUID.fromString(token.userId)); it.setString(2, token.purpose); it.executeUpdate()
             }
@@ -41,24 +45,30 @@ class VerificationTokenRepository(private val dataSource: DataSource) {
 
     fun verify(userId: String, purpose: String, hash: String): VerificationToken {
         dataSource.connection.use { conn ->
-            val token = conn.prepareStatement("SELECT * FROM verification_tokens WHERE user_id=? AND purpose=? AND consumed_at IS NULL AND used_at IS NULL FOR UPDATE").use {
-                it.setObject(1, UUID.fromString(userId)); it.setString(2, purpose)
-                val rs = it.executeQuery(); if (rs.next()) mapRow(rs) else null
-            } ?: apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-            if (token.expiresAt.isBefore(Instant.now())) {
-                consume(conn, token.id); conn.commit(); apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
-            }
-            if (token.attempts >= token.maxAttempts) apiError(ApiErrorCode.AUTH_CODE_LOCKED, "code")
-            if (token.tokenHash != hash) {
-                val attempts = token.attempts + 1
-                conn.prepareStatement("UPDATE verification_tokens SET attempts=?, locked_at=CASE WHEN ? >= max_attempts THEN CURRENT_TIMESTAMP ELSE locked_at END WHERE id=?").use {
-                    it.setInt(1, attempts); it.setInt(2, attempts); it.setObject(3, UUID.fromString(token.id)); it.executeUpdate()
+            try {
+                val token = conn.prepareStatement("SELECT * FROM verification_tokens WHERE user_id=? AND purpose=? AND consumed_at IS NULL AND used_at IS NULL ORDER BY created_at DESC LIMIT 1 FOR UPDATE").use {
+                    it.setObject(1, UUID.fromString(userId)); it.setString(2, purpose)
+                    val rs = it.executeQuery(); if (rs.next()) mapRow(rs) else null
+                } ?: apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
+                if (token.expiresAt.isBefore(Instant.now())) {
+                    consume(conn, token.id); conn.commit(); apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
                 }
-                conn.commit()
-                if (attempts >= token.maxAttempts) apiError(ApiErrorCode.AUTH_CODE_LOCKED, "code")
-                apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
+                if (token.attempts >= token.maxAttempts) apiError(ApiErrorCode.AUTH_CODE_LOCKED, "code")
+                if (token.tokenHash != hash) {
+                    val attempts = token.attempts + 1
+                    conn.prepareStatement("UPDATE verification_tokens SET attempts=?, locked_at=CASE WHEN ? >= max_attempts THEN CURRENT_TIMESTAMP ELSE locked_at END WHERE id=?").use {
+                        it.setInt(1, attempts); it.setInt(2, attempts); it.setObject(3, UUID.fromString(token.id)); it.executeUpdate()
+                    }
+                    conn.commit()
+                    if (attempts >= token.maxAttempts) apiError(ApiErrorCode.AUTH_CODE_LOCKED, "code")
+                    apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
+                }
+                consume(conn, token.id); conn.commit(); return token
+            } catch (error: SQLException) {
+                conn.rollback()
+                if (error.sqlState == "40001") apiError(ApiErrorCode.AUTH_INVALID_OR_EXPIRED_CODE, "code")
+                throw error
             }
-            consume(conn, token.id); conn.commit(); return token
         }
     }
 

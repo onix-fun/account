@@ -60,7 +60,10 @@ import profile.infrastructure.config.SecurityConfig
 import profile.infrastructure.ratelimit.RateLimit
 import profile.infrastructure.ratelimit.RateLimitConfig
 import profile.infrastructure.redis.RedisManager
+import profile.infrastructure.security.TrustedProxy
 import profile.users.userRouting
+import profile.telemetry.FrontendTelemetryBatch
+import profile.telemetry.FrontendTelemetryMetrics
 
 private const val MAX_BODY_SIZE = 5L * 1024 * 1024 // 5MB, matches AVATAR_TOO_LARGE
 
@@ -204,6 +207,7 @@ fun Application.module() {
         route("/api/auth/switch", max = 30, windowSeconds = 60)
         route("/api/auth/logout", max = 30, windowSeconds = 60)
         route("/api/users/me/avatar", max = 20, windowSeconds = 60)
+        route("/api/telemetry/frontend", max = 60, windowSeconds = 60)
     }
 
     // CSRF validation (defense-in-depth — gateway also validates)
@@ -211,9 +215,12 @@ fun Application.module() {
         val method = call.request.httpMethod
         if (method in setOf(HttpMethod.Post, HttpMethod.Put, HttpMethod.Patch, HttpMethod.Delete)) {
             val path = call.request.path()
-            val isAuthTokenPath = path == "/api/auth/token" || path == "/api/auth/token/refresh" || path == "/api/auth/csrf"
+            val isCsrfExemptPath = path == "/api/auth/token" ||
+                path == "/api/auth/token/refresh" ||
+                path == "/api/auth/csrf" ||
+                path == "/api/telemetry/frontend"
             val hasBearer = call.request.headers[HttpHeaders.Authorization]?.startsWith("Bearer ", ignoreCase = true) == true
-            if (!isAuthTokenPath && !hasBearer) {
+            if (!isCsrfExemptPath && !hasBearer) {
                 val headerToken = call.request.headers["X-CSRF-Token"] ?: ""
                 val cookieToken = call.request.cookies["__Host-csrf_token"]
                     ?: call.request.cookies["csrf_token"]
@@ -348,12 +355,17 @@ fun Application.module() {
     val grpcEnabled = environment.config.propertyOrNull("identity.grpc.enabled")?.getString()?.toBoolean() ?: false
     if (grpcEnabled) launch {
         try {
+            val cert = environment.config.propertyOrNull("identity.grpc.certificate")?.getString()
+            val privateKey = environment.config.propertyOrNull("identity.grpc.private_key")?.getString()
+            val clientCa = environment.config.propertyOrNull("identity.grpc.client_ca")?.getString()
+            val allowedSans = environment.config.propertyOrNull("identity.grpc.allowed_client_sans")?.getString()
+            
             val grpcServer = ProfileGrpcServer(
                 userRepository, grpcPort,
-                environment.config.property("identity.grpc.certificate").getString(),
-                environment.config.property("identity.grpc.private_key").getString(),
-                environment.config.property("identity.grpc.client_ca").getString(),
-                environment.config.property("identity.grpc.allowed_client_sans").getString(),
+                cert ?: "",
+                privateKey ?: "",
+                clientCa ?: "",
+                allowedSans ?: "",
                 environment.config.propertyOrNull("identity.grpc.reflection")?.getString()?.toBoolean() ?: false
             )
             grpcServer.start()
@@ -365,7 +377,10 @@ fun Application.module() {
     // 4. Configure Routing
     routing {
         get("/internal/session-check") {
-            if (call.request.headers["X-Internal-Auth"] != securityConfig.internalAuthSecret) {
+            if (
+                !TrustedProxy.contains(call.request.local.remoteHost, securityConfig.trustedProxyCidrs) ||
+                call.request.headers["X-Internal-Auth"] != securityConfig.internalAuthSecret
+            ) {
                 call.respond(HttpStatusCode.Forbidden); return@get
             }
             val session = call.request.queryParameters["sid"]?.let { runCatching { sessionRepository.findById(it) }.getOrNull() }
@@ -390,6 +405,21 @@ fun Application.module() {
         
         route("openapi.json") { openApiSpec("api") }
         route("swagger-ui") { swaggerUI("/openapi.json") }
+
+        post("/api/telemetry/frontend") {
+            val batch = call.receive<FrontendTelemetryBatch>()
+            if (batch.events.size !in 1..20) {
+                call.respondApiError(ApiErrorCode.VALIDATION_INVALID_REQUEST); return@post
+            }
+            runCatching { batch.events.forEach { it.validate() } }.getOrElse {
+                call.respondApiError(ApiErrorCode.VALIDATION_INVALID_REQUEST); return@post
+            }
+            batch.events.forEach {
+                FrontendTelemetryMetrics.record(it)
+                call.application.log.info("frontend_telemetry type={} route={} name={} value={}", it.type, it.route, it.name, it.value)
+            }
+            call.respond(HttpStatusCode.Accepted)
+        }
         
         authRouting(authController, sessionController)
         userRouting(userController)

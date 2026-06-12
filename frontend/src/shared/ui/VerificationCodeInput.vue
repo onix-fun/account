@@ -67,10 +67,14 @@ watch(
 </script>
 
 <template>
-  <div class="verification-code-field">
-    <div class="verification-code-input" :class="{ invalid: Boolean(localError) }" @paste="onPaste">
+  <div class="grid gap-2 w-full">
+    <div 
+      class="grid grid-cols-6 gap-2 w-full" 
+      :class="{ 'opacity-60 pointer-events-none': disabled }"
+      @paste="onPaste"
+    >
       <input
-        v-for="(_, index) in digits"
+        v-for="(_, index) in 6"
         :key="index"
         :ref="(element) => { if (element) inputs[index] = element as HTMLInputElement }"
         :value="digits[index]"
@@ -81,10 +85,12 @@ watch(
         pattern="[0-9]"
         maxlength="1"
         autocomplete="one-time-code"
+        class="w-full aspect-square text-center text-xl font-bold bg-[var(--surface-muted)] text-[var(--text)] rounded-[10px] outline-none transition-all focus:bg-[var(--surface-raised)] focus:ring-3 focus:ring-[var(--focus-ring)] border-0"
+        :class="{ 'bg-[var(--toast-error-bg)] ring-2 ring-[var(--danger)]/30': Boolean(localError) && modelValue.length === 6 }"
         @input="onInput(index, $event)"
         @keydown="onKeydown(index, $event)"
       />
     </div>
-    <span v-if="error" class="validation-message text-danger">{{ error }}</span>
+    <span v-if="error" class="text-xs font-semibold text-[var(--danger)]">{{ error }}</span>
   </div>
 </template>

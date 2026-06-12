@@ -44,8 +44,18 @@ class ProfileServiceImpl(private val users: UserRepository) : ProfileServiceGrpc
 class ProfileGrpcServer(users: UserRepository, private val port: Int, certificate: String, privateKey: String, clientCa: String, allowedSans: String, reflection: Boolean) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val builder = NettyServerBuilder.forPort(port)
-        .sslContext(GrpcSslContexts.forServer(File(certificate), File(privateKey)).trustManager(File(clientCa)).clientAuth(ClientAuth.REQUIRE).build())
-        .addService(ServerInterceptors.intercept(ProfileServiceImpl(users), ClientSanInterceptor(allowedSans)))
+        
+    init {
+        if (certificate.isNotBlank() && privateKey.isNotBlank() && clientCa.isNotBlank()) {
+            builder.sslContext(GrpcSslContexts.forServer(File(certificate), File(privateKey)).trustManager(File(clientCa)).clientAuth(ClientAuth.REQUIRE).build())
+                .addService(ServerInterceptors.intercept(ProfileServiceImpl(users), ClientSanInterceptor(allowedSans)))
+            log.info("Configured mTLS for gRPC server")
+        } else {
+            builder.addService(ProfileServiceImpl(users))
+            log.info("Configured insecure gRPC server (no certificates provided)")
+        }
+    }
+
     private val server = (if (reflection) builder.addService(ProtoReflectionService.newInstance()) else builder).build()
-    fun start() { server.start(); log.info("Profile gRPC mTLS server started on port {}", port); Runtime.getRuntime().addShutdownHook(Thread { server.shutdown() }) }
+    fun start() { server.start(); log.info("Profile gRPC server started on port {}", port); Runtime.getRuntime().addShutdownHook(Thread { server.shutdown() }) }
 }

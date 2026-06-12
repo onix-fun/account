@@ -1,17 +1,10 @@
-FROM maven:3.9-eclipse-temurin-23 AS build
-WORKDIR /app
-
-COPY pom.xml .
-COPY src ./src
-RUN mvn -q -DskipTests package
-
 FROM eclipse-temurin:23-jre
 WORKDIR /app
 
 ARG OTEL_JAVA_AGENT_VERSION=2.27.0
-ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVA_AGENT_VERSION}/opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
+COPY opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
 
-COPY --from=build /app/target/*-with-dependencies.jar /app/profile.jar
+COPY target/*-with-dependencies.jar /app/profile.jar
 
 RUN useradd -M -u 1001 appuser && mkdir -p /var/log/account/profile && chown -R appuser:appuser /app /otel /var/log/account
 

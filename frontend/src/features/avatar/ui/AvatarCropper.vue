@@ -125,37 +125,71 @@ const applyCrop = async () => {
 </script>
 
 <template>
-  <div class="modal-backdrop minimal" @click.self="emit('cancel')">
-    <section class="crop-modal" role="dialog" aria-modal="true" :aria-label="t('profile.cropPhoto')">
-      <header class="modal-head">
-        <h2>{{ t("profile.cropPhoto") }}</h2>
-        <button class="icon-button quiet" type="button" :aria-label="t('common.cancel')" @click="emit('cancel')">
-          <i class="pi pi-times"></i>
-        </button>
-      </header>
-
-      <div class="crop-area">
-        <div class="crop-box" @pointerdown="onPointerDown">
-          <img :src="objectUrl" alt="" :style="imageStyle" draggable="false" @load="onImageLoad" />
-          <span class="crop-mask" aria-hidden="true"></span>
+  <PDialog
+    :visible="true"
+    modal
+    dismissable-mask
+    class="w-full max-w-[460px]"
+    :header="t('profile.cropPhoto')"
+    @update:visible="emit('cancel')"
+  >
+    <div class="grid gap-4 py-2">
+      <div class="grid gap-3 justify-items-center">
+        <div 
+          class="w-full max-w-[300px] aspect-square relative overflow-hidden rounded-xl bg-[#101828] touch-none cursor-move"
+          @pointerdown="onPointerDown"
+        >
+          <img 
+            ref="imageElement"
+            :src="objectUrl" 
+            alt="" 
+            :style="imageStyle" 
+            class="absolute left-1/2 top-1/2 max-w-none select-none origin-center pointer-events-none"
+            @load="onImageLoad" 
+          />
+          <div class="absolute inset-0 border border-white/80 rounded-xl shadow-[inset_0_0_0_999px_rgba(16,24,40,0.16)] pointer-events-none" aria-hidden="true"></div>
         </div>
-        <p class="muted small">{{ t("profile.cropInstructions") }}</p>
+        <p class="m-0 text-xs text-[var(--muted)] text-center">{{ t("profile.cropInstructions") }}</p>
       </div>
 
-      <div class="crop-controls">
-        <label class="field compact">
-          <span>{{ t("profile.zoom") }}</span>
-          <input v-model.number="zoom" type="range" min="1" max="3" step="0.01" />
-        </label>
-        <button class="icon-button" type="button" :aria-label="t('profile.rotate')" @click="rotate">
-          <i class="pi pi-refresh"></i>
-        </button>
+      <div class="flex items-end gap-3 px-1">
+        <div class="flex-1 grid gap-1.5">
+          <span class="text-xs font-bold text-[var(--muted)]">{{ t("profile.zoom") }}</span>
+          <input 
+            v-model.number="zoom" 
+            type="range" 
+            min="1" 
+            max="3" 
+            step="0.01" 
+            class="w-full accent-[var(--text)] h-1.5 bg-[var(--surface-muted)] rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
+        <PButton 
+          icon="pi pi-refresh" 
+          variant="text" 
+          severity="secondary" 
+          class="w-10 h-10" 
+          :aria-label="t('profile.rotate')" 
+          @click="rotate" 
+        />
       </div>
+    </div>
 
-      <footer class="modal-foot split">
-        <button class="btn btn-ghost" type="button" @click="emit('cancel')">{{ t("common.cancel") }}</button>
-        <button class="btn btn-primary" type="button" @click="applyCrop">{{ t("common.apply") }}</button>
-      </footer>
-    </section>
-  </div>
+    <template #footer>
+      <div class="flex items-center gap-3 w-full">
+        <PButton 
+          :label="t('common.cancel')" 
+          variant="text" 
+          severity="secondary" 
+          class="flex-1" 
+          @click="emit('cancel')" 
+        />
+        <PButton 
+          :label="t('common.apply')" 
+          class="flex-1" 
+          @click="applyCrop" 
+        />
+      </div>
+    </template>
+  </PDialog>
 </template>

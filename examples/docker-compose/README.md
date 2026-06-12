@@ -1,48 +1,55 @@
-# Docker Compose
+# Docker Compose — production reference
 
-Production-пример для одного сервера. TLS должен завершаться на доверенном
-reverse proxy, который пересылает запросы во внутренний `account-gateway:8089`.
+Запускает immutable application images и полный self-hosted SigNoz stack.
+Локальная сборка образов в этом примере отсутствует.
 
-## Подготовка
+## Быстрый старт
+
+```sh
+./generate-keys.sh
+cp .env.example .env
+docker compose up -d
+```
+
+| Сервис | URL |
+|---|---|
+| Frontend | `http://localhost:5174` |
+| Gateway / API | `http://localhost:8089` |
+| Swagger UI | `http://localhost:8089/swagger-ui` |
+| MailHog (email) | `http://localhost:8026` |
+| MinIO Console | `http://localhost:9011` |
+| SigNoz | `http://localhost:3301` |
+
+## Переменные окружения
+
+Скопируйте `.env.example` в `.env` и при необходимости измените порты:
 
 ```sh
 cp .env.example .env
-mkdir -p secrets
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 \
-  -out secrets/account-jwt-private.pem
-openssl rsa -pubout -in secrets/account-jwt-private.pem \
-  -out secrets/account-jwt-public.pem
 ```
 
-Замените все `CHANGE_ME` в `.env`. Особенно важны:
-
-- `PUBLIC_BASE_URL` и точный `ACCOUNT_ALLOWED_ORIGINS`;
-- `ACCOUNT_TRUSTED_PROXY_CIDRS`;
-- `IDENTITY_OTP_HMAC_SECRET` и `IDENTITY_INTERNAL_AUTH_SECRET`;
-- database, SMTP STARTTLS и S3 credentials.
-
-## Запуск
+После создания первого администратора SigNoz импортируйте dashboards:
 
 ```sh
-docker compose config
-docker compose up -d
-docker compose ps
+SIGNOZ_API_KEY=replace-me ../../observability/signoz/import-dashboards.sh
 ```
 
-Gateway имеет только внутренний `expose`. Настройте reverse proxy в той же сети
-или явно добавьте безопасную публикацию порта только для доверенного ingress.
-
-## Обновление и остановка
+## Остановка
 
 ```sh
-docker compose pull
-docker compose up -d
-docker compose down
+docker compose down        # остановить контейнеры
+docker compose down -v     # удалить application и SigNoz volumes
 ```
 
-`docker compose down -v` необратимо удаляет PostgreSQL, Redis и MinIO volumes.
+## Production
 
-## Ограничения
+Для production используйте образы из GHCR:
 
-Пример удобен для небольшого single-host deployment, но не обеспечивает HA.
-Не публикуйте backend, PostgreSQL, Redis или MinIO напрямую.
+```text
+ghcr.io/onix-fun/accaunt/frontend
+ghcr.io/onix-fun/accaunt/backend
+ghcr.io/onix-fun/accaunt/gateway
+```
+
+Требования: HTTPS, Secure cookies, CORS allowlist, SMTP STARTTLS,
+секреты длиной не менее 32 символов.

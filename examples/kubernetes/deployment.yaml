@@ -22,6 +22,7 @@ data:
   IDENTITY_DATABASE_JDBC_URL: jdbc:postgresql://account-postgres:5432/account
   IDENTITY_DATABASE_USERNAME: account
   IDENTITY_REDIS_URL: redis://account-redis:6379
+  IDENTITY_TRUSTED_PROXY_CIDRS: 10.0.0.0/8
   IDENTITY_SMTP_HOST: smtp.example.com
   IDENTITY_SMTP_PORT: "587"
   IDENTITY_SMTP_FROM: no-reply@example.com
@@ -31,13 +32,19 @@ data:
   IDENTITY_S3_ACCESS_KEY: account-minio
   IDENTITY_S3_BUCKET: avatars
   IDENTITY_GRPC_ENABLED: "false"
+  JAVA_TOOL_OPTIONS: -javaagent:/otel/opentelemetry-javaagent.jar
+  OTEL_SERVICE_NAME: profile
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-otel-collector.signoz.svc.cluster.local:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_LOGS_EXPORTER: none
+  OTEL_RESOURCE_ATTRIBUTES: service.namespace=account,deployment.environment=production
   ACCOUNT_ALLOWED_ORIGINS: https://account.example.com
   ACCOUNT_HSTS_HEADER: max-age=31536000; includeSubDomains
   ACCOUNT_TRUSTED_PROXY_CIDRS: 10.0.0.0/8
   ACCOUNT_DNS_RESOLVER: 10.96.0.10
   ACCOUNT_SWAGGER_UI_ENABLED: "false"
-  IDENTITY_REDIS_HOST: account-redis
-  IDENTITY_REDIS_PORT: "6379"
   POSTGRES_DB: account
   POSTGRES_USER: account
   MINIO_ROOT_USER: account-minio
@@ -93,7 +100,7 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: postgres:16
+          image: postgres:18
           ports:
             - name: postgres
               containerPort: 5432
@@ -214,10 +221,14 @@ spec:
     metadata:
       labels:
         app: account-minio
+      annotations:
+        signoz.io/scrape: "true"
+        signoz.io/port: "9000"
+        signoz.io/path: "/minio/v2/metrics/cluster"
     spec:
       containers:
         - name: minio
-          image: minio/minio:latest
+          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
           args: [server, /data, --console-address, ":9001"]
           envFrom:
             - configMapRef:
@@ -285,7 +296,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/onix-fun/accaunt/frontend:latest
+          image: ghcr.io/onix-fun/accaunt/frontend:1.0.0
           ports:
             - name: http
               containerPort: 80
@@ -338,7 +349,7 @@ spec:
     spec:
       initContainers:
         - name: initialize-avatar-bucket
-          image: minio/mc:latest
+          image: minio/mc:RELEASE.2025-04-16T18-13-26Z
           envFrom:
             - configMapRef:
                 name: account-config
@@ -353,7 +364,7 @@ spec:
               mc anonymous set download local/avatars
       containers:
         - name: profile
-          image: ghcr.io/onix-fun/accaunt/backend:latest
+          image: ghcr.io/onix-fun/accaunt/backend:1.0.0
           envFrom:
             - configMapRef:
                 name: account-config
@@ -416,10 +427,14 @@ spec:
     metadata:
       labels:
         app: account-gateway
+      annotations:
+        signoz.io/scrape: "true"
+        signoz.io/port: "8090"
+        signoz.io/path: "/nginx_status"
     spec:
       containers:
         - name: account-gateway
-          image: ghcr.io/onix-fun/accaunt/gateway:latest
+          image: ghcr.io/onix-fun/accaunt/gateway:1.0.0
           envFrom:
             - configMapRef:
                 name: account-config
@@ -428,6 +443,8 @@ spec:
           ports:
             - name: http
               containerPort: 8089
+            - name: metrics
+              containerPort: 8090
           readinessProbe:
             httpGet:
               path: /health
