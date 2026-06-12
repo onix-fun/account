@@ -4,6 +4,7 @@ import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
+import io.ktor.server.plugins.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import profile.infrastructure.config.JwtConfig
@@ -302,7 +303,7 @@ class AuthController(
             domain = sessionConfig.cookieDomain,
             path = REFRESH_COOKIE_PATH,
             maxAge = refreshCookieMaxAgeSeconds(),
-            extensions = mapOf("SameSite" to "Strict")
+            extensions = mapOf("SameSite" to "Lax")
         )
     }
 
@@ -315,7 +316,7 @@ class AuthController(
             domain = sessionConfig.cookieDomain,
             path = REFRESH_COOKIE_PATH,
             maxAge = 0,
-            extensions = mapOf("SameSite" to "Strict")
+            extensions = mapOf("SameSite" to "Lax")
         )
     }
 
@@ -323,10 +324,10 @@ class AuthController(
         name = browserCookieName(ACCESS_COOKIE_NAME),
         value = value,
         maxAge = accessCookieMaxAgeSeconds(),
-        sameSite = "Strict"
+        sameSite = "Lax"
     )
 
-    private fun clearAccessCookie() = browserCookie(name = browserCookieName(ACCESS_COOKIE_NAME), value = "", maxAge = 0, sameSite = "Strict")
+    private fun clearAccessCookie() = browserCookie(name = browserCookieName(ACCESS_COOKIE_NAME), value = "", maxAge = 0, sameSite = "Lax")
 
     private fun activeUserCookie(userId: String) = browserCookie(
         name = browserCookieName(ACTIVE_USER_COOKIE_NAME),
@@ -340,7 +341,7 @@ class AuthController(
         name = browserCookieName(CSRF_COOKIE_NAME),
         value = value,
         maxAge = refreshCookieMaxAgeSeconds(),
-        sameSite = "Strict"
+        sameSite = "Lax"
     )
 
     private fun browserCookie(name: String, value: String, maxAge: Int? = null, sameSite: String = "Lax"): Cookie {
@@ -399,13 +400,7 @@ class AuthController(
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
-    private fun ApplicationCall.clientIpAddress(): String {
-        val trustedGateway = TrustedProxy.contains(request.local.remoteHost, securityConfig.trustedProxyCidrs) &&
-            request.headers["X-Internal-Auth"]?.let {
-            java.security.MessageDigest.isEqual(it.toByteArray(), securityConfig.internalAuthSecret.toByteArray())
-        } == true
-        return if (trustedGateway) request.headers["X-Real-IP"] ?: request.local.remoteHost else request.local.remoteHost
-    }
+    private fun ApplicationCall.clientIpAddress(): String = request.origin.remoteHost
 
     private fun ApplicationCall.emailLocale(): EmailLocale =
         EmailLocale.fromHeader(request.headers[HttpHeaders.AcceptLanguage])

@@ -1,5 +1,5 @@
 <configuration>
-    <property name="LOG_DIR" value="${LOG_DIR:-/var/log/account/profile}" />
+    <property name="LOG_DIR" value="${LOG_DIR:-/var/log/accaunt/profile}" />
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIR}/profile.log</file>
@@ -23,6 +23,7 @@
         <appender-ref ref="STDOUT"/>
     </root>
 
+    <logger name="io.ktor" level="DEBUG"/>
     <logger name="org.eclipse.jetty" level="INFO"/>
     <logger name="io.netty" level="INFO"/>
 </configuration>

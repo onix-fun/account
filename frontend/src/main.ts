@@ -21,7 +21,6 @@ import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 import "./style.css";
-import { installFrontendTelemetry } from "@/infra/telemetry";
 
 const AccountTheme = definePreset(Aura, {
   semantic: {
@@ -117,4 +116,3 @@ app.component("PMessage", Message);
 app.component("PToast", Toast);
 
 app.mount("#app");
-installFrontendTelemetry();

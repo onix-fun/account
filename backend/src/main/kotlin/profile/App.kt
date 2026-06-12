@@ -14,9 +14,14 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
+import io.ktor.server.plugins.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.requestvalidation.*
 import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.plugins.cors.routing.*
+import io.ktor.server.plugins.defaultheaders.*
+import io.ktor.server.plugins.forwardedheaders.*
+import io.ktor.server.plugins.calllogging.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -62,16 +67,57 @@ import profile.infrastructure.ratelimit.RateLimitConfig
 import profile.infrastructure.redis.RedisManager
 import profile.infrastructure.security.TrustedProxy
 import profile.users.userRouting
-import profile.telemetry.FrontendTelemetryBatch
-import profile.telemetry.FrontendTelemetryMetrics
 
-private const val MAX_BODY_SIZE = 5L * 1024 * 1024 // 5MB, matches AVATAR_TOO_LARGE
+private const val MAX_BODY_SIZE = 5L * 1024 * 1024
+ // 5MB, matches AVATAR_TOO_LARGE
 
 fun Application.module() {
+    val securityConfig by inject<SecurityConfig>()
+
     // 1. Configure Plugins
     install(Koin) {
         slf4jLogger()
         modules(koinModule(environment.config))
+    }
+
+    install(XForwardedHeaders)
+
+    install(CallLogging) {
+        level = org.slf4j.event.Level.INFO
+        filter { call -> call.request.path().startsWith("/api") }
+    }
+
+    install(CORS) {
+        val origins = securityConfig.allowedOrigins
+        if (origins.contains("*") || origins.isEmpty()) {
+            allowHost("localhost:5174", schemes = listOf("http", "https"))
+            allowHost("127.0.0.1:5174", schemes = listOf("http", "https"))
+            allowHost("localhost:8089", schemes = listOf("http", "https"))
+            allowHost("localhost:8091", schemes = listOf("http", "https"))
+        } else {
+            origins.forEach { 
+                val host = it.removePrefix("http://").removePrefix("https://")
+                if (host.isNotBlank()) allowHost(host, schemes = listOf("http", "https"))
+            }
+        }
+        allowMethod(HttpMethod.Options)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Patch)
+        allowMethod(HttpMethod.Delete)
+        allowHeader(HttpHeaders.ContentType)
+        allowHeader(HttpHeaders.Authorization)
+        allowHeader("X-Correlation-Id")
+        allowHeader("X-CSRF-Token")
+        allowCredentials = true
+        maxAgeInSeconds = 86400
+    }
+
+    install(DefaultHeaders) {
+        header("X-Content-Type-Options", "nosniff")
+        header("X-Frame-Options", "DENY")
+        header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        val csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self'; connect-src 'self' http://localhost:8089 http://127.0.0.1:8089 http://localhost:8091 http://127.0.0.1:8091; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        header("Content-Security-Policy", csp)
     }
 
     install(ContentNegotiation) {
@@ -207,18 +253,17 @@ fun Application.module() {
         route("/api/auth/switch", max = 30, windowSeconds = 60)
         route("/api/auth/logout", max = 30, windowSeconds = 60)
         route("/api/users/me/avatar", max = 20, windowSeconds = 60)
-        route("/api/telemetry/frontend", max = 60, windowSeconds = 60)
     }
 
-    // CSRF validation (defense-in-depth — gateway also validates)
+    // CSRF validation
     intercept(ApplicationCallPipeline.Call) {
         val method = call.request.httpMethod
         if (method in setOf(HttpMethod.Post, HttpMethod.Put, HttpMethod.Patch, HttpMethod.Delete)) {
             val path = call.request.path()
             val isCsrfExemptPath = path == "/api/auth/token" ||
                 path == "/api/auth/token/refresh" ||
-                path == "/api/auth/csrf" ||
-                path == "/api/telemetry/frontend"
+                path == "/api/auth/refresh" ||
+                path == "/api/auth/csrf"
             val hasBearer = call.request.headers[HttpHeaders.Authorization]?.startsWith("Bearer ", ignoreCase = true) == true
             if (!isCsrfExemptPath && !hasBearer) {
                 val headerToken = call.request.headers["X-CSRF-Token"] ?: ""
@@ -244,18 +289,20 @@ fun Application.module() {
             val error = parts.firstOrNull()?.let { runCatching { ApiErrorCode.valueOf(it) }.getOrNull() }
                 ?: ApiErrorCode.VALIDATION_INVALID_REQUEST
             val fields = parts.getOrNull(1)?.split(",")?.filter { it.isNotBlank() }.orEmpty()
-            call.respondApiError(error, fields)
+            call.respond(error.status, ApiErrorResponse(error.name, error.numericCode, error.message, fields.map { ApiFieldError(it, error.name, error.numericCode) }))
         }
         exception<ApiException> { call, cause ->
-            call.respondApiError(cause.error, cause.fields)
+            call.respond(cause.error.status, ApiErrorResponse(cause.error.name, cause.error.numericCode, cause.error.message, cause.fields.map { ApiFieldError(it, cause.error.name, cause.error.numericCode) }))
         }
         exception<IllegalStateException> { call, cause ->
             call.application.log.error("Illegal state: ${cause.message}", cause)
-            call.respondApiError(ApiErrorCode.INFRASTRUCTURE_SERVICE_UNAVAILABLE)
+            val error = ApiErrorCode.INFRASTRUCTURE_SERVICE_UNAVAILABLE
+            call.respond(error.status, ApiErrorResponse(error.name, error.numericCode, error.message))
         }
         exception<Throwable> { call, cause ->
             call.application.log.error("Internal server error: ${cause.message}", cause)
-            call.respondApiError(ApiErrorCode.INFRASTRUCTURE_INTERNAL_ERROR)
+            val error = ApiErrorCode.INFRASTRUCTURE_INTERNAL_ERROR
+            call.respond(error.status, ApiErrorResponse(error.name, error.numericCode, error.message))
         }
     }
 
@@ -267,13 +314,14 @@ fun Application.module() {
 
     val sessionRepository by inject<SessionRepository>()
     val userRepository by inject<UserRepository>()
-    val securityConfig by inject<SecurityConfig>()
     install(Authentication) {
         jwt {
             authHeader { call ->
-                call.request.parseAuthorizationHeader()
-                    ?: (call.request.cookies["__Host-access_token"] ?: call.request.cookies["access_token"])
-                        ?.let { HttpAuthHeader.Single("Bearer", it) }
+                val authHeader = call.request.parseAuthorizationHeader()
+                if (authHeader != null) return@authHeader authHeader
+                
+                val cookieToken = call.request.cookies["__Host-access_token"] ?: call.request.cookies["access_token"]
+                cookieToken?.let { HttpAuthHeader.Single("Bearer", it) }
             }
             verifier(
                 JWT.require(Algorithm.RSA256(jwtPublicKey, null))
@@ -284,7 +332,12 @@ fun Application.module() {
             validate { credential ->
                 val sid = credential.payload.getClaim("sid").asString()
                 val session = sid?.let(sessionRepository::findById)
-                if (session != null && session.revokedAt == null && session.expiresAt.isAfter(java.time.Instant.now())) JWTPrincipal(credential.payload) else null
+                val isValid = session != null && session.revokedAt == null && session.expiresAt.isAfter(java.time.Instant.now())
+                if (!isValid) {
+                    application.log.warn("JWT validation failed: sid={}, session_found={}, revoked={}, expired={}", 
+                        sid, session != null, session?.revokedAt != null, session?.expiresAt?.isBefore(java.time.Instant.now()) ?: "n/a")
+                }
+                if (isValid) JWTPrincipal(credential.payload) else null
             }
         }
     }
@@ -376,24 +429,6 @@ fun Application.module() {
 
     // 4. Configure Routing
     routing {
-        get("/internal/session-check") {
-            if (
-                !TrustedProxy.contains(call.request.local.remoteHost, securityConfig.trustedProxyCidrs) ||
-                call.request.headers["X-Internal-Auth"] != securityConfig.internalAuthSecret
-            ) {
-                call.respond(HttpStatusCode.Forbidden); return@get
-            }
-            val session = call.request.queryParameters["sid"]?.let { runCatching { sessionRepository.findById(it) }.getOrNull() }
-            val userId = call.request.queryParameters["uid"]
-            if (session != null && session.userId == userId && session.revokedAt == null && session.expiresAt.isAfter(java.time.Instant.now())) {
-                val user = userRepository.findById(userId)
-                if (user == null || user.status != "ACTIVE") {
-                    redisManager.revokeSession(session.id)
-                    call.respond(HttpStatusCode.Unauthorized); return@get
-                }
-                call.respond(HttpStatusCode.NoContent)
-            } else call.respond(HttpStatusCode.Unauthorized)
-        }
         get("health", {
             tags = setOf("System")
             summary = "Health check"
@@ -406,21 +441,6 @@ fun Application.module() {
         route("openapi.json") { openApiSpec("api") }
         route("swagger-ui") { swaggerUI("/openapi.json") }
 
-        post("/api/telemetry/frontend") {
-            val batch = call.receive<FrontendTelemetryBatch>()
-            if (batch.events.size !in 1..20) {
-                call.respondApiError(ApiErrorCode.VALIDATION_INVALID_REQUEST); return@post
-            }
-            runCatching { batch.events.forEach { it.validate() } }.getOrElse {
-                call.respondApiError(ApiErrorCode.VALIDATION_INVALID_REQUEST); return@post
-            }
-            batch.events.forEach {
-                FrontendTelemetryMetrics.record(it)
-                call.application.log.info("frontend_telemetry type={} route={} name={} value={}", it.type, it.route, it.name, it.value)
-            }
-            call.respond(HttpStatusCode.Accepted)
-        }
-        
         authRouting(authController, sessionController)
         userRouting(userController)
         searchRouting(searchController)

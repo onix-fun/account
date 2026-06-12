@@ -6,7 +6,7 @@ setup:
 
 up: setup
 	@echo "Starting backend and gateway containers..."
-	cd dev && docker compose up -d --build
+	cd dev && docker compose up -d --build --remove-orphans
 	@echo "Cleaning up frontend port (5174)..."
 	-lsof -ti:5174 | xargs kill -9 2>/dev/null || true
 	@echo "Starting frontend dev server..."
@@ -14,7 +14,7 @@ up: setup
 
 down:
 	@echo "Stopping containers..."
-	cd dev && docker compose down
+	cd dev && docker compose down --remove-orphans
 
 clean: down
 	@echo "Cleaning up volumes..."

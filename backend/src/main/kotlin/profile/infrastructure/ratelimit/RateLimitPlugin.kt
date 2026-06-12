@@ -2,6 +2,7 @@ package profile.infrastructure.ratelimit
 
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.plugins.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import org.koin.ktor.ext.inject
@@ -26,7 +27,6 @@ class RateLimitConfig {
 
 val RateLimit = createApplicationPlugin("RateLimit", ::RateLimitConfig) {
     val redisManager = application.inject<RedisManager>().value
-    val appConfig = application.inject<AppConfig>().value
     val rules = pluginConfig.rules
 
     onCall { call ->
@@ -36,16 +36,9 @@ val RateLimit = createApplicationPlugin("RateLimit", ::RateLimitConfig) {
         }?.value
 
         if (matchedRule != null) {
-            val trustedGateway = TrustedProxy.contains(call.request.local.remoteHost, appConfig.security.trustedProxyCidrs) &&
-                call.request.headers["X-Internal-Auth"]?.let {
-                MessageDigest.isEqual(it.toByteArray(), appConfig.security.internalAuthSecret.toByteArray())
-            } == true
-            val clientIp = if (trustedGateway) call.request.headers["X-Real-IP"] else null
-            val ipKey = clientIp ?: call.request.local.remoteHost
-            val clientId = if (trustedGateway) call.request.headers["X-Client-Id"]?.takeIf { it.isNotBlank() } else null
+            val ipKey = call.request.origin.remoteHost
             val allowed = runCatching {
-                redisManager.checkRateLimit("ratelimit:${matchedRule.hashCode()}:ip", ipKey, matchedRule.max, matchedRule.windowSeconds) &&
-                    (clientId == null || redisManager.checkRateLimit("ratelimit:${matchedRule.hashCode()}:client", clientId, matchedRule.max, matchedRule.windowSeconds))
+                redisManager.checkRateLimit("ratelimit:${matchedRule.hashCode()}:ip", ipKey, matchedRule.max, matchedRule.windowSeconds)
             }.getOrElse {
                 call.respond(
                     HttpStatusCode.ServiceUnavailable,

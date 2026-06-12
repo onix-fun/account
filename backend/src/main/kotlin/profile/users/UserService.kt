@@ -46,6 +46,14 @@ class UserService(
         return updated
     }
 
+    suspend fun getAvatarStream(key: String): java.io.InputStream? {
+        return s3Client.getObject(key)
+    }
+
+    suspend fun getAvatarSize(key: String): Long? {
+        return s3Client.getObjectSize(key)
+    }
+
     suspend fun updateAvatar(userId: String, bytes: ByteArray, contentType: String): User {
         val user = userRepository.findById(userId) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
         val processed = AvatarProcessor.process(bytes)

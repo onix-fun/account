@@ -6,7 +6,9 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
+import io.ktor.server.plugins.*
 import io.ktor.server.response.*
+import kotlinx.coroutines.withContext
 import profile.infrastructure.db.User
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
@@ -14,11 +16,20 @@ import profile.auth.AuthService
 import profile.infrastructure.events.EmailLocale
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.util.*
 
 class UserController(
     private val userService: UserService,
     private val authService: AuthService
 ) {
+    companion object {
+        private const val MAX_AVATAR_BYTES = 5 * 1024 * 1024
+        private val ALLOWED_AVATAR_TYPES = setOf("image/jpeg", "image/png", "image/webp")
+        private val PNG_SIGNATURE = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
+        )
+    }
+
     suspend fun getMe(call: ApplicationCall) {
         val userId = call.principal<JWTPrincipal>()!!.payload.subject
 
@@ -134,12 +145,39 @@ class UserController(
         if (!valid) apiError(ApiErrorCode.AVATAR_SIGNATURE_MISMATCH, "file")
     }
 
-    private companion object {
-        private const val MAX_AVATAR_BYTES = 5 * 1024 * 1024
-        private const val DEFAULT_BUFFER_SIZE = 8192
-        private val ALLOWED_AVATAR_TYPES = setOf("image/jpeg", "image/png", "image/webp")
-        private val PNG_SIGNATURE = byteArrayOf(
-            0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
-        )
+    suspend fun streamAvatar(call: ApplicationCall) {
+        val keyParts = call.parameters.getAll("key") ?: apiError(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "key")
+        val key = keyParts.joinToString("/")
+        call.application.log.info("Streaming avatar request: key={}", key)
+        
+        try {
+            val stream = userService.getAvatarStream(key)
+            if (stream == null) {
+                call.application.log.info("Avatar not found in storage: key={}", key)
+                call.respond(HttpStatusCode.NotFound)
+                return
+            }
+
+            call.response.header(HttpHeaders.CacheControl, "public, max-age=31536000, immutable")
+            val contentType = ContentType.parse(contentTypeFor(key))
+            
+            val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                stream.use { it.readBytes() }
+            }
+            call.respondBytes(bytes, contentType = contentType, status = HttpStatusCode.OK)
+            
+        } catch (e: Exception) {
+            call.application.log.error("Error streaming avatar: key={}, error={}", key, e.message, e)
+            call.respond(HttpStatusCode.InternalServerError)
+        }
+    }
+
+    private fun contentTypeFor(key: String): String {
+        return when {
+            key.endsWith(".png", ignoreCase = true) -> "image/png"
+            key.endsWith(".webp", ignoreCase = true) -> "image/webp"
+            else -> "image/jpeg"
+        }
     }
 }
+

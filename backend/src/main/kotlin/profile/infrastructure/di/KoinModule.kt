@@ -79,14 +79,15 @@ fun koinModule(config: ApplicationConfig) = module {
             otpHmacSecret = config.propertyOrNull("identity.security.otp_hmac_secret")?.getString() ?: throw IllegalStateException("IDENTITY_OTP_HMAC_SECRET is not configured"),
             internalAuthSecret = config.propertyOrNull("identity.security.internal_auth_secret")?.getString() ?: throw IllegalStateException("IDENTITY_INTERNAL_AUTH_SECRET is not configured"),
             trustedProxyCidrs = config.propertyOrNull("identity.security.trusted_proxy_cidrs")?.getString()
-                ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("127.0.0.1/32", "::1/128")
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("127.0.0.1/32", "::1/128"),
+            allowedOrigins = config.propertyOrNull("identity.security.allowed_origins")?.getString()
+                ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("http://localhost:5174", "http://127.0.0.1:5174")
         ),
         environment = config.propertyOrNull("app.environment")?.getString() ?: "development"
     )
     if (appConfig.environment == "production") {
         require(appConfig.session.cookieSecure) { "Secure cookies are required in production" }
         require(appConfig.security.otpHmacSecret.length >= 32) { "IDENTITY_OTP_HMAC_SECRET must be at least 32 characters" }
-        require(appConfig.security.internalAuthSecret.length >= 32) { "IDENTITY_INTERNAL_AUTH_SECRET must be at least 32 characters" }
         require(appConfig.smtp.startTls) { "SMTP STARTTLS is required in production" }
         profile.infrastructure.security.EmailNormalizer.normalize(appConfig.smtp.from, "smtp.from")
         require(appConfig.s3.publicUrl.startsWith("https://")) { "Public avatar URL must use HTTPS in production" }

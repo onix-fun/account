@@ -6,7 +6,7 @@ COPY opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
 
 COPY target/*-with-dependencies.jar /app/profile.jar
 
-RUN useradd -M -u 1001 appuser && mkdir -p /var/log/account/profile && chown -R appuser:appuser /app /otel /var/log/account
+RUN useradd -M -u 1001 appuser && mkdir -p /var/log/accaunt/profile && chown -R appuser:appuser /app /otel /var/log/accaunt
 
 USER appuser
 

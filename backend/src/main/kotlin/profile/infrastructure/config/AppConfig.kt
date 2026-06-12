@@ -53,7 +53,8 @@ data class SmtpConfig(
 data class SecurityConfig(
     val otpHmacSecret: String,
     val internalAuthSecret: String,
-    val trustedProxyCidrs: List<String>
+    val trustedProxyCidrs: List<String>,
+    val allowedOrigins: List<String>
 )
 
 data class S3Config(

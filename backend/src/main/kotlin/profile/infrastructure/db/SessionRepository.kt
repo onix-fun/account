@@ -99,37 +99,41 @@ class SessionRepository(private val dataSource: DataSource) {
 
     fun findByTokenHash(hash: String): Session? {
         dataSource.connection.use { conn ->
-            conn.prepareStatement(FIND_BY_TOKEN_HASH_SQL).use { stmt ->
+            val session = conn.prepareStatement(FIND_BY_TOKEN_HASH_SQL).use { stmt ->
                 stmt.setString(1, hash)
                 val rs = stmt.executeQuery()
-                if (rs.next()) return mapRow(rs)
+                if (rs.next()) mapRow(rs) else null
             }
+            conn.commit()
+            return session
         }
-        return null
     }
 
     fun findByTokenHashWithGrace(hash: String): Session? {
         dataSource.connection.use { conn ->
-            conn.prepareStatement(FIND_BY_TOKEN_HASH_WITH_GRACE_SQL).use { stmt ->
+            val session = conn.prepareStatement(FIND_BY_TOKEN_HASH_WITH_GRACE_SQL).use { stmt ->
                 stmt.setString(1, hash)
                 stmt.setString(2, hash)
                 stmt.setTimestamp(3, java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(REFRESH_TOKEN_GRACE_SECONDS)))
                 val rs = stmt.executeQuery()
-                if (rs.next()) return mapRow(rs)
+                if (rs.next()) mapRow(rs) else null
             }
+            conn.commit()
+            return session
         }
-        return null
     }
 
     fun findActiveByUserId(userId: String): List<Session> {
         dataSource.connection.use { conn ->
-            conn.prepareStatement(FIND_BY_USER_ID_SQL).use { stmt ->
+            val sessions = conn.prepareStatement(FIND_BY_USER_ID_SQL).use { stmt ->
                 stmt.setObject(1, UUID.fromString(userId))
                 val rs = stmt.executeQuery()
                 val result = mutableListOf<Session>()
                 while (rs.next()) result.add(mapRow(rs))
-                return result
+                result
             }
+            conn.commit()
+            return sessions
         }
     }
 
@@ -137,13 +141,15 @@ class SessionRepository(private val dataSource: DataSource) {
         if (ids.isEmpty()) return emptyList()
         dataSource.connection.use { conn ->
             val placeholders = ids.joinToString(",") { "?" }
-            conn.prepareStatement(FIND_ACTIVE_BY_IDS_SQL.format(placeholders)).use { stmt ->
+            val sessions = conn.prepareStatement(FIND_ACTIVE_BY_IDS_SQL.format(placeholders)).use { stmt ->
                 ids.forEachIndexed { i, id -> stmt.setObject(i + 1, UUID.fromString(id)) }
                 val rs = stmt.executeQuery()
                 val result = mutableListOf<Session>()
                 while (rs.next()) result.add(mapRow(rs))
-                return result
+                result
             }
+            conn.commit()
+            return sessions
         }
     }
 
@@ -215,14 +221,19 @@ class SessionRepository(private val dataSource: DataSource) {
     }
 
     fun findById(id: String): Session? {
+        val uuid = runCatching { UUID.fromString(id.trim()) }.getOrNull()
+            ?: runCatching { UUID.fromString(id.trim().take(36)) }.getOrNull()
+            ?: return null
+
         dataSource.connection.use { conn ->
-            conn.prepareStatement(FIND_BY_ID_SQL).use { stmt ->
-                stmt.setObject(1, UUID.fromString(id))
+            val session = conn.prepareStatement(FIND_BY_ID_SQL).use { stmt ->
+                stmt.setObject(1, uuid)
                 val rs = stmt.executeQuery()
-                if (rs.next()) return mapRow(rs)
+                if (rs.next()) mapRow(rs) else null
             }
+            conn.commit()
+            return session
         }
-        return null
     }
 
     private fun mapRow(rs: java.sql.ResultSet): Session {
