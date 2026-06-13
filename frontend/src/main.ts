@@ -72,24 +72,6 @@ const AccountTheme = definePreset(Aura, {
       },
     },
   },
-  components: {
-    inputtext: {
-      background: "{surface.100}",
-      borderColor: "transparent",
-      hoverBorderColor: "transparent",
-      focusBorderColor: "transparent",
-      borderRadius: "10px",
-    },
-    password: {
-      input: {
-        background: "{surface.100}",
-        borderColor: "transparent",
-        hoverBorderColor: "transparent",
-        focusBorderColor: "transparent",
-        borderRadius: "10px",
-      },
-    },
-  },
 });
 
 const app = createApp(App);

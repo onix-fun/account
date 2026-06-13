@@ -419,7 +419,7 @@
                         <DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
                     </environmentVariables>
                     <systemPropertyVariables>
-                        <docker.api.version>1.44</docker.api.version>
+                        <api.version>1.44</api.version>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

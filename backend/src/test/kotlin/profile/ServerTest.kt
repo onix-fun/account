@@ -1,6 +1,7 @@
 package profile
 
 import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -83,6 +84,12 @@ class ServerTest {
             pendingRegistrationStore = get()
             verificationTokenRepository = get()
             userRepository = get()
+        }
+        val client = createClient {
+            defaultRequest {
+                header("X-CSRF-Token", "test-csrf-token")
+                cookie("csrf_token", "test-csrf-token")
+            }
         }
         val registerResponse = client.post("/api/auth/register") {
             header(HttpHeaders.ContentType, ContentType.Application.Json)
@@ -183,6 +190,10 @@ class ServerTest {
         val client = createClient {
             install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
                 json()
+            }
+            defaultRequest {
+                header("X-CSRF-Token", "test-csrf-token")
+                cookie("csrf_token", "test-csrf-token")
             }
         }
 
@@ -372,6 +383,10 @@ class ServerTest {
             install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
                 json()
             }
+            defaultRequest {
+                header("X-CSRF-Token", "test-csrf-token")
+                cookie("csrf_token", "test-csrf-token")
+            }
         }
 
         suspend fun confirmAccount(email: String, username: String): HttpResponse {
@@ -468,7 +483,7 @@ class ServerTest {
         val pending = store.findByEmail(email) ?: error("Pending registration missing for $email")
         for (value in 0..999_999) {
             val code = value.toString().padStart(6, '0')
-            if (TokenHasher.challenge("development-only-otp-secret", "REGISTRATION", email, code) == pending.codeHash) return code
+            if (TokenHasher.challenge(TEST_OTP_SECRET, "REGISTRATION", email, code) == pending.codeHash) return code
         }
         error("Could not resolve pending registration code")
     }
@@ -476,7 +491,7 @@ class ServerTest {
     private fun codeForVerificationToken(repository: VerificationTokenRepository, purpose: String): String {
         for (value in 0..999_999) {
             val code = value.toString().padStart(6, '0')
-            val token = repository.findByHash(TokenHasher.challenge("development-only-otp-secret", purpose, testUserIdForPurpose(repository, purpose), code))
+            val token = repository.findByHash(TokenHasher.challenge(TEST_OTP_SECRET, purpose, testUserIdForPurpose(repository, purpose), code))
             if (token?.purpose == purpose) return code
         }
         error("Could not resolve $purpose verification code")
@@ -493,6 +508,7 @@ class ServerTest {
     }
 
     private companion object {
+        private const val TEST_OTP_SECRET = "test-otp-hmac-secret-at-least-32-characters!"
         private val postgres = PostgreSQLContainer<Nothing>("postgres:18").apply {
             withDatabaseName("account_test")
             withUsername("account")

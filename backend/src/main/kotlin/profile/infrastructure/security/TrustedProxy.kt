@@ -23,7 +23,9 @@ object TrustedProxy {
         return when (address) {
             is Inet4Address -> address.address
             is Inet6Address -> {
-                if (address.isIPv4CompatibleAddress) {
+                if (address.isLoopbackAddress) {
+                    address.address
+                } else if (address.isIPv4CompatibleAddress) {
                     address.address.copyOfRange(12, 16)
                 } else {
                     val bytes = address.address

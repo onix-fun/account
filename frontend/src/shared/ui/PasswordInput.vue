@@ -17,6 +17,7 @@ const attrs = useAttrs();
 <template>
   <PPassword
     v-bind="attrs"
+    :input-props="attrs"
     :model-value="modelValue"
     toggle-mask
     :feedback="false"

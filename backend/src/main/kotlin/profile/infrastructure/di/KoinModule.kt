@@ -25,6 +25,9 @@ import profile.users.UserController
 import profile.users.UserService
 
 fun koinModule(config: ApplicationConfig) = module {
+    fun env(name: String, fallback: () -> String): String =
+        System.getenv(name)?.takeIf { it.isNotBlank() } ?: fallback()
+
     // 1. Typed Config
     val appConfig = AppConfig(
         jwt = JwtConfig(
@@ -36,7 +39,9 @@ fun koinModule(config: ApplicationConfig) = module {
         ),
         session = SessionConfig(
             refreshTokenExpDays = config.property("identity.session.refresh_token_exp_days").getString().toLong(),
-            cookieSecure = config.propertyOrNull("identity.session.cookie_secure")?.getString()?.toBoolean() ?: false,
+            cookieSecure = env("ACCOUNT_COOKIE_SECURE") {
+                config.propertyOrNull("identity.session.cookie_secure")?.getString() ?: "false"
+            }.toBoolean(),
             cookieDomain = config.propertyOrNull("identity.session.cookie_domain")
                 ?.getString()
                 ?.trim()
@@ -55,35 +60,39 @@ fun koinModule(config: ApplicationConfig) = module {
         postgres = PostgresConfig(
             url = config.property("postgres.url").getString(),
             user = config.property("postgres.user").getString(),
-            password = config.property("postgres.password").getString()
+            password = env("POSTGRES_PASSWORD") { config.property("postgres.password").getString() }
         ),
         redis = RedisConfig(
             url = config.property("redis.url").getString()
         ),
         smtp = SmtpConfig(
-            host = config.property("smtp.host").getString(),
-            port = config.property("smtp.port").getString().toInt(),
-            from = config.propertyOrNull("smtp.from")?.getString() ?: "no-reply@account.local",
-            username = config.propertyOrNull("smtp.username")?.getString()?.takeIf { it.isNotBlank() },
-            password = config.propertyOrNull("smtp.password")?.getString()?.takeIf { it.isNotBlank() },
-            startTls = config.propertyOrNull("smtp.start_tls")?.getString()?.toBoolean() ?: false
+            host = env("SMTP_HOST") { config.property("smtp.host").getString() },
+            port = env("SMTP_PORT") { config.property("smtp.port").getString() }.toInt(),
+            from = env("SMTP_FROM") { config.propertyOrNull("smtp.from")?.getString() ?: "no-reply@account.local" },
+            username = System.getenv("SMTP_USERNAME")?.takeIf { it.isNotBlank() }
+                ?: config.propertyOrNull("smtp.username")?.getString()?.takeIf { it.isNotBlank() },
+            password = System.getenv("SMTP_PASSWORD")?.takeIf { it.isNotBlank() }
+                ?: config.propertyOrNull("smtp.password")?.getString()?.takeIf { it.isNotBlank() },
+            startTls = env("SMTP_START_TLS") {
+                config.propertyOrNull("smtp.start_tls")?.getString() ?: "false"
+            }.toBoolean()
         ),
         s3 = S3Config(
             endpoint = config.property("s3.endpoint").getString(),
-            publicUrl = config.propertyOrNull("s3.public_url")?.getString() ?: config.property("s3.endpoint").getString(),
-            accessKey = config.property("s3.access_key").getString(),
-            secretKey = config.property("s3.secret_key").getString(),
+            publicUrl = env("S3_PUBLIC_URL") { config.propertyOrNull("s3.public_url")?.getString() ?: config.property("s3.endpoint").getString() },
+            accessKey = env("S3_ACCESS_KEY") { config.property("s3.access_key").getString() },
+            secretKey = env("S3_SECRET_KEY") { config.property("s3.secret_key").getString() },
             bucket = config.property("s3.bucket").getString()
         ),
         security = SecurityConfig(
-            otpHmacSecret = config.propertyOrNull("identity.security.otp_hmac_secret")?.getString() ?: throw IllegalStateException("IDENTITY_OTP_HMAC_SECRET is not configured"),
-            internalAuthSecret = config.propertyOrNull("identity.security.internal_auth_secret")?.getString() ?: throw IllegalStateException("IDENTITY_INTERNAL_AUTH_SECRET is not configured"),
+            otpHmacSecret = env("IDENTITY_OTP_HMAC_SECRET") { config.propertyOrNull("identity.security.otp_hmac_secret")?.getString() ?: "" },
+            internalAuthSecret = env("INTERNAL_AUTH_SECRET") { config.propertyOrNull("identity.security.internal_auth_secret")?.getString() ?: "" },
             trustedProxyCidrs = config.propertyOrNull("identity.security.trusted_proxy_cidrs")?.getString()
                 ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("127.0.0.1/32", "::1/128"),
             allowedOrigins = config.propertyOrNull("identity.security.allowed_origins")?.getString()
                 ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("http://localhost:5174", "http://127.0.0.1:5174")
         ),
-        environment = config.propertyOrNull("app.environment")?.getString() ?: "development"
+        environment = env("APP_ENV") { config.propertyOrNull("app.environment")?.getString() ?: "development" }
     )
     if (appConfig.environment == "production") {
         require(appConfig.session.cookieSecure) { "Secure cookies are required in production" }
