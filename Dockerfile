@@ -1,5 +1,5 @@
 # Stage 1: Frontend (Build or Use existing)
-FROM node:22-alpine AS frontend-build
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-build
 WORKDIR /app
 COPY frontend/package*.json ./
 COPY frontend/ ./
