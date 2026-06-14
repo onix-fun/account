@@ -52,8 +52,8 @@ ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/release
 COPY docker/rootfs/ /
 
 # Fix permissions
-RUN mkdir -p /var/lib/nginx/tmp /var/log/nginx /run/nginx /etc/nginx/http.d && \
-    chown -R appuser:appuser /var/lib/nginx /var/log/nginx /run/nginx /etc/nginx/http.d /usr/share/nginx/html /app /otel /etc/account && \
+RUN mkdir -p /var/lib/nginx/tmp /var/log/nginx /run/nginx /etc/nginx/conf.d && \
+    chown -R appuser:appuser /var/lib/nginx /var/log/nginx /run/nginx /etc/nginx/conf.d /usr/share/nginx/html /app /otel /etc/account && \
     chmod +x /etc/s6-overlay/s6-rc.d/*/run /etc/s6-overlay/s6-rc.d/init-config/up /etc/s6-overlay/s6-rc.d/*/finish /usr/local/bin/migrate 2>/dev/null || true
 
 # s6-overlay entrypoint

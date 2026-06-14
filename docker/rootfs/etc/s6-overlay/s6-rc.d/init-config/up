@@ -36,6 +36,6 @@ fi
 if [ -f /etc/nginx/templates/nginx.conf.template ]; then
   envsubst '\${ACCOUNT_HTTP_PORT} \${ACCOUNT_API_BASE_URL} \${ACCOUNT_FRONTEND_BASE_PATH}' \
     < /etc/nginx/templates/nginx.conf.template \
-    > /etc/nginx/http.d/default.conf
+    > /etc/nginx/conf.d/default.conf
 fi
 "
