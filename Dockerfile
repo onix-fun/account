@@ -27,7 +27,7 @@ WORKDIR /app
 ARG S6_OVERLAY_VERSION=3.2.0.2
 
 # Install dependencies and s6-overlay
-RUN apt-get update && apt-get install -y nginx gettext bash curl && \
+RUN apt-get update && apt-get install -y nginx gettext bash curl xz-utils && \
     rm -rf /var/lib/apt/lists/* && \
     if [ "$(uname -m)" = "x86_64" ]; then ARCH="x86_64"; \
     elif [ "$(uname -m)" = "aarch64" ]; then ARCH="aarch64"; \
