@@ -1,18 +1,23 @@
-# Stage 1: Frontend Build
+# Stage 1: Frontend (Build or Use existing)
 FROM node:22-alpine AS frontend-build
 WORKDIR /app
 COPY frontend/package*.json ./
-RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+# If dist already exists (provided from outside), we skip npm build
+RUN if [ ! -d "dist" ]; then npm ci && npm run build; fi
 
-# Stage 2: Backend Build
+# Stage 2: Backend (Build or Use existing)
 FROM maven:3.9.9-eclipse-temurin-23 AS backend-build
 WORKDIR /src
 COPY backend/pom.xml ./
-RUN mvn --batch-mode dependency:go-offline
+# Only download dependencies if we actually need to build
 COPY backend/src ./src
-RUN mvn --batch-mode -DskipTests package
+COPY backend/target ./target
+# If the shaded jar already exists, skip maven build
+RUN if [ ! -f "target/"*"-with-dependencies.jar" ]; then \
+    mvn --batch-mode dependency:go-offline && \
+    mvn --batch-mode -DskipTests package; \
+    fi
 
 # Stage 3: Runtime
 FROM eclipse-temurin:23-jre-alpine
