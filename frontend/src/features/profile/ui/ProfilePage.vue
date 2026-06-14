@@ -121,9 +121,10 @@ onBeforeUnmount(() => {
   revokeAvatarPreview();
 });
 
-function setMessage(message: string, tone: "success" | "error" | "warn" | "info" = "success") {
+function setMessage(message: string, tone: "success" | "error" | "warn" | "warning" | "info" = "success") {
+  const warning = tone === "warn" || tone === "warning";
   toast.add({
-    severity: tone === "error" ? "error" : tone === "warn" ? "warn" : "success",
+    severity: tone === "error" ? "error" : warning ? "warn" : tone === "info" ? "info" : "success",
     summary: tone === "error" ? t("common.error") : t("common.success"),
     detail: message,
     life: 5000,

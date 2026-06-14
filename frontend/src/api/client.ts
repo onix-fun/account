@@ -1,39 +1,9 @@
 import axios from "axios";
 import { i18n } from "@/shared/i18n";
-
-export const APP_API_BASE_URL = (
-  import.meta.env.VITE_APP_API_URL ||
-  import.meta.env.VITE_API_URL ||
-  "/api"
-).replace(/\/$/, "");
-export const PROFILE_BASE_URL = "/api";
-export const DOMAIN_BASE_URL = `${APP_API_BASE_URL}/domain`;
-export const ANALYTICS_BASE_URL = `${APP_API_BASE_URL}/analytics`;
-
-export function contactsWsBaseUrl(): string {
-  const configured = import.meta.env.VITE_CONTACTS_WS_URL as string | undefined;
-  if (configured) return configured.replace(/\/$/, "");
-
-  const apiUrl = new URL(APP_API_BASE_URL, window.location.origin);
-  apiUrl.protocol = apiUrl.protocol === "https:" ? "wss:" : "ws:";
-  apiUrl.pathname = `${apiUrl.pathname.replace(/\/$/, "")}/contacts/ws`;
-  return apiUrl.toString().replace(/\/$/, "");
-}
-
-export const domainClient = axios.create({
-  baseURL: DOMAIN_BASE_URL,
-  timeout: 8000,
-  withCredentials: true,
-});
-
-export const analyticsClient = axios.create({
-  baseURL: ANALYTICS_BASE_URL,
-  timeout: 8000,
-  withCredentials: true,
-});
+import { runtimeConfig } from "@/runtime-config";
 
 export const profileClient = axios.create({
-  baseURL: PROFILE_BASE_URL,
+  baseURL: runtimeConfig.apiBaseUrl,
   timeout: 8000,
   withCredentials: true,
 });
@@ -92,7 +62,7 @@ export async function refreshBrowserSession(): Promise<void> {
   return sessionRefreshRequest;
 }
 
-[domainClient, analyticsClient, profileClient].forEach((client) => {
+[profileClient].forEach((client) => {
   client.interceptors.request.use(async (config) => {
     config.headers.set("Accept-Language", i18n.global.locale.value);
     if (isUnsafeMethod(config.method) && !config.url?.startsWith("/auth/token")) {

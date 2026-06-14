@@ -1,0 +1,41 @@
+#!/command/execlineb -P
+with-contenv
+/bin/sh -c "
+set -e
+
+# Default values
+: \"\${ACCOUNT_HTTP_PORT:=8080}\"
+: \"\${ACCOUNT_HTTP_HOST:=0.0.0.0}\"
+: \"\${ACCOUNT_API_BASE_URL:=/api}\"
+: \"\${ACCOUNT_FRONTEND_BASE_PATH:=/}\"
+: \"\${ACCOUNT_TRUSTED_REDIRECT_ORIGINS:=}\"
+: \"\${JAVA_OPTS:=}\"
+
+# Export for envsubst
+export ACCOUNT_HTTP_PORT ACCOUNT_HTTP_HOST ACCOUNT_API_BASE_URL ACCOUNT_FRONTEND_BASE_PATH
+
+# Generate Frontend Runtime Config
+ACCOUNT_TRUSTED_REDIRECT_ORIGINS_JSON=\"\"
+old_ifs=\"\$IFS\"
+IFS=\",\"
+for origin in \$ACCOUNT_TRUSTED_REDIRECT_ORIGINS; do
+  [ -z \"\$origin\" ] && continue
+  [ -n \"\$ACCOUNT_TRUSTED_REDIRECT_ORIGINS_JSON\" ] && ACCOUNT_TRUSTED_REDIRECT_ORIGINS_JSON=\"\$ACCOUNT_TRUSTED_REDIRECT_ORIGINS_JSON,\"
+  ACCOUNT_TRUSTED_REDIRECT_ORIGINS_JSON=\"\$ACCOUNT_TRUSTED_REDIRECT_ORIGINS_JSON\\\"\$origin\\\"\"
+done
+IFS=\"\$old_ifs\"
+export ACCOUNT_TRUSTED_REDIRECT_ORIGINS_JSON
+
+if [ -f /etc/account/account-runtime-config.template.js ]; then
+  envsubst '\${ACCOUNT_API_BASE_URL} \${ACCOUNT_FRONTEND_BASE_PATH} \${ACCOUNT_TRUSTED_REDIRECT_ORIGINS_JSON}' \
+    < /etc/account/account-runtime-config.template.js \
+    > /usr/share/nginx/html/account-runtime-config.js
+fi
+
+# Generate Nginx Config
+if [ -f /etc/nginx/templates/nginx.conf.template ]; then
+  envsubst '\${ACCOUNT_HTTP_PORT} \${ACCOUNT_API_BASE_URL} \${ACCOUNT_FRONTEND_BASE_PATH}' \
+    < /etc/nginx/templates/nginx.conf.template \
+    > /etc/nginx/http.d/default.conf
+fi
+"

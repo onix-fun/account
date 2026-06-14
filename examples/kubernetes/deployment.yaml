@@ -1,511 +1,102 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: account
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: account-config
-  namespace: account
-data:
-  APP_ENV: production
-  PROFILE_PORT: "8080"
-  IDENTITY_JWT_ISSUER: account-service
-  IDENTITY_JWT_AUDIENCE: account
-  IDENTITY_JWT_PRIVATE_KEY_PATH: /run/secrets/account-jwt-private.pem
-  IDENTITY_JWT_PUBLIC_KEY_PATH: /run/secrets/account-jwt-public.pem
-  IDENTITY_ACCESS_TOKEN_EXP_MINUTES: "15"
-  IDENTITY_REFRESH_TOKEN_EXP_DAYS: "30"
-  IDENTITY_REFRESH_COOKIE_SECURE: "true"
-  IDENTITY_REGISTRATION_ALLOW_IN_MEMORY_FALLBACK: "false"
-  IDENTITY_DATABASE_JDBC_URL: jdbc:postgresql://account-postgres:5432/account
-  IDENTITY_DATABASE_USERNAME: account
-  IDENTITY_REDIS_URL: redis://account-redis:6379
-  IDENTITY_TRUSTED_PROXY_CIDRS: 10.0.0.0/8
-  IDENTITY_SMTP_HOST: smtp.example.com
-  IDENTITY_SMTP_PORT: "587"
-  IDENTITY_SMTP_FROM: no-reply@example.com
-  IDENTITY_SMTP_STARTTLS: "true"
-  IDENTITY_S3_ENDPOINT: http://account-minio:9000
-  IDENTITY_S3_PUBLIC_URL: https://account.example.com/api/avatars
-  IDENTITY_S3_ACCESS_KEY: account-minio
-  IDENTITY_S3_BUCKET: avatars
-  IDENTITY_GRPC_ENABLED: "false"
-  JAVA_TOOL_OPTIONS: -javaagent:/otel/opentelemetry-javaagent.jar
-  OTEL_SERVICE_NAME: profile
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-otel-collector.signoz.svc.cluster.local:4318
-  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-  OTEL_TRACES_EXPORTER: otlp
-  OTEL_METRICS_EXPORTER: otlp
-  OTEL_LOGS_EXPORTER: none
-  OTEL_RESOURCE_ATTRIBUTES: service.namespace=account,deployment.environment=production
-  ACCOUNT_ALLOWED_ORIGINS: https://account.example.com
-  ACCOUNT_HSTS_HEADER: max-age=31536000; includeSubDomains
-  ACCOUNT_TRUSTED_PROXY_CIDRS: 10.0.0.0/8
-  ACCOUNT_DNS_RESOLVER: 10.96.0.10
-  ACCOUNT_SWAGGER_UI_ENABLED: "false"
-  POSTGRES_DB: account
-  POSTGRES_USER: account
-  MINIO_ROOT_USER: account-minio
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: account-postgres-data
-  namespace: account
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 10Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: account-redis-data
-  namespace: account
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 2Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: account-minio-data
-  namespace: account
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 20Gi
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: account-postgres
-  namespace: account
-spec:
-  serviceName: account-postgres
-  replicas: 1
-  selector:
-    matchLabels:
-      app: account-postgres
-  template:
-    metadata:
-      labels:
-        app: account-postgres
-    spec:
-      containers:
-        - name: postgres
-          image: postgres:18
-          ports:
-            - name: postgres
-              containerPort: 5432
-          envFrom:
-            - configMapRef:
-                name: account-config
-            - secretRef:
-                name: account-secrets
-          readinessProbe:
-            exec:
-              command: [pg_isready, -U, account, -d, account]
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          livenessProbe:
-            exec:
-              command: [pg_isready, -U, account, -d, account]
-            initialDelaySeconds: 20
-            periodSeconds: 10
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              memory: 1Gi
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/postgresql/data
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: account-postgres-data
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: account-postgres
-  namespace: account
-spec:
-  selector:
-    app: account-postgres
-  ports:
-    - name: postgres
-      port: 5432
-      targetPort: postgres
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: account-redis
-  namespace: account
-spec:
-  serviceName: account-redis
-  replicas: 1
-  selector:
-    matchLabels:
-      app: account-redis
-  template:
-    metadata:
-      labels:
-        app: account-redis
-    spec:
-      containers:
-        - name: redis
-          image: redis:7-alpine
-          args: [redis-server, --appendonly, "yes"]
-          ports:
-            - name: redis
-              containerPort: 6379
-          readinessProbe:
-            exec:
-              command: [redis-cli, ping]
-            initialDelaySeconds: 3
-            periodSeconds: 5
-          livenessProbe:
-            exec:
-              command: [redis-cli, ping]
-            initialDelaySeconds: 15
-            periodSeconds: 10
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              memory: 256Mi
-          volumeMounts:
-            - name: data
-              mountPath: /data
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: account-redis-data
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: account-redis
-  namespace: account
-spec:
-  selector:
-    app: account-redis
-  ports:
-    - name: redis
-      port: 6379
-      targetPort: redis
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: account-minio
-  namespace: account
-spec:
-  serviceName: account-minio
-  replicas: 1
-  selector:
-    matchLabels:
-      app: account-minio
-  template:
-    metadata:
-      labels:
-        app: account-minio
-      annotations:
-        signoz.io/scrape: "true"
-        signoz.io/port: "9000"
-        signoz.io/path: "/minio/v2/metrics/cluster"
-    spec:
-      containers:
-        - name: minio
-          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-          args: [server, /data, --console-address, ":9001"]
-          envFrom:
-            - configMapRef:
-                name: account-config
-            - secretRef:
-                name: account-secrets
-          ports:
-            - name: api
-              containerPort: 9000
-            - name: console
-              containerPort: 9001
-          readinessProbe:
-            httpGet:
-              path: /minio/health/ready
-              port: api
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /minio/health/live
-              port: api
-            initialDelaySeconds: 20
-            periodSeconds: 10
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              memory: 1Gi
-          volumeMounts:
-            - name: data
-              mountPath: /data
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: account-minio-data
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: account-minio
-  namespace: account
-spec:
-  selector:
-    app: account-minio
-  ports:
-    - name: api
-      port: 9000
-      targetPort: api
----
 apiVersion: apps/v1
 kind: Deployment
-metadata:
-  name: frontend
-  namespace: account
+metadata: {name: account-frontend}
 spec:
   replicas: 2
-  selector:
-    matchLabels:
-      app: frontend
+  selector: {matchLabels: {app: account-frontend}}
   template:
-    metadata:
-      labels:
-        app: frontend
+    metadata: {labels: {app: account-frontend}}
     spec:
       containers:
         - name: frontend
           image: ghcr.io/onix-fun/accaunt/frontend:1.0.0
-          ports:
-            - name: http
-              containerPort: 80
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
-            initialDelaySeconds: 3
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-            initialDelaySeconds: 15
-            periodSeconds: 10
-          resources:
-            requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              memory: 128Mi
+          env:
+            - {name: ACCOUNT_API_BASE_URL, value: /api}
+            - {name: ACCOUNT_FRONTEND_BASE_PATH, value: /}
+          ports: [{containerPort: 80}]
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: frontend
-  namespace: account
+metadata: {name: account-frontend}
 spec:
-  selector:
-    app: frontend
-  ports:
-    - name: http
-      port: 80
-      targetPort: http
+  selector: {app: account-frontend}
+  ports: [{port: 80, targetPort: 80}]
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: profile
-  namespace: account
+apiVersion: batch/v1
+kind: Job
+metadata: {name: account-migrate}
 spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: profile
   template:
-    metadata:
-      labels:
-        app: profile
     spec:
-      initContainers:
-        - name: initialize-avatar-bucket
-          image: minio/mc:RELEASE.2025-04-16T18-13-26Z
-          envFrom:
-            - configMapRef:
-                name: account-config
-            - secretRef:
-                name: account-secrets
-          command:
-            - /bin/sh
-            - -ec
-            - |
-              until mc alias set local http://account-minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do sleep 2; done
-              mc mb -p local/avatars || true
-              mc anonymous set download local/avatars
+      restartPolicy: Never
       containers:
-        - name: profile
+        - name: migrate
           image: ghcr.io/onix-fun/accaunt/backend:1.0.0
+          args: [migrate]
           envFrom:
-            - configMapRef:
-                name: account-config
-            - secretRef:
-                name: account-secrets
-          ports:
-            - name: http
-              containerPort: 8080
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          resources:
-            requests:
-              cpu: 200m
-              memory: 384Mi
-            limits:
-              memory: 1Gi
+            - configMapRef: {name: account-config}
+            - secretRef: {name: account-secrets}
           volumeMounts:
-            - name: jwt-keys
-              mountPath: /run/secrets
-              readOnly: true
+            - {name: jwt, mountPath: /run/secrets, readOnly: true}
       volumes:
-        - name: jwt-keys
-          secret:
-            secretName: account-jwt-keys
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: profile
-  namespace: account
-spec:
-  selector:
-    app: profile
-  ports:
-    - name: http
-      port: 8080
-      targetPort: http
+        - name: jwt
+          secret: {secretName: account-jwt-keys}
 ---
 apiVersion: apps/v1
 kind: Deployment
-metadata:
-  name: account-gateway
-  namespace: account
+metadata: {name: account-backend}
 spec:
   replicas: 2
-  selector:
-    matchLabels:
-      app: account-gateway
+  selector: {matchLabels: {app: account-backend}}
   template:
-    metadata:
-      labels:
-        app: account-gateway
-      annotations:
-        signoz.io/scrape: "true"
-        signoz.io/port: "8090"
-        signoz.io/path: "/nginx_status"
+    metadata: {labels: {app: account-backend}}
     spec:
       containers:
-        - name: account-gateway
-          image: ghcr.io/onix-fun/accaunt/gateway:1.0.0
+        - name: backend
+          image: ghcr.io/onix-fun/accaunt/backend:1.0.0
+          args: [serve, --role=all]
           envFrom:
-            - configMapRef:
-                name: account-config
-            - secretRef:
-                name: account-secrets
+            - configMapRef: {name: account-config}
+            - secretRef: {name: account-secrets}
           ports:
-            - name: http
-              containerPort: 8089
-            - name: metrics
-              containerPort: 8090
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: http
-            initialDelaySeconds: 20
-            periodSeconds: 10
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              memory: 384Mi
+            - {name: http, containerPort: 8080}
+            - {name: grpc, containerPort: 9097}
+          readinessProbe: {httpGet: {path: /readyz, port: http}}
+          livenessProbe: {httpGet: {path: /livez, port: http}}
           volumeMounts:
-            - name: jwt-keys
-              mountPath: /run/secrets
-              readOnly: true
+            - {name: jwt, mountPath: /run/secrets, readOnly: true}
+            - {name: grpc-tls, mountPath: /run/grpc, readOnly: true}
       volumes:
-        - name: jwt-keys
-          secret:
-            secretName: account-jwt-keys
+        - name: jwt
+          secret: {secretName: account-jwt-keys}
+        - name: grpc-tls
+          secret: {secretName: account-grpc-tls}
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: account-gateway
-  namespace: account
+metadata: {name: account-backend}
 spec:
-  selector:
-    app: account-gateway
+  selector: {app: account-backend}
   ports:
-    - name: http
-      port: 8089
-      targetPort: http
+    - {name: http, port: 8080, targetPort: http}
+    - {name: grpc, port: 9097, targetPort: grpc}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: account
-  namespace: account
-  annotations:
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
   ingressClassName: nginx
-  tls:
-    - hosts:
-        - account.example.com
-      secretName: account-ingress-tls
   rules:
     - host: account.example.com
       http:
         paths:
+          - path: /api
+            pathType: Prefix
+            backend: {service: {name: account-backend, port: {name: http}}}
+          - path: /.well-known/jwks.json
+            pathType: Exact
+            backend: {service: {name: account-backend, port: {name: http}}}
           - path: /
             pathType: Prefix
-            backend:
-              service:
-                name: account-gateway
-                port:
-                  name: http
+            backend: {service: {name: account-frontend, port: {port: 80}}}

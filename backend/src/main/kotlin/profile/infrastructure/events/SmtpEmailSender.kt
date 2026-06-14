@@ -12,8 +12,14 @@ import jakarta.mail.internet.MimeMultipart
 import profile.infrastructure.config.SmtpConfig
 import profile.infrastructure.security.EmailNormalizer
 import java.util.Properties
+import java.net.InetSocketAddress
+import java.net.Socket
 
 class SmtpEmailSender(private val config: SmtpConfig) {
+    fun isReady(): Boolean = runCatching {
+        Socket().use { it.connect(InetSocketAddress(config.host, config.port), 2_000) }
+        true
+    }.getOrDefault(false)
     fun sendCode(email: String, code: String, purpose: EmailCodePurpose, locale: EmailLocale) =
         send(email, EmailContentFactory.code(purpose, code, locale))
 

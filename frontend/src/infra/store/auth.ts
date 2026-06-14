@@ -104,25 +104,61 @@ export const useAuthStore = defineStore("auth", () => {
   };
 
   const updateProfile = async (payload: { username?: string; firstName?: string; lastName?: string; bio?: string }) => {
-    currentUser.value = await AuthService.updateProfile(payload);
-    syncAccounts();
+    isLoading.value = true;
+    error.value = null;
+    try {
+      currentUser.value = await AuthService.updateProfile(payload);
+      syncAccounts();
+    } catch (cause) {
+      error.value = apiErrorMessage(cause);
+      throw cause;
+    } finally {
+      isLoading.value = false;
+    }
   };
 
   const requestEmailChange = (currentPassword: string, newEmail: string) => AuthService.requestEmailChange(currentPassword, newEmail);
   const confirmEmailChange = async (code: string) => {
-    currentUser.value = await AuthService.confirmEmailChange(code);
+    isLoading.value = true;
+    error.value = null;
+    try {
+      currentUser.value = await AuthService.confirmEmailChange(code);
+    } catch (cause) {
+      error.value = apiErrorMessage(cause);
+      throw cause;
+    } finally {
+      isLoading.value = false;
+    }
   };
   const cancelEmailChange = () => AuthService.cancelEmailChange();
 
   const completeRegistrationProfile = async (payload: { firstName?: string; lastName?: string }) => {
-    currentUser.value = await AuthService.updateProfile(payload);
-    isCompletingRegistrationProfile.value = false;
-    syncAccounts();
+    isLoading.value = true;
+    error.value = null;
+    try {
+      currentUser.value = await AuthService.updateProfile(payload);
+      isCompletingRegistrationProfile.value = false;
+      syncAccounts();
+    } catch (cause) {
+      error.value = apiErrorMessage(cause);
+      throw cause;
+    } finally {
+      isLoading.value = false;
+    }
   };
 
   const uploadAvatar = async (file: File) => {
-    currentUser.value = await AuthService.uploadAvatar(file);
-    syncAccounts();
+    isLoading.value = true;
+    error.value = null;
+    try {
+      currentUser.value = await AuthService.uploadAvatar(file);
+      syncAccounts();
+    } catch (cause) {
+      error.value = apiErrorMessage(cause);
+      throw cause;
+    } finally {
+      isLoading.value = false;
+    }
   };
 
   const verifyEmail = async (code: string) => {

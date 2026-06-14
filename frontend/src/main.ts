@@ -21,7 +21,6 @@ import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 import "./style.css";
-import { installFrontendTelemetry } from "@/infra/telemetry";
 
 const AccountTheme = definePreset(Aura, {
   semantic: {
@@ -73,24 +72,6 @@ const AccountTheme = definePreset(Aura, {
       },
     },
   },
-  components: {
-    inputtext: {
-      background: "{surface.100}",
-      borderColor: "transparent",
-      hoverBorderColor: "transparent",
-      focusBorderColor: "transparent",
-      borderRadius: "10px",
-    },
-    password: {
-      input: {
-        background: "{surface.100}",
-        borderColor: "transparent",
-        hoverBorderColor: "transparent",
-        focusBorderColor: "transparent",
-        borderRadius: "10px",
-      },
-    },
-  },
 });
 
 const app = createApp(App);
@@ -117,4 +98,3 @@ app.component("PMessage", Message);
 app.component("PToast", Toast);
 
 app.mount("#app");
-installFrontendTelemetry();

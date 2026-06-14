@@ -2,15 +2,19 @@ syntax = "proto3";
 
 package profile.v1;
 
-option go_package = "gateway/internal/grpc/protobuf/profile/v1;profilev1";
 option java_multiple_files = true;
 
 service ProfileService {
   rpc GetUserByUsername(GetUserByUsernameRequest) returns (UserRef);
+  rpc GetUserById(GetUserByIdRequest) returns (UserRef);
 }
 
 message GetUserByUsernameRequest {
   string username = 1;
+}
+
+message GetUserByIdRequest {
+  string id = 1;
 }
 
 message UserRef {

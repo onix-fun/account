@@ -15,6 +15,7 @@ import io.grpc.stub.StreamObserver
 import org.slf4j.LoggerFactory
 import profile.infrastructure.db.UserRepository
 import profile.v1.GetUserByUsernameRequest
+import profile.v1.GetUserByIdRequest
 import profile.v1.ProfileServiceGrpc
 import profile.v1.UserRef
 import java.io.File
@@ -39,6 +40,12 @@ class ProfileServiceImpl(private val users: UserRepository) : ProfileServiceGrpc
         if (user == null) return observer.onError(StatusException(Status.NOT_FOUND))
         observer.onNext(UserRef.newBuilder().setId(user.id).setUsername(user.username).build()); observer.onCompleted()
     }
+
+    override fun getUserById(request: GetUserByIdRequest, observer: StreamObserver<UserRef>) {
+        val user = request.id.takeIf { it.isNotBlank() }?.let(users::findById)
+        if (user == null) return observer.onError(StatusException(Status.NOT_FOUND))
+        observer.onNext(UserRef.newBuilder().setId(user.id).setUsername(user.username).build()); observer.onCompleted()
+    }
 }
 
 class ProfileGrpcServer(users: UserRepository, private val port: Int, certificate: String, privateKey: String, clientCa: String, allowedSans: String, reflection: Boolean) {
@@ -47,7 +54,8 @@ class ProfileGrpcServer(users: UserRepository, private val port: Int, certificat
         
     init {
         if (certificate.isNotBlank() && privateKey.isNotBlank() && clientCa.isNotBlank()) {
-            builder.sslContext(GrpcSslContexts.forServer(File(certificate), File(privateKey)).trustManager(File(clientCa)).clientAuth(ClientAuth.REQUIRE).build())
+            builder.sslContext(GrpcSslContexts.forServer(pemFile(certificate, "certificate"), pemFile(privateKey, "private-key"))
+                .trustManager(pemFile(clientCa, "client-ca")).clientAuth(ClientAuth.REQUIRE).build())
                 .addService(ServerInterceptors.intercept(ProfileServiceImpl(users), ClientSanInterceptor(allowedSans)))
             log.info("Configured mTLS for gRPC server")
         } else {
@@ -58,4 +66,13 @@ class ProfileGrpcServer(users: UserRepository, private val port: Int, certificat
 
     private val server = (if (reflection) builder.addService(ProtoReflectionService.newInstance()) else builder).build()
     fun start() { server.start(); log.info("Profile gRPC server started on port {}", port); Runtime.getRuntime().addShutdownHook(Thread { server.shutdown() }) }
+    fun stop() { server.shutdown() }
+
+    private fun pemFile(source: String, name: String): File {
+        if (!source.startsWith("-----BEGIN")) return File(source)
+        return kotlin.io.path.createTempFile("account-grpc-$name-", ".pem").toFile().apply {
+            writeText(source)
+            deleteOnExit()
+        }
+    }
 }

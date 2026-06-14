@@ -5,12 +5,6 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
-  file_log/gateway:
-    include: [/var/log/account/account-gateway/*.log]
-    start_at: end
-    resource:
-      service.name: account-gateway
-      service.namespace: account
   file_log/profile:
     include: [/var/log/account/profile/*.log]
     start_at: end
@@ -29,8 +23,8 @@ receivers:
       load: {}
       network: {}
   redis:
-    endpoint: ${env:IDENTITY_REDIS_HOST}:6379
-    password: ${env:IDENTITY_REDIS_PASSWORD}
+    endpoint: ${env:ACCOUNT_REDIS_HOST}:6379
+    password: ${env:ACCOUNT_REDIS_PASSWORD}
     collection_interval: 30s
   postgresql:
     endpoint: account-postgres:5432
@@ -40,9 +34,6 @@ receivers:
     collection_interval: 30s
     tls:
       insecure: true
-  nginx:
-    endpoint: http://account-gateway:8090/nginx_status
-    collection_interval: 30s
   prometheus:
     config:
       scrape_configs:
@@ -135,10 +126,10 @@ service:
       processors: [memory_limiter, resource/common, tail_sampling, batch]
       exporters: [otlp_grpc/signoz]
     metrics:
-      receivers: [otlp, host_metrics, redis, postgresql, nginx, prometheus]
+      receivers: [otlp, host_metrics, redis, postgresql, prometheus]
       processors: [memory_limiter, resource/common, batch]
       exporters: [otlp_grpc/signoz]
     logs:
-      receivers: [otlp, file_log/gateway, file_log/profile]
+      receivers: [otlp, file_log/profile]
       processors: [memory_limiter, resource/common, batch]
       exporters: [otlp_grpc/signoz]

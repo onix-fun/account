@@ -5,6 +5,7 @@ import { fileURLToPath, URL } from "node:url";
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  base: "./",
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: {
@@ -16,9 +17,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": {
-        target: "http://localhost:8089",
-        changeOrigin: true,
-        ws: true,
+        target: "http://127.0.0.1:8091",
       },
     },
   },

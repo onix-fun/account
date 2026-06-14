@@ -9,6 +9,10 @@ import io.ktor.server.auth.*
 import io.ktor.server.routing.*
 
 fun Route.userRouting(userController: UserController) {
+    get("/api/avatars/{key...}") {
+        userController.streamAvatar(call)
+    }
+
     route("/api/users") {
         authenticate {
             get("/me", {

@@ -4,6 +4,8 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import { createI18n } from "vue-i18n";
 import PasswordInput from "./PasswordInput.vue";
+import Password from "primevue/password";
+import PrimeVue from "primevue/config";
 
 const i18n = createI18n({
   legacy: false,
@@ -23,14 +25,14 @@ describe("PasswordInput", () => {
     const wrapper = mount(PasswordInput, {
       props: { modelValue: "secret123" },
       attrs: { class: "input", autocomplete: "current-password" },
-      global: { plugins: [i18n] },
+      global: { plugins: [i18n, PrimeVue], components: { PPassword: Password } },
     });
 
     const input = wrapper.get("input");
     expect(input.attributes("type")).toBe("password");
     expect(input.attributes("autocomplete")).toBe("current-password");
 
-    await wrapper.get("button").trigger("click");
+    await wrapper.get('[data-pc-section="unmaskicon"]').trigger("click");
 
     expect(input.attributes("type")).toBe("text");
     expect(input.element.value).toBe("secret123");

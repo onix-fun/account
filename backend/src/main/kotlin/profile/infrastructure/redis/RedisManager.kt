@@ -3,18 +3,19 @@ package profile.infrastructure.redis
 import io.lettuce.core.RedisClient
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.sync.RedisCommands
-import io.ktor.server.config.*
+import profile.infrastructure.config.RedisConfig
+import profile.infrastructure.config.AppConfig
 import java.util.concurrent.ConcurrentHashMap
 
-class RedisManager(config: ApplicationConfig) {
+class RedisManager(config: AppConfig) {
     private val client: RedisClient?
     private val connection: StatefulRedisConnection<String, String>?
     private val memoryRateLimit = ConcurrentHashMap<String, Long>()
     val requiresAvailability: Boolean =
-        config.propertyOrNull("app.environment")?.getString()?.equals("production", ignoreCase = true) == true
+        config.environment.equals("production", ignoreCase = true)
 
     init {
-        val url = config.propertyOrNull("redis.url")?.getString()
+        val url = config.redis.url
         if (url != null) {
             val c = RedisClient.create(url)
             client = c
@@ -30,6 +31,8 @@ class RedisManager(config: ApplicationConfig) {
     }
 
     fun sync(): RedisCommands<String, String>? = connection?.sync()
+
+    fun isReady(): Boolean = runCatching { sync()?.ping() == "PONG" }.getOrDefault(false)
 
     fun pubSubConnection(): io.lettuce.core.pubsub.StatefulRedisPubSubConnection<String, String>? = client?.connectPubSub()
 
