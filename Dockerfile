@@ -20,15 +20,15 @@ RUN if [ ! -f "target/"*"-with-dependencies.jar" ]; then \
     fi
 
 # Stage 3: Runtime
-FROM eclipse-temurin:23-jre-alpine
+FROM eclipse-temurin:23-jre
 WORKDIR /app
 
 # s6-overlay version
 ARG S6_OVERLAY_VERSION=3.2.0.2
 
 # Install dependencies and s6-overlay
-RUN apk add --no-cache nginx gettext bash curl && \
-    apk upgrade --no-cache && \
+RUN apt-get update && apt-get install -y nginx gettext bash curl && \
+    rm -rf /var/lib/apt/lists/* && \
     if [ "$(uname -m)" = "x86_64" ]; then ARCH="x86_64"; \
     elif [ "$(uname -m)" = "aarch64" ]; then ARCH="aarch64"; \
     else echo "Unsupported architecture: $(uname -m)"; exit 1; fi && \
@@ -36,7 +36,7 @@ RUN apk add --no-cache nginx gettext bash curl && \
     curl -L -s https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${ARCH}.tar.xz | tar -Jxpf - -C /
 
 # Setup appuser
-RUN adduser -D -u 1001 appuser
+RUN useradd -M -u 1001 appuser
 
 # Copy Frontend artifacts
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
