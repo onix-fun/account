@@ -15,6 +15,10 @@ class S3Client(config: S3Config) {
     private val secretKey = config.secretKey
     private val bucket = config.bucket
 
+    init {
+        println("DEBUG: Initializing S3 Client at $endpoint")
+    }
+
     private val client = MinioClient.builder()
         .endpoint(endpoint)
         .credentials(accessKey, secretKey)

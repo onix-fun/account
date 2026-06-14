@@ -28,12 +28,18 @@ import java.nio.file.Files
 import java.security.KeyPairGenerator
 import java.util.Base64
 import kotlin.test.*
-import org.testcontainers.containers.PostgreSQLContainer
 
 class ServerTest {
 
     private fun TestApplicationBuilder.setupTestConfig(cookieDomain: String? = null, cookieSecure: Boolean = false) {
-        val isMigrated = migrated.value
+        val dbUrl = System.getenv("POSTGRES_URL") ?: "jdbc:postgresql://localhost:5432/account_test"
+        val dbUser = System.getenv("POSTGRES_USER") ?: "account"
+        val dbPass = System.getenv("POSTGRES_PASSWORD") ?: "account"
+        val redisUrl = System.getenv("REDIS_URL") ?: "redis://localhost:6379"
+
+        println("DEBUG: Running migrations on $dbUrl")
+        DatabaseFactory.migrate(PostgresConfig(dbUrl, dbUser, dbPass))
+        
         environment {
             config = MapApplicationConfig(
                 "account.runtime.role" to "api",
@@ -48,10 +54,10 @@ class ServerTest {
                 "identity.registration.pending_ttl_seconds" to "3600",
                 "identity.registration.allow_in_memory_fallback" to "true",
                 "identity.background.enabled" to "false",
-                "postgres.url" to postgres.jdbcUrl,
-                "postgres.user" to postgres.username,
-                "postgres.password" to postgres.password,
-                "redis.url" to "redis://localhost:6379",
+                "postgres.url" to dbUrl,
+                "postgres.user" to dbUser,
+                "postgres.password" to dbPass,
+                "redis.url" to redisUrl,
                 "smtp.host" to "localhost",
                 "smtp.port" to "2500",
                 "smtp.from" to "test@account.local",
@@ -514,18 +520,7 @@ class ServerTest {
 
     private companion object {
         private const val TEST_OTP_SECRET = "test-otp-hmac-secret-at-least-32-characters!"
-        private val postgres = PostgreSQLContainer<Nothing>("postgres:18-alpine").apply {
-            withDatabaseName("account_test")
-            withUsername("account")
-            withPassword("account")
-            start()
-        }
-
-        private val migrated = lazy {
-            DatabaseFactory.migrate(PostgresConfig(postgres.jdbcUrl, postgres.username, postgres.password))
-            true
-        }
-
+        
         private val testKeyPaths by lazy {
             val generator = KeyPairGenerator.getInstance("RSA")
             generator.initialize(2048)

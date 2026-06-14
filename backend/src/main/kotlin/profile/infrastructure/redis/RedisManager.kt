@@ -17,6 +17,7 @@ class RedisManager(config: AppConfig) {
     init {
         val url = config.redis.url
         if (url != null) {
+            println("DEBUG: Connecting to Redis at $url")
             val c = RedisClient.create(url)
             c.setOptions(io.lettuce.core.ClientOptions.builder()
                 .socketOptions(io.lettuce.core.SocketOptions.builder()
@@ -25,8 +26,9 @@ class RedisManager(config: AppConfig) {
                 .build())
             client = c
             connection = try {
-                c.connect()
+                c.connect().also { println("DEBUG: Redis connected successfully") }
             } catch (e: Exception) {
+                println("DEBUG: Redis connection failed: ${e.message}")
                 null
             }
         } else {
