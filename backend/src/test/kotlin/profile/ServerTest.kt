@@ -33,7 +33,7 @@ import org.testcontainers.containers.PostgreSQLContainer
 class ServerTest {
 
     private fun TestApplicationBuilder.setupTestConfig(cookieDomain: String? = null, cookieSecure: Boolean = false) {
-        DatabaseFactory.migrate(PostgresConfig(postgres.jdbcUrl, postgres.username, postgres.password))
+        val isMigrated = migrated.value
         environment {
             config = MapApplicationConfig(
                 "account.runtime.role" to "api",
@@ -514,12 +514,18 @@ class ServerTest {
 
     private companion object {
         private const val TEST_OTP_SECRET = "test-otp-hmac-secret-at-least-32-characters!"
-        private val postgres = PostgreSQLContainer<Nothing>("postgres:18").apply {
+        private val postgres = PostgreSQLContainer<Nothing>("postgres:18-alpine").apply {
             withDatabaseName("account_test")
             withUsername("account")
             withPassword("account")
             start()
         }
+
+        private val migrated = lazy {
+            DatabaseFactory.migrate(PostgresConfig(postgres.jdbcUrl, postgres.username, postgres.password))
+            true
+        }
+
         private val testKeyPaths by lazy {
             val generator = KeyPairGenerator.getInstance("RSA")
             generator.initialize(2048)
