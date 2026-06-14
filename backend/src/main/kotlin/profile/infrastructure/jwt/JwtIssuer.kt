@@ -2,21 +2,23 @@ package profile.infrastructure.jwt
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
-import io.ktor.server.config.*
+import profile.infrastructure.config.JwtConfig
 import java.util.*
 
-class JwtIssuer(config: ApplicationConfig) {
-    private val issuer = config.property("identity.jwt.issuer").getString()
-    private val audience = config.property("identity.jwt.audience").getString()
-    private val validityInMinutes = config.property("identity.jwt.access_token_exp_minutes").getString().toLong()
+class JwtIssuer(config: JwtConfig) {
+    private val issuer = config.issuer
+    private val audience = config.audience
+    private val activeKid = config.activeKid
+    private val validityInMinutes = config.accessTokenExpMinutes
     private val algorithm = Algorithm.RSA256(
-        RsaKeyLoader.loadPublicKey(config.property("identity.jwt.public_key_path").getString()),
-        RsaKeyLoader.loadPrivateKey(config.property("identity.jwt.private_key_path").getString())
+        RsaKeyLoader.loadPublicKey(config.publicKey),
+        RsaKeyLoader.loadPrivateKey(config.privateKey)
     )
 
     fun createToken(userId: String, sessionId: String): String {
         val now = Date()
         return JWT.create()
+            .withKeyId(activeKid)
             .withAudience(audience)
             .withIssuer(issuer)
             .withSubject(userId)

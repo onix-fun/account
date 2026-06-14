@@ -1,210 +1,110 @@
-include:
-  - ../../observability/signoz/compose.yml
+name: account
+
+x-backend-env: &backend-env
+  ACCOUNT_ENV: ${ACCOUNT_ENV:-development}
+  ACCOUNT_DATABASE_JDBC_URL: jdbc:postgresql://postgres:5432/account
+  ACCOUNT_DATABASE_USERNAME: account
+  ACCOUNT_DATABASE_PASSWORD: ${ACCOUNT_DATABASE_PASSWORD}
+  ACCOUNT_REDIS_URL: redis://:${ACCOUNT_REDIS_PASSWORD}@redis:6379
+  ACCOUNT_SMTP_HOST: mail
+  ACCOUNT_SMTP_PORT: "1025"
+  ACCOUNT_SMTP_FROM: ${ACCOUNT_SMTP_FROM:-no-reply@account.local}
+  ACCOUNT_SMTP_STARTTLS: "false"
+  ACCOUNT_S3_ENDPOINT: http://s3:9000
+  ACCOUNT_S3_PUBLIC_URL: /api/avatars
+  ACCOUNT_S3_ACCESS_KEY: ${ACCOUNT_S3_ACCESS_KEY}
+  ACCOUNT_S3_SECRET_KEY: ${ACCOUNT_S3_SECRET_KEY}
+  ACCOUNT_S3_BUCKET: avatars
+  ACCOUNT_JWT_ISSUER: ${ACCOUNT_JWT_ISSUER:-account-service}
+  ACCOUNT_JWT_AUDIENCE: ${ACCOUNT_JWT_AUDIENCE:-account}
+  ACCOUNT_JWT_ACTIVE_KID: ${ACCOUNT_JWT_ACTIVE_KID:-dev}
+  ACCOUNT_JWT_PRIVATE_KEY_FILE: /run/secrets/account-jwt-private.pem
+  ACCOUNT_JWT_PUBLIC_KEY_FILE: /run/secrets/account-jwt-public.pem
+  ACCOUNT_SECURITY_OTP_HMAC_SECRET: ${ACCOUNT_SECURITY_OTP_HMAC_SECRET}
+  ACCOUNT_SECURITY_INTERNAL_AUTH_SECRET: ${ACCOUNT_SECURITY_INTERNAL_AUTH_SECRET}
+  ACCOUNT_HTTP_ALLOWED_ORIGINS: ${ACCOUNT_HTTP_ALLOWED_ORIGINS:-http://localhost:8089}
+  ACCOUNT_GRPC_ENABLED: "false"
 
 services:
-  signoz:
+  account:
+    image: ${ACCOUNT_IMAGE:-ghcr.io/onix-fun/account:latest}
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    ports: ["${ACCOUNT_HTTP_PORT:-8089}:8080"]
+    command: serve --role=all
     environment:
-      SIGNOZ_TOKENIZER_JWT_SECRET: ${SIGNOZ_TOKENIZER_JWT_SECRET:?Set SIGNOZ_TOKENIZER_JWT_SECRET to at least 32 random characters}
-
-  accaunt-gateway:
-    image: ${ACCOUNT_GATEWAY_IMAGE:?Set ACCOUNT_GATEWAY_IMAGE to an immutable GHCR tag}
-    environment:
-      IDENTITY_JWT_PUBLIC_KEY_PATH: /run/secrets/accaunt-jwt-public.pem
-      IDENTITY_JWT_ISSUER: accaunt-service
-      IDENTITY_JWT_AUDIENCE: accaunt
-      ACCOUNT_TRUSTED_BASE_DOMAIN: localhost
-      ACCOUNT_SWAGGER_UI_ENABLED: "true"
-      IDENTITY_INTERNAL_AUTH_SECRET: ${IDENTITY_INTERNAL_AUTH_SECRET:-local-test-internal-secret-32chars!}
-      IDENTITY_REDIS_PASSWORD: ${IDENTITY_REDIS_PASSWORD:-accaunt-redis-secret}
-      IDENTITY_REDIS_URL: redis://:${IDENTITY_REDIS_PASSWORD:-accaunt-redis-secret}@accaunt-redis:6379
-    ports:
-      - "${ACCOUNT_GATEWAY_HTTP_PORT:-8089}:8089"
+      <<: *backend-env
+      ACCOUNT_API_BASE_URL: /api
+      ACCOUNT_FRONTEND_BASE_PATH: /
     volumes:
-      - ./secrets/accaunt-jwt-public.pem:/run/secrets/accaunt-jwt-public.pem:ro
-      - accaunt_gateway_logs:/var/log/accaunt/accaunt-gateway
+      - ./secrets/account-jwt-private.pem:/run/secrets/account-jwt-private.pem:ro
+      - ./secrets/account-jwt-public.pem:/run/secrets/account-jwt-public.pem:ro
     depends_on:
-      profile:
-        condition: service_started
-      accaunt-minio:
-        condition: service_started
-    networks:
-      - accaunt-network
-    restart: unless-stopped
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      s3-init: {condition: service_completed_successfully}
+      mail: {condition: service_started}
 
-  frontend:
-    image: ${ACCOUNT_FRONTEND_IMAGE:?Set ACCOUNT_FRONTEND_IMAGE to an immutable GHCR tag}
-    networks:
-      - accaunt-network
-    restart: unless-stopped
-
-  profile:
-    image: ${ACCOUNT_BACKEND_IMAGE:?Set ACCOUNT_BACKEND_IMAGE to an immutable GHCR tag}
-    environment:
-      PROFILE_PORT: "8080"
-      IDENTITY_JWT_ISSUER: accaunt-service
-      IDENTITY_JWT_AUDIENCE: accaunt
-      IDENTITY_JWT_PRIVATE_KEY_PATH: /run/secrets/accaunt-jwt-private.pem
-      IDENTITY_JWT_PUBLIC_KEY_PATH: /run/secrets/accaunt-jwt-public.pem
-      IDENTITY_ACCESS_TOKEN_EXP_MINUTES: "15"
-      IDENTITY_REFRESH_TOKEN_EXP_DAYS: "30"
-      IDENTITY_OTP_HMAC_SECRET: ${IDENTITY_OTP_HMAC_SECRET:-local-test-otp-secret-32chars!!}
-      IDENTITY_INTERNAL_AUTH_SECRET: ${IDENTITY_INTERNAL_AUTH_SECRET:-local-test-internal-secret-32chars!}
-      IDENTITY_TRUSTED_PROXY_CIDRS: 172.16.0.0/12
-      IDENTITY_REFRESH_COOKIE_SECURE: "false"
-      IDENTITY_COOKIE_DOMAIN: ""
-      IDENTITY_DATABASE_JDBC_URL: jdbc:postgresql://accaunt-postgres:5432/accaunt
-      IDENTITY_DATABASE_USERNAME: ${POSTGRES_USER:-accaunt}
-      IDENTITY_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-accaunt}
-      IDENTITY_REDIS_URL: redis://:${IDENTITY_REDIS_PASSWORD:-accaunt-redis-secret}@accaunt-redis:6379
-      IDENTITY_SMTP_HOST: accaunt-mail
-      IDENTITY_SMTP_PORT: "1025"
-      IDENTITY_S3_ENDPOINT: http://accaunt-minio:9000
-      IDENTITY_S3_PUBLIC_URL: http://localhost:${ACCOUNT_GATEWAY_HTTP_PORT:-8089}/api/avatars
-      IDENTITY_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-accaunt-minio}
-      IDENTITY_S3_SECRET_KEY: ${S3_SECRET_KEY:-accaunt-minio-secret}
-      IDENTITY_S3_BUCKET: avatars
-      JAVA_TOOL_OPTIONS: -javaagent:/otel/opentelemetry-javaagent.jar
-      OTEL_SERVICE_NAME: profile
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://accaunt-otel-collector:4318
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      OTEL_TRACES_EXPORTER: otlp
-      OTEL_METRICS_EXPORTER: otlp
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=accaunt,deployment.environment=production
-      LOG_DIR: /var/log/accaunt/profile
+  migrate:
+    image: ${ACCOUNT_IMAGE:-ghcr.io/onix-fun/account:latest}
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    command: migrate
+    environment: *backend-env
     volumes:
-      - ./secrets/accaunt-jwt-private.pem:/run/secrets/accaunt-jwt-private.pem:ro
-      - ./secrets/accaunt-jwt-public.pem:/run/secrets/accaunt-jwt-public.pem:ro
-      - profile_logs:/var/log/accaunt/profile
-    expose:
-      - "8080"
+      - ./secrets/account-jwt-private.pem:/run/secrets/account-jwt-private.pem:ro
+      - ./secrets/account-jwt-public.pem:/run/secrets/account-jwt-public.pem:ro
     depends_on:
-      accaunt-postgres:
-        condition: service_healthy
-      accaunt-redis:
-        condition: service_healthy
-      accaunt-minio-init:
-        condition: service_completed_successfully
-      accaunt-mail:
-        condition: service_started
-      accaunt-otel-collector:
-        condition: service_started
-    networks:
-      - accaunt-network
-    restart: unless-stopped
+      postgres: {condition: service_healthy}
 
-  accaunt-postgres:
-    image: postgres:18
+  postgres:
+    image: postgres:18-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-accaunt}
-      POSTGRES_USER: ${POSTGRES_USER:-accaunt}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-accaunt}
-    volumes:
-      - accaunt_postgres_data:/var/lib/postgresql
+      POSTGRES_DB: account
+      POSTGRES_USER: account
+      POSTGRES_PASSWORD: ${ACCOUNT_DATABASE_PASSWORD}
+    volumes: [account_postgres:/var/lib/postgresql]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U accaunt -d accaunt"]
+      test: ["CMD-SHELL", "pg_isready -U account -d account"]
       interval: 5s
       timeout: 3s
       retries: 10
-    networks:
-      - accaunt-network
-    restart: unless-stopped
 
-  accaunt-redis:
+  redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes --requirepass "${IDENTITY_REDIS_PASSWORD:-accaunt-redis-secret}"
-    volumes:
-      - accaunt_redis_data:/data
+    command: redis-server --appendonly yes --requirepass "${ACCOUNT_REDIS_PASSWORD}"
+    volumes: [account_redis:/data]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a '${ACCOUNT_REDIS_PASSWORD}' ping"]
       interval: 5s
       timeout: 3s
-      retries: 5
-    networks:
-      - accaunt-network
-    restart: unless-stopped
+      retries: 10
 
-  accaunt-minio:
+  s3:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: server /data --console-address ":9001"
+    command: server /data
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-accaunt-minio}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-accaunt-minio-secret}
-    ports:
-      - "${MINIO_API_PORT:-9010}:9000"
-      - "${MINIO_CONSOLE_PORT:-9011}:9001"
-    volumes:
-      - accaunt_minio_data:/data
-    networks:
-      - accaunt-network
-    restart: unless-stopped
+      MINIO_ROOT_USER: ${ACCOUNT_S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${ACCOUNT_S3_SECRET_KEY}
+    volumes: [account_s3:/data]
 
-  accaunt-minio-init:
+  s3-init:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
-    depends_on:
-      - accaunt-minio
-    entrypoint: >
-      /bin/sh -c "
-      until /usr/bin/mc alias set local http://accaunt-minio:9000 ${S3_ACCESS_KEY:-accaunt-minio} ${S3_SECRET_KEY:-accaunt-minio-secret}; do sleep 2; done;
-      /usr/bin/mc mb -p local/avatars || true;
-      /usr/bin/mc anonymous set download local/avatars;
-      "
-    networks:
-      - accaunt-network
-
-  accaunt-mail:
-    image: mailhog/mailhog:v1.0.1
-    ports:
-      - "${MAIL_SMTP_PORT:-1026}:1025"
-      - "${MAIL_UI_PORT:-8026}:8025"
-    networks:
-      - accaunt-network
-    restart: unless-stopped
-
-  accaunt-otel-storage-init:
-    image: busybox:1.37.0
-    user: "0:0"
-    command: ["sh", "-c", "chown -R 10001:10001 /var/lib/otelcol"]
-    volumes:
-      - accaunt_otel_data:/var/lib/otelcol
-    network_mode: none
-    restart: "no"
-
-  accaunt-otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.151.0
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - until mc alias set local http://s3:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do sleep 2; done; mc mb -p local/avatars || true
     environment:
-      DEPLOYMENT_ENVIRONMENT: production
-      IDENTITY_REDIS_HOST: accaunt-redis
-      IDENTITY_REDIS_PASSWORD: ${IDENTITY_REDIS_PASSWORD:-accaunt-redis-secret}
-      POSTGRES_USER: ${POSTGRES_USER:-accaunt}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-accaunt}
-    volumes:
-      - ../../observability/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
-      - accaunt_gateway_logs:/var/log/accaunt/accaunt-gateway:ro
-      - profile_logs:/var/log/accaunt/profile:ro
-      - accaunt_otel_data:/var/lib/otelcol
-    depends_on:
-      accaunt-otel-storage-init:
-        condition: service_completed_successfully
-      signoz-otel-collector:
-        condition: service_started
-      accaunt-minio:
-        condition: service_started
-      accaunt-postgres:
-        condition: service_healthy
-      accaunt-redis:
-        condition: service_healthy
-    networks: [accaunt-network]
-    restart: unless-stopped
+      MINIO_ROOT_USER: ${ACCOUNT_S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${ACCOUNT_S3_SECRET_KEY}
+    depends_on: [s3]
+
+  mail:
+    image: mailhog/mailhog:v1.0.1
+    ports: ["${ACCOUNT_MAIL_UI_PORT:-8026}:8025"]
 
 volumes:
-  accaunt_gateway_logs:
-  profile_logs:
-  accaunt_postgres_data:
-  accaunt_redis_data:
-  accaunt_minio_data:
-  accaunt_otel_data:
-
-networks:
-  accaunt-network:
-    driver: bridge
+  account_postgres:
+  account_redis:
+  account_s3:

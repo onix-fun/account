@@ -8,11 +8,11 @@ import javax.sql.DataSource
 
 object DatabaseFactory {
     fun init(config: PostgresConfig): DataSource {
-        val migrationDs = HikariDataSource(baseConfig(config))
-        runFlyway(migrationDs)
-        migrationDs.close()
-
         return HikariDataSource(runtimeConfig(config))
+    }
+
+    fun migrate(config: PostgresConfig) {
+        HikariDataSource(baseConfig(config)).use(::runFlyway)
     }
 
     private fun baseConfig(config: PostgresConfig): HikariConfig {

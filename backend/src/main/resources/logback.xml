@@ -1,29 +1,9 @@
 <configuration>
-    <property name="LOG_DIR" value="${LOG_DIR:-/var/log/accaunt/profile}" />
-
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_DIR}/profile.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_DIR}/profile.%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
-        </rollingPolicy>
-        <encoder>
-            <pattern>%d{YYYY-MM-dd HH:mm:ss.SSS} %-5level trace_id=%X{trace_id} span_id=%X{span_id} correlation_id=%X{correlation_id} logger=%logger - %msg%n</pattern>
-        </encoder>
-    </appender>
-
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{YYYY-MM-dd HH:mm:ss.SSS} %-5level trace_id=%X{trace_id} span_id=%X{span_id} correlation_id=%X{correlation_id} logger=%logger - %msg%n</pattern>
-        </encoder>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
     </appender>
-
-    <root level="INFO">
-        <appender-ref ref="FILE"/>
+    <root level="${ACCOUNT_LOG_LEVEL:-INFO}">
         <appender-ref ref="STDOUT"/>
     </root>
-
-    <logger name="io.ktor" level="DEBUG"/>
-    <logger name="org.eclipse.jetty" level="INFO"/>
-    <logger name="io.netty" level="INFO"/>
+    <logger name="io.ktor" level="${ACCOUNT_KTOR_LOG_LEVEL:-INFO}"/>
 </configuration>

@@ -1,3 +1,5 @@
 *
 !Dockerfile
-!target/
+!pom.xml
+!src/
+!src/**

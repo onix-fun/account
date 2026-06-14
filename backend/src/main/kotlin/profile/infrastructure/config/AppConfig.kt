@@ -9,15 +9,31 @@ data class AppConfig(
     val smtp: SmtpConfig,
     val s3: S3Config,
     val security: SecurityConfig,
-    val environment: String
+    val environment: String,
+    val runtime: RuntimeConfig,
+    val grpc: GrpcConfig
 )
 
 data class JwtConfig(
     val issuer: String,
     val audience: String,
-    val privateKeyPath: String,
-    val publicKeyPath: String,
+    val privateKey: String,
+    val publicKey: String,
+    val activeKid: String,
+    val previousPublicKeys: Map<String, String>,
     val accessTokenExpMinutes: Long
+)
+
+data class RuntimeConfig(val role: String)
+
+data class GrpcConfig(
+    val enabled: Boolean,
+    val port: Int,
+    val certificate: String?,
+    val privateKey: String?,
+    val clientCa: String?,
+    val allowedClientSans: List<String>,
+    val reflection: Boolean
 )
 
 data class SessionConfig(

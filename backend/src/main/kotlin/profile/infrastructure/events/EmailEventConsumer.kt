@@ -9,14 +9,25 @@ import javax.sql.DataSource
 
 class EmailEventConsumer(private val dataSource: DataSource, private val publisher: EventPublisher, private val sender: SmtpEmailSender) {
     private val log = LoggerFactory.getLogger(javaClass)
+    @Volatile private var thread: Thread? = null
 
     fun start() {
-        Thread({
+        if (thread?.isAlive == true) return
+        thread = Thread({
             while (!Thread.currentThread().isInterrupted) {
                 runCatching { processBatch() }.onFailure { log.error("Outbox worker failed", it) }
-                Thread.sleep(1_000)
+                try {
+                    Thread.sleep(1_000)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
             }
         }, "email-outbox-worker").apply { isDaemon = true; start() }
+    }
+
+    fun stop() {
+        thread?.interrupt()
+        thread = null
     }
 
     internal fun processBatch() {

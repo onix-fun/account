@@ -1,3 +1,5 @@
+import { runtimeConfig } from "@/runtime-config";
+
 function isTrustedRedirect(url: URL): boolean {
     if (url.origin === window.location.origin) return true;
 
@@ -9,12 +11,7 @@ function isTrustedRedirect(url: URL): boolean {
         return true;
     }
 
-    const trustedBaseDomain = String(import.meta.env.VITE_TRUSTED_BASE_DOMAIN || "").toLowerCase();
-    return (
-        Boolean(trustedBaseDomain) &&
-        url.protocol === "https:" &&
-        (url.hostname === trustedBaseDomain || url.hostname.endsWith(`.${trustedBaseDomain}`))
-    );
+    return runtimeConfig.trustedRedirectOrigins.includes(url.origin);
 }
 
 export function trustedRedirectUrl(value: unknown): string | null {

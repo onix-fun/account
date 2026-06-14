@@ -21,6 +21,8 @@ import profile.infrastructure.db.VerificationTokenRepository
 import profile.infrastructure.db.UserRepository
 import profile.infrastructure.redis.PendingRegistrationStore
 import profile.infrastructure.security.TokenHasher
+import profile.infrastructure.config.PostgresConfig
+import profile.infrastructure.db.DatabaseFactory
 import profile.users.UpdateProfileRequest
 import java.nio.file.Files
 import java.security.KeyPairGenerator
@@ -31,8 +33,10 @@ import org.testcontainers.containers.PostgreSQLContainer
 class ServerTest {
 
     private fun TestApplicationBuilder.setupTestConfig(cookieDomain: String? = null, cookieSecure: Boolean = false) {
+        DatabaseFactory.migrate(PostgresConfig(postgres.jdbcUrl, postgres.username, postgres.password))
         environment {
             config = MapApplicationConfig(
+                "account.runtime.role" to "api",
                 "identity.jwt.issuer" to "account-service",
                 "identity.jwt.audience" to "account",
                 "identity.jwt.private_key_path" to testPrivateKeyPath,
@@ -228,15 +232,15 @@ class ServerTest {
         val cookie = cookieWithPrefix(loginResponse, "refresh_token_$userId=")
         assertNotNull(cookie, "Refresh token cookie not found in response")
         assertTrue(cookie.contains("HttpOnly"), "Cookie should be HttpOnly")
-        assertTrue(cookie.contains("SameSite=Strict"), "Cookie should set SameSite=Strict")
+        assertTrue(cookie.contains("SameSite=Lax"), "Cookie should set SameSite=Lax")
         assertTrue(cookie.contains("Path=/api/auth"), "Cookie should be scoped to /api/auth")
         assertFalse(cookie.contains("Domain="), "Development cookie should stay host-only")
-        val accessCookie = cookieWithPrefix(loginResponse, "__Host-access_token=")
+        val accessCookie = cookieWithPrefix(loginResponse, "access_token=")
         assertNotNull(accessCookie, "Login should set access token cookie")
         assertTrue(accessCookie.contains("HttpOnly"), "Access cookie should be HttpOnly")
-        assertTrue(accessCookie.contains("SameSite=Strict"), "Access cookie should set SameSite=Strict")
+        assertTrue(accessCookie.contains("SameSite=Lax"), "Access cookie should set SameSite=Lax")
 
-        val activeCookie = cookieWithPrefix(loginResponse, "__Host-active_user=")
+        val activeCookie = cookieWithPrefix(loginResponse, "active_user=")
         assertNotNull(activeCookie, "Active account cookie not found in response")
 
         // 3. Get sessions using the HttpOnly-style browser access cookie.
@@ -344,22 +348,22 @@ class ServerTest {
         val csrfResponse = client.get("/api/auth/csrf")
         assertEquals(HttpStatusCode.OK, csrfResponse.status)
         assertNotNull(Json.parseToJsonElement(csrfResponse.bodyAsText()).jsonObject["csrfToken"])
-        val csrfCookie = cookieWithPrefix(csrfResponse, "__Host-csrf_token=")
+        val csrfCookie = cookieWithPrefix(csrfResponse, "csrf_token=")
         assertNotNull(csrfCookie)
         assertTrue(csrfCookie.contains("HttpOnly"))
-        assertTrue(csrfCookie.contains("SameSite=Strict"))
+        assertTrue(csrfCookie.contains("SameSite=Lax"))
 
         // 6. Reset password using a 6-digit code and login with the new password.
         val forgotResponse = client.post("/api/auth/forgot-password") {
             contentType(ContentType.Application.Json)
-            setBody(ForgotPasswordRequest(identifier = "loginuser"))
+            setBody(ForgotPasswordRequest(identifier = "renameduser"))
         }
         assertEquals(HttpStatusCode.OK, forgotResponse.status)
 
         val resetCode = codeForVerificationToken(verificationTokenRepository, "PASSWORD_RESET")
         val resetResponse = client.post("/api/auth/reset-password") {
             contentType(ContentType.Application.Json)
-            setBody(ResetPasswordRequest(identifier = "loginuser", code = resetCode, newPassword = "newpassword123"))
+            setBody(ResetPasswordRequest(identifier = "renameduser", code = resetCode, newPassword = "newpassword123"))
         }
         assertEquals(HttpStatusCode.OK, resetResponse.status, "Password reset failed: ${resetResponse.bodyAsText()}")
 
@@ -424,7 +428,7 @@ class ServerTest {
         val mismatchedRefreshResponse = client.post("/api/auth/refresh") {
             header(
                 HttpHeaders.Cookie,
-                "refresh_token_$secondId=${cookiePair(firstRefresh).substringAfter("=")}; __Host-active_user=$secondId"
+                "refresh_token_$secondId=${cookiePair(firstRefresh).substringAfter("=")}; active_user=$secondId"
             )
         }
         assertEquals(HttpStatusCode.NotFound, mismatchedRefreshResponse.status)
@@ -440,8 +444,8 @@ class ServerTest {
         assertEquals(firstId, activeUserId)
         val rotatedFirstRefresh = cookieWithPrefix(switchResponse, "refresh_token_$firstId=")!!
         assertNotEquals(cookiePair(firstRefresh), cookiePair(rotatedFirstRefresh))
-        assertNotNull(cookieWithPrefix(switchResponse, "__Host-access_token="))
-        val firstActiveCookie = cookieWithPrefix(switchResponse, "__Host-active_user=")
+        assertNotNull(cookieWithPrefix(switchResponse, "access_token="))
+        val firstActiveCookie = cookieWithPrefix(switchResponse, "active_user=")
         assertNotNull(firstActiveCookie)
 
         val logoutResponse = client.post("/api/auth/logout") {
@@ -452,8 +456,8 @@ class ServerTest {
         }
         assertEquals(HttpStatusCode.OK, logoutResponse.status)
         assertTrue(cookieWithPrefix(logoutResponse, "refresh_token_$firstId=")!!.contains("Max-Age=0"))
-        assertTrue(cookieWithPrefix(logoutResponse, "__Host-access_token=")!!.contains("Max-Age=0"))
-        assertTrue(cookieWithPrefix(logoutResponse, "__Host-active_user=")!!.contains("Max-Age=0"))
+        assertTrue(cookieWithPrefix(logoutResponse, "access_token=")!!.contains("Max-Age=0"))
+        assertTrue(cookieWithPrefix(logoutResponse, "active_user=")!!.contains("Max-Age=0"))
 
         val accountsAfterLogoutResponse = client.get("/api/auth/accounts") {
             header(
@@ -489,10 +493,11 @@ class ServerTest {
     }
 
     private fun codeForVerificationToken(repository: VerificationTokenRepository, purpose: String): String {
+        val userId = testUserIdForPurpose(repository, purpose)
+        val expectedHash = repository.latest(userId, purpose)?.tokenHash ?: error("Missing token")
         for (value in 0..999_999) {
             val code = value.toString().padStart(6, '0')
-            val token = repository.findByHash(TokenHasher.challenge(TEST_OTP_SECRET, purpose, testUserIdForPurpose(repository, purpose), code))
-            if (token?.purpose == purpose) return code
+            if (TokenHasher.challenge(TEST_OTP_SECRET, purpose, userId, code) == expectedHash) return code
         }
         error("Could not resolve $purpose verification code")
     }

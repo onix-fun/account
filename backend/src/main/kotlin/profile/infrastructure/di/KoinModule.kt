@@ -15,6 +15,7 @@ import profile.infrastructure.events.EmailEventConsumer
 import profile.infrastructure.events.EventPublisher
 import profile.infrastructure.events.SmtpEmailSender
 import profile.infrastructure.jwt.JwtIssuer
+import profile.infrastructure.jwt.JwksProvider
 import profile.infrastructure.redis.PendingRegistrationStore
 import profile.infrastructure.redis.RedisManager
 import profile.search.SearchController
@@ -24,24 +25,27 @@ import profile.sessions.SessionService
 import profile.users.UserController
 import profile.users.UserService
 
-fun koinModule(config: ApplicationConfig) = module {
-    fun env(name: String, fallback: () -> String): String =
-        System.getenv(name)?.takeIf { it.isNotBlank() } ?: fallback()
-
-    // 1. Typed Config
-    val appConfig = AppConfig(
+fun appConfigFrom(config: ApplicationConfig): AppConfig {
+    return AppConfig(
         jwt = JwtConfig(
             issuer = config.property("identity.jwt.issuer").getString(),
             audience = config.property("identity.jwt.audience").getString(),
-            privateKeyPath = config.property("identity.jwt.private_key_path").getString(),
-            publicKeyPath = config.property("identity.jwt.public_key_path").getString(),
+            privateKey = config.propertyOrNull("identity.jwt.private_key")?.getString()
+                ?: config.property("identity.jwt.private_key_path").getString(),
+            publicKey = config.propertyOrNull("identity.jwt.public_key")?.getString()
+                ?: config.property("identity.jwt.public_key_path").getString(),
+            activeKid = config.propertyOrNull("identity.jwt.active_kid")?.getString() ?: "active",
+            previousPublicKeys = config.propertyOrNull("identity.jwt.previous_public_keys")?.getString()
+                ?.split(",")
+                ?.mapNotNull {
+                    val parts = it.split("=", limit = 2)
+                    if (parts.size == 2 && parts.all(String::isNotBlank)) parts[0].trim() to parts[1].trim() else null
+                }?.toMap().orEmpty(),
             accessTokenExpMinutes = config.property("identity.jwt.access_token_exp_minutes").getString().toLong()
         ),
         session = SessionConfig(
             refreshTokenExpDays = config.property("identity.session.refresh_token_exp_days").getString().toLong(),
-            cookieSecure = env("ACCOUNT_COOKIE_SECURE") {
-                config.propertyOrNull("identity.session.cookie_secure")?.getString() ?: "false"
-            }.toBoolean(),
+            cookieSecure = config.propertyOrNull("identity.session.cookie_secure")?.getString()?.toBoolean() ?: false,
             cookieDomain = config.propertyOrNull("identity.session.cookie_domain")
                 ?.getString()
                 ?.trim()
@@ -60,46 +64,65 @@ fun koinModule(config: ApplicationConfig) = module {
         postgres = PostgresConfig(
             url = config.property("postgres.url").getString(),
             user = config.property("postgres.user").getString(),
-            password = env("POSTGRES_PASSWORD") { config.property("postgres.password").getString() }
+            password = config.property("postgres.password").getString()
         ),
         redis = RedisConfig(
             url = config.property("redis.url").getString()
         ),
         smtp = SmtpConfig(
-            host = env("SMTP_HOST") { config.property("smtp.host").getString() },
-            port = env("SMTP_PORT") { config.property("smtp.port").getString() }.toInt(),
-            from = env("SMTP_FROM") { config.propertyOrNull("smtp.from")?.getString() ?: "no-reply@account.local" },
-            username = System.getenv("SMTP_USERNAME")?.takeIf { it.isNotBlank() }
-                ?: config.propertyOrNull("smtp.username")?.getString()?.takeIf { it.isNotBlank() },
-            password = System.getenv("SMTP_PASSWORD")?.takeIf { it.isNotBlank() }
-                ?: config.propertyOrNull("smtp.password")?.getString()?.takeIf { it.isNotBlank() },
-            startTls = env("SMTP_START_TLS") {
-                config.propertyOrNull("smtp.start_tls")?.getString() ?: "false"
-            }.toBoolean()
+            host = config.property("smtp.host").getString(),
+            port = config.property("smtp.port").getString().toInt(),
+            from = config.propertyOrNull("smtp.from")?.getString() ?: "no-reply@account.local",
+            username = config.propertyOrNull("smtp.username")?.getString()?.takeIf { it.isNotBlank() },
+            password = config.propertyOrNull("smtp.password")?.getString()?.takeIf { it.isNotBlank() },
+            startTls = config.propertyOrNull("smtp.start_tls")?.getString()?.toBoolean() ?: false
         ),
         s3 = S3Config(
             endpoint = config.property("s3.endpoint").getString(),
-            publicUrl = env("S3_PUBLIC_URL") { config.propertyOrNull("s3.public_url")?.getString() ?: config.property("s3.endpoint").getString() },
-            accessKey = env("S3_ACCESS_KEY") { config.property("s3.access_key").getString() },
-            secretKey = env("S3_SECRET_KEY") { config.property("s3.secret_key").getString() },
+            publicUrl = config.propertyOrNull("s3.public_url")?.getString() ?: config.property("s3.endpoint").getString(),
+            accessKey = config.property("s3.access_key").getString(),
+            secretKey = config.property("s3.secret_key").getString(),
             bucket = config.property("s3.bucket").getString()
         ),
         security = SecurityConfig(
-            otpHmacSecret = env("IDENTITY_OTP_HMAC_SECRET") { config.propertyOrNull("identity.security.otp_hmac_secret")?.getString() ?: "" },
-            internalAuthSecret = env("INTERNAL_AUTH_SECRET") { config.propertyOrNull("identity.security.internal_auth_secret")?.getString() ?: "" },
+            otpHmacSecret = config.propertyOrNull("identity.security.otp_hmac_secret")?.getString() ?: "",
+            internalAuthSecret = config.propertyOrNull("identity.security.internal_auth_secret")?.getString() ?: "",
             trustedProxyCidrs = config.propertyOrNull("identity.security.trusted_proxy_cidrs")?.getString()
                 ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("127.0.0.1/32", "::1/128"),
             allowedOrigins = config.propertyOrNull("identity.security.allowed_origins")?.getString()
                 ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("http://localhost:5174", "http://127.0.0.1:5174")
         ),
-        environment = env("APP_ENV") { config.propertyOrNull("app.environment")?.getString() ?: "development" }
+        environment = config.propertyOrNull("app.environment")?.getString() ?: "development",
+        runtime = RuntimeConfig(config.propertyOrNull("account.runtime.role")?.getString() ?: "all"),
+        grpc = GrpcConfig(
+            enabled = config.propertyOrNull("identity.grpc.enabled")?.getString()?.toBoolean() ?: false,
+            port = config.propertyOrNull("identity.grpc.port")?.getString()?.toIntOrNull() ?: 9097,
+            certificate = config.propertyOrNull("identity.grpc.certificate")?.getString()?.takeIf(String::isNotBlank),
+            privateKey = config.propertyOrNull("identity.grpc.private_key")?.getString()?.takeIf(String::isNotBlank),
+            clientCa = config.propertyOrNull("identity.grpc.client_ca")?.getString()?.takeIf(String::isNotBlank),
+            allowedClientSans = config.propertyOrNull("identity.grpc.allowed_client_sans")?.getString()
+                ?.split(",")?.map(String::trim)?.filter(String::isNotBlank).orEmpty(),
+            reflection = config.propertyOrNull("identity.grpc.reflection")?.getString()?.toBoolean() ?: false
+        )
     )
+}
+
+fun koinModule(config: ApplicationConfig) = module {
+    // 1. Typed Config
+    val appConfig = appConfigFrom(config)
     if (appConfig.environment == "production") {
         require(appConfig.session.cookieSecure) { "Secure cookies are required in production" }
-        require(appConfig.security.otpHmacSecret.length >= 32) { "IDENTITY_OTP_HMAC_SECRET must be at least 32 characters" }
+        require(appConfig.security.otpHmacSecret.length >= 32) { "ACCOUNT_SECURITY_OTP_HMAC_SECRET must be at least 32 characters" }
+        require(appConfig.security.internalAuthSecret.length >= 32) { "ACCOUNT_SECURITY_INTERNAL_AUTH_SECRET must be at least 32 characters" }
         require(appConfig.smtp.startTls) { "SMTP STARTTLS is required in production" }
         profile.infrastructure.security.EmailNormalizer.normalize(appConfig.smtp.from, "smtp.from")
         require(appConfig.s3.publicUrl.startsWith("https://")) { "Public avatar URL must use HTTPS in production" }
+        if (appConfig.grpc.enabled) {
+            require(!appConfig.grpc.certificate.isNullOrBlank()) { "gRPC server certificate is required in production" }
+            require(!appConfig.grpc.privateKey.isNullOrBlank()) { "gRPC private key is required in production" }
+            require(!appConfig.grpc.clientCa.isNullOrBlank()) { "gRPC client CA is required in production" }
+            require(appConfig.grpc.allowedClientSans.isNotEmpty()) { "gRPC client SAN allowlist is required in production" }
+        }
     }
     
     single { appConfig }
@@ -111,17 +134,20 @@ fun koinModule(config: ApplicationConfig) = module {
     single { appConfig.smtp }
     single { appConfig.s3 }
     single { appConfig.security }
+    single { appConfig.runtime }
+    single { appConfig.grpc }
     single { config }
 
     // 2. Infrastructure
     single { DatabaseFactory.init(get()) }
-    single { RedisManager(config) }
+    single { RedisManager(appConfig) }
     single { PendingRegistrationStore(get(), get()) }
-    single { profile.infrastructure.storage.S3Client(config) }
+    single { profile.infrastructure.storage.S3Client(appConfig.s3) }
     single { EventPublisher(get(), get()) }
     single { SmtpEmailSender(get()) }
     single { EmailEventConsumer(get(), get(), get()) }
-    single { JwtIssuer(get()) }
+    single { JwtIssuer(appConfig.jwt) }
+    single { JwksProvider(appConfig.jwt) }
     single { UserRepository(get()) }
     single { SessionRepository(get()) }
     single { VerificationTokenRepository(get()) }

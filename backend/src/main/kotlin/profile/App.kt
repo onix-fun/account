@@ -26,6 +26,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
@@ -62,14 +63,24 @@ import profile.users.ConfirmEmailChangeRequest
 import profile.users.UpdateProfileRequest
 import profile.infrastructure.db.SessionRepository
 import profile.infrastructure.config.SecurityConfig
+import profile.infrastructure.config.AppConfig
+import profile.infrastructure.config.GrpcConfig
 import profile.infrastructure.ratelimit.RateLimit
 import profile.infrastructure.ratelimit.RateLimitConfig
 import profile.infrastructure.redis.RedisManager
 import profile.infrastructure.security.TrustedProxy
+import profile.infrastructure.storage.S3Client
+import profile.infrastructure.events.SmtpEmailSender
+import profile.infrastructure.jwt.JwksProvider
 import profile.users.userRouting
+import javax.sql.DataSource
+import java.lang.management.ManagementFactory
 
 private const val MAX_BODY_SIZE = 5L * 1024 * 1024
  // 5MB, matches AVATAR_TOO_LARGE
+
+@Serializable
+private data class ReadinessResponse(val status: String, val checks: Map<String, Boolean>)
 
 fun Application.module() {
     val securityConfig by inject<SecurityConfig>()
@@ -279,8 +290,10 @@ fun Application.module() {
     }
 
     val redisManager by inject<RedisManager>()
+    val applicationDataSource by inject<DataSource>()
     environment.monitor.subscribe(ApplicationStopping) {
         redisManager.close()
+        (applicationDataSource as? AutoCloseable)?.close()
     }
 
     install(StatusPages) {
@@ -306,10 +319,12 @@ fun Application.module() {
         }
     }
 
-    val jwtIssuer = environment.config.property("identity.jwt.issuer").getString()
-    val jwtAudience = environment.config.property("identity.jwt.audience").getString()
+    val appConfig by inject<AppConfig>()
+    val grpcConfig by inject<GrpcConfig>()
+    val jwtIssuer = appConfig.jwt.issuer
+    val jwtAudience = appConfig.jwt.audience
     val jwtPublicKey = RsaKeyLoader.loadPublicKey(
-        environment.config.property("identity.jwt.public_key_path").getString()
+        appConfig.jwt.publicKey
     )
 
     val sessionRepository by inject<SessionRepository>()
@@ -375,18 +390,17 @@ fun Application.module() {
     val userController by inject<UserController>()
     val searchController by inject<SearchController>()
     val sessionController by inject<SessionController>()
-    val grpcPort = environment.config
-        .propertyOrNull("identity.grpc.port")
-        ?.getString()
-        ?.toIntOrNull() ?: 9097
+    val dataSource by inject<DataSource>()
+    val readinessRedis by inject<RedisManager>()
+    val readinessS3 by inject<S3Client>()
+    val readinessSmtp by inject<SmtpEmailSender>()
+    val jwksProvider by inject<JwksProvider>()
+    val role = appConfig.runtime.role
+    val apiEnabled = role == "api" || role == "all"
+    val workerEnabled = role == "worker" || role == "all"
     
     // 3. Background Tasks
-    val backgroundTasksEnabled = environment.config
-        .propertyOrNull("identity.background.enabled")
-        ?.getString()
-        ?.toBoolean() ?: true
-
-    if (backgroundTasksEnabled) {
+    if (apiEnabled) {
         launch {
             try {
                 searchService.indexAllUsers()
@@ -395,33 +409,25 @@ fun Application.module() {
             }
         }
 
-        launch {
-            try {
-                emailEventConsumer.start()
-            } catch (e: Exception) {
-                log.error("Failed to start email event consumer: ${e.message}")
-            }
-        }
+    }
+    if (workerEnabled) {
+        emailEventConsumer.start()
+        environment.monitor.subscribe(ApplicationStopping) { emailEventConsumer.stop() }
     }
     
     // 3b. Start optional mTLS gRPC Server
-    val grpcEnabled = environment.config.propertyOrNull("identity.grpc.enabled")?.getString()?.toBoolean() ?: false
-    if (grpcEnabled) launch {
+    if (apiEnabled && grpcConfig.enabled) launch {
         try {
-            val cert = environment.config.propertyOrNull("identity.grpc.certificate")?.getString()
-            val privateKey = environment.config.propertyOrNull("identity.grpc.private_key")?.getString()
-            val clientCa = environment.config.propertyOrNull("identity.grpc.client_ca")?.getString()
-            val allowedSans = environment.config.propertyOrNull("identity.grpc.allowed_client_sans")?.getString()
-            
             val grpcServer = ProfileGrpcServer(
-                userRepository, grpcPort,
-                cert ?: "",
-                privateKey ?: "",
-                clientCa ?: "",
-                allowedSans ?: "",
-                environment.config.propertyOrNull("identity.grpc.reflection")?.getString()?.toBoolean() ?: false
+                userRepository, grpcConfig.port,
+                grpcConfig.certificate.orEmpty(),
+                grpcConfig.privateKey.orEmpty(),
+                grpcConfig.clientCa.orEmpty(),
+                grpcConfig.allowedClientSans.joinToString(","),
+                grpcConfig.reflection
             )
             grpcServer.start()
+            environment.monitor.subscribe(ApplicationStopping) { grpcServer.stop() }
         } catch (e: Exception) {
             log.error("Failed to start gRPC server: ${e.message}")
         }
@@ -429,22 +435,50 @@ fun Application.module() {
 
     // 4. Configure Routing
     routing {
-        get("health", {
+        get("livez", {
             tags = setOf("System")
-            summary = "Health check"
-            description = "Returns API health status"
-            response { code(HttpStatusCode.OK) { description = "API is healthy" } }
+            summary = "Liveness check"
+            response { code(HttpStatusCode.OK) { description = "Process is alive" } }
         }) {
             call.respond(HttpStatusCode.OK, mapOf("status" to "UP"))
         }
-        
-        route("openapi.json") { openApiSpec("api") }
-        route("swagger-ui") { swaggerUI("/openapi.json") }
 
-        authRouting(authController, sessionController)
-        userRouting(userController)
-        searchRouting(searchController)
-        sessionRouting(sessionController)
+        get("health") { call.respond(HttpStatusCode.OK, mapOf("status" to "UP")) }
+
+        get("readyz") {
+            val checks = linkedMapOf(
+                "postgres" to runCatching { dataSource.connection.use { it.isValid(2) } }.getOrDefault(false),
+                "redis" to readinessRedis.isReady(),
+                "s3" to readinessS3.isReady(),
+                "smtp" to readinessSmtp.isReady()
+            )
+            val ready = checks.values.all { it }
+            call.respond(
+                if (ready) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable,
+                ReadinessResponse(if (ready) "UP" else "DOWN", checks)
+            )
+        }
+
+        get("metrics") {
+            val uptime = ManagementFactory.getRuntimeMXBean().uptime / 1000.0
+            call.respondText(
+                "# HELP account_process_uptime_seconds Process uptime.\n# TYPE account_process_uptime_seconds gauge\naccount_process_uptime_seconds $uptime\n",
+                ContentType.Text.Plain
+            )
+        }
+
+        get("/.well-known/jwks.json") {
+            call.respond(jwksProvider.document)
+        }
+
+        if (apiEnabled) {
+            route("openapi.json") { openApiSpec("api") }
+            route("swagger-ui") { swaggerUI("/openapi.json") }
+            authRouting(authController, sessionController)
+            userRouting(userController)
+            searchRouting(searchController)
+            sessionRouting(sessionController)
+        }
     }
 }
 

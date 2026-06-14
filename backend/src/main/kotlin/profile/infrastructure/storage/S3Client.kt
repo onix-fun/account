@@ -3,16 +3,17 @@ package profile.infrastructure.storage
 import io.minio.MinioClient
 import io.minio.PutObjectArgs
 import io.minio.RemoveObjectArgs
-import io.ktor.server.config.*
+import io.minio.BucketExistsArgs
+import profile.infrastructure.config.S3Config
 import java.io.ByteArrayInputStream
 import java.util.UUID
 
-class S3Client(config: ApplicationConfig) {
-    private val endpoint = config.property("s3.endpoint").getString()
-    private val publicUrl = (config.propertyOrNull("s3.public_url")?.getString() ?: endpoint).removeSuffix("/")
-    private val accessKey = config.property("s3.access_key").getString()
-    private val secretKey = config.property("s3.secret_key").getString()
-    private val bucket = config.property("s3.bucket").getString()
+class S3Client(config: S3Config) {
+    private val endpoint = config.endpoint
+    private val publicUrl = config.publicUrl.removeSuffix("/")
+    private val accessKey = config.accessKey
+    private val secretKey = config.secretKey
+    private val bucket = config.bucket
 
     private val client = MinioClient.builder()
         .endpoint(endpoint)
@@ -66,6 +67,10 @@ class S3Client(config: ApplicationConfig) {
             ).size()
         }.getOrNull()
     }
+
+    fun isReady(): Boolean = runCatching {
+        client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())
+    }.getOrDefault(false)
 
     private fun extensionFor(contentType: String): String {
         return when (contentType.lowercase()) {
