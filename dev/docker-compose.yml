@@ -27,8 +27,10 @@ x-backend-env: &backend-env
 
 services:
   migrate:
-    build: ../backend
-    command: migrate
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.dev
+    command: ["java", "-jar", "/app/profile.jar", "migrate"]
     environment: *backend-env
     volumes:
       - ./secrets/account-jwt-private.pem:/run/secrets/account-jwt-private.pem:ro
@@ -37,8 +39,10 @@ services:
       postgres: {condition: service_healthy}
 
   backend:
-    build: ../backend
-    command: serve --role=all
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.dev
+    command: ["java", "-jar", "/app/profile.jar", "serve", "--role=all"]
     environment: *backend-env
     ports: ["8091:8080"]
     volumes:

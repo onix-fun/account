@@ -5,10 +5,14 @@ setup:
 	cd dev && ./scripts/generate-dev-keys.sh
 
 up: setup
+	@echo "Building backend JAR..."
+	cd backend && mvn package -q -DskipTests
 	@echo "Starting account development containers..."
 	cd dev && docker compose up -d --build --remove-orphans
 	@echo "Cleaning up frontend port (5174)..."
 	-lsof -ti:5174 | xargs kill -9 2>/dev/null || true
+	@echo "Installing frontend dependencies..."
+	cd frontend && npm install
 	@echo "Starting frontend dev server..."
 	cd frontend && npm run dev
 
