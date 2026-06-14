@@ -24,7 +24,7 @@ jobs:
         image: postgres:18-alpine
         env: {POSTGRES_USER: account, POSTGRES_PASSWORD: account, POSTGRES_DB: account_test}
         options: >-
-          --health-cmd pg_isready -U account -d account_test
+          --health-cmd "pg_isready -U account -d account_test"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
@@ -46,27 +46,27 @@ jobs:
 
       - name: Setup Node
         uses: actions/setup-node@v4
-        with: {node-version: '22', cache: npm, cache-dependency-path: account/frontend/package-lock.json}
+        with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
 
       - name: Backend Tests and Package
         run: |
           mvn --batch-mode clean verify
-        working-directory: account/backend
+        working-directory: backend
         env:
           POSTGRES_URL: jdbc:postgresql://localhost:5432/account_test
 
       - name: Frontend Tests and Build
         run: |
           npm ci && npm run test:coverage && npm run build
-        working-directory: account/frontend
+        working-directory: frontend
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: account-artifacts
           path: |
-            account/backend/target/*-with-dependencies.jar
-            account/frontend/dist/
+            backend/target/*-with-dependencies.jar
+            frontend/dist/
           retention-days: 1
 
   e2e:
@@ -75,13 +75,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with: {name: account-artifacts, path: account}
+        with: {name: account-artifacts}
       
       - uses: docker/setup-buildx-action@v3
       - name: Build Test Image (AMD64 only)
         uses: docker/build-push-action@v6
         with:
-          context: account
+          context: .
           load: true
           tags: account:test
           cache-from: type=gha
@@ -89,9 +89,9 @@ jobs:
       
       - name: Setup E2E Environment
         run: |
-          mkdir -p account/examples/docker-compose/secrets
-          openssl genrsa -out account/examples/docker-compose/secrets/account-jwt-private.pem 2048
-          openssl rsa -in account/examples/docker-compose/secrets/account-jwt-private.pem -pubout -out account/examples/docker-compose/secrets/account-jwt-public.pem
+          mkdir -p examples/docker-compose/secrets
+          openssl genrsa -out examples/docker-compose/secrets/account-jwt-private.pem 2048
+          openssl rsa -in examples/docker-compose/secrets/account-jwt-private.pem -pubout -out examples/docker-compose/secrets/account-jwt-public.pem
       
       - name: Run E2E
         env:
@@ -103,7 +103,7 @@ jobs:
           ACCOUNT_SECURITY_OTP_HMAC_SECRET: test
           ACCOUNT_SECURITY_INTERNAL_AUTH_SECRET: test
         run: |
-          docker compose -f account/examples/docker-compose/docker-compose.yml up -d
+          docker compose -f examples/docker-compose/docker-compose.yml up -d
           
           # Wait for readiness
           for i in $(seq 1 30); do
@@ -111,6 +111,7 @@ jobs:
               echo "Service is ready"
               break
             fi
+            [ "$i" = 30 ] && (docker compose -f examples/docker-compose/docker-compose.yml logs && exit 1)
             sleep 2
           done
           
@@ -125,7 +126,7 @@ jobs:
 
       - name: Stop E2E
         if: always()
-        run: docker compose -f account/examples/docker-compose/docker-compose.yml down -v
+        run: docker compose -f examples/docker-compose/docker-compose.yml down -v
 
   release:
     needs: e2e
@@ -140,7 +141,7 @@ jobs:
       - id: semantic
         uses: cycjimmy/semantic-release-action@v4
         with:
-          working_directory: account
+          working_directory: .
           extra_plugins: |
             @semantic-release/commit-analyzer
             @semantic-release/release-notes-generator
@@ -155,7 +156,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with: {name: account-artifacts, path: account}
+        with: {name: account-artifacts}
       
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -177,7 +178,7 @@ jobs:
       - id: build
         uses: docker/build-push-action@v6
         with:
-          context: account
+          context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
