@@ -398,9 +398,10 @@ fun Application.module() {
     val role = appConfig.runtime.role
     val apiEnabled = role == "api" || role == "all"
     val workerEnabled = role == "worker" || role == "all"
+    val backgroundEnabled = environment.config.propertyOrNull("identity.background.enabled")?.getString()?.toBoolean() ?: true
     
     // 3. Background Tasks
-    if (apiEnabled) {
+    if (apiEnabled && backgroundEnabled) {
         launch {
             try {
                 searchService.indexAllUsers()
@@ -408,7 +409,6 @@ fun Application.module() {
                 log.error("Failed to index users: ${e.message}")
             }
         }
-
     }
     if (workerEnabled) {
         emailEventConsumer.start()

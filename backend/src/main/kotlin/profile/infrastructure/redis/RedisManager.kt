@@ -18,6 +18,11 @@ class RedisManager(config: AppConfig) {
         val url = config.redis.url
         if (url != null) {
             val c = RedisClient.create(url)
+            c.setOptions(io.lettuce.core.ClientOptions.builder()
+                .socketOptions(io.lettuce.core.SocketOptions.builder()
+                    .connectTimeout(java.time.Duration.ofSeconds(5))
+                    .build())
+                .build())
             client = c
             connection = try {
                 c.connect()

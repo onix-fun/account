@@ -414,6 +414,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.4</version>
                 <configuration>
+                    <forkedProcessTimeoutInSeconds>300</forkedProcessTimeoutInSeconds>
                     <environmentVariables>
                         <LOG_DIR>${project.build.directory}/test-logs</LOG_DIR>
                         <DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
