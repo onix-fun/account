@@ -102,8 +102,8 @@ jobs:
           curl --silent --head http://localhost:8089/readyz | grep "404 Not Found"
           
           # Verify Operational Endpoints are AVAILABLE on internal port (direct container access)
-          docker exec examples-account-1 curl --fail --silent http://localhost:8081/livez > /dev/null
-          docker exec examples-account-1 curl --fail --silent http://localhost:8081/readyz > /dev/null
+          docker exec account-account-1 curl --fail --silent http://localhost:8081/livez > /dev/null
+          docker exec account-account-1 curl --fail --silent http://localhost:8081/readyz > /dev/null
 
       - name: Stop E2E
         if: always()
