@@ -1,10 +1,24 @@
-# Ignore development and example secrets
+# Ignore all development and example files
+**/*.pem
+**/*.key
+**/*.pub
+**/.env*
+**/docker-compose*.yml
+**/Makefile
+**/scripts/**
+**/examples/**
+**/secrets/**
+**/*.template.*
+backend/src/main/kotlin/profile/infrastructure/config/EnvConfig.kt
+**/src/test/**
+**/package-lock.json
+**/node_modules/**
+**/target/**
+**/docs/**
+**/temp/**
+**/tmp/**
+**/logs/**
 *.pem
 *.key
 .env.example
 docker-compose.yml
-examples/
-**/secrets/**
-**/*.template.js
-**/*.conf.template
-backend/src/main/kotlin/profile/infrastructure/config/EnvConfig.kt
