@@ -23,6 +23,7 @@ ARG S6_OVERLAY_VERSION=3.2.0.2
 
 # Install dependencies and s6-overlay
 RUN apk add --no-cache nginx gettext bash curl && \
+    apk upgrade --no-cache && \
     if [ "$(uname -m)" = "x86_64" ]; then ARCH="x86_64"; \
     elif [ "$(uname -m)" = "aarch64" ]; then ARCH="aarch64"; \
     else echo "Unsupported architecture: $(uname -m)"; exit 1; fi && \
