@@ -1,0 +1,10 @@
+# Ignore development and example secrets
+*.pem
+*.key
+.env.example
+docker-compose.yml
+examples/
+**/secrets/**
+**/*.template.js
+**/*.conf.template
+backend/src/main/kotlin/profile/infrastructure/config/EnvConfig.kt
