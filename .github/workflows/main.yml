@@ -26,13 +26,13 @@ jobs:
         uses: actions/setup-java@v4
         with: {java-version: '23', distribution: temurin, cache: maven}
       - run: mvn --batch-mode clean verify
-        working-directory: account/backend
+        working-directory: backend
 
       - name: Frontend Tests
         uses: actions/setup-node@v4
-        with: {node-version: '22', cache: npm, cache-dependency-path: account/frontend/package-lock.json}
+        with: {node-version: '22', cache: npm, cache-dependency-path: frontend/package-lock.json}
       - run: npm ci && npm run test:coverage
-        working-directory: account/frontend
+        working-directory: frontend
 
   build-test-image:
     needs: test
@@ -43,7 +43,7 @@ jobs:
       - name: Build and Load
         uses: docker/build-push-action@v6
         with:
-          context: account
+          context: .
           load: true
           tags: account:test
           cache-from: type=gha
@@ -68,9 +68,9 @@ jobs:
       
       - name: Setup E2E Environment
         run: |
-          mkdir -p account/examples/docker-compose/secrets
-          openssl genrsa -out account/examples/docker-compose/secrets/account-jwt-private.pem 2048
-          openssl rsa -in account/examples/docker-compose/secrets/account-jwt-private.pem -pubout -out account/examples/docker-compose/secrets/account-jwt-public.pem
+          mkdir -p examples/docker-compose/secrets
+          openssl genrsa -out examples/docker-compose/secrets/account-jwt-private.pem 2048
+          openssl rsa -in examples/docker-compose/secrets/account-jwt-private.pem -pubout -out examples/docker-compose/secrets/account-jwt-public.pem
       
       - name: Run E2E
         env:
@@ -82,7 +82,7 @@ jobs:
           ACCOUNT_SECURITY_OTP_HMAC_SECRET: test
           ACCOUNT_SECURITY_INTERNAL_AUTH_SECRET: test
         run: |
-          docker compose -f account/examples/docker-compose/docker-compose.yml up -d
+          docker compose -f examples/docker-compose/docker-compose.yml up -d
           
           # Wait for readiness
           for i in $(seq 1 30); do
@@ -90,7 +90,7 @@ jobs:
               echo "Service is ready"
               break
             fi
-            [ "$i" = 30 ] && (docker compose -f account/examples/docker-compose/docker-compose.yml logs && exit 1)
+            [ "$i" = 30 ] && (docker compose -f examples/docker-compose/docker-compose.yml logs && exit 1)
             sleep 2
           done
           
@@ -102,12 +102,12 @@ jobs:
           curl --silent --head http://localhost:8089/readyz | grep "404 Not Found"
           
           # Verify Operational Endpoints are AVAILABLE on internal port (direct container access)
-          docker exec account_account_1 curl --fail --silent http://localhost:8081/livez > /dev/null
-          docker exec account_account_1 curl --fail --silent http://localhost:8081/readyz > /dev/null
+          docker exec examples-account-1 curl --fail --silent http://localhost:8081/livez > /dev/null
+          docker exec examples-account-1 curl --fail --silent http://localhost:8081/readyz > /dev/null
 
       - name: Stop E2E
         if: always()
-        run: docker compose -f account/examples/docker-compose/docker-compose.yml down -v
+        run: docker compose -f examples/docker-compose/docker-compose.yml down -v
 
   release:
     needs: e2e
@@ -122,7 +122,7 @@ jobs:
       - id: semantic
         uses: cycjimmy/semantic-release-action@v4
         with:
-          working_directory: account
+          working_directory: .
           extra_plugins: |
             @semantic-release/commit-analyzer
             @semantic-release/release-notes-generator
@@ -156,7 +156,7 @@ jobs:
       - id: build
         uses: docker/build-push-action@v6
         with:
-          context: account
+          context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -166,7 +166,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}'
           severity: 'HIGH,CRITICAL'
