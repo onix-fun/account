@@ -27,12 +27,11 @@ x-backend-env: &backend-env
 
 services:
   account:
-    image: ${ACCOUNT_IMAGE:-ghcr.io/onix-fun/account:latest}
+    image: ${ACCOUNT_IMAGE:-ghcr.io/onix-fun/accaunt:latest}
     build:
       context: ../../
       dockerfile: Dockerfile
     ports: ["${ACCOUNT_HTTP_PORT:-8089}:8080"]
-    command: serve --role=all
     environment:
       <<: *backend-env
       ACCOUNT_API_BASE_URL: /api
@@ -47,11 +46,11 @@ services:
       mail: {condition: service_started}
 
   migrate:
-    image: ${ACCOUNT_IMAGE:-ghcr.io/onix-fun/account:latest}
+    image: ${ACCOUNT_IMAGE:-ghcr.io/onix-fun/accaunt:latest}
     build:
       context: ../../
       dockerfile: Dockerfile
-    command: migrate
+    entrypoint: ["java", "-jar", "/app/app.jar", "migrate"]
     environment: *backend-env
     volumes:
       - ./secrets/account-jwt-private.pem:/run/secrets/account-jwt-private.pem:ro
