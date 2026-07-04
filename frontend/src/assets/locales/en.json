@@ -102,6 +102,8 @@
     "noSessions": "No active sessions",
     "expires": "expires",
     "lastActive": "last active",
+    "createdAt": "created",
+    "ipAddress": "IP address",
     "unknownDevice": "Unknown device",
     "accountsTitle": "Accounts",
     "zoom": "Zoom",
@@ -171,6 +173,36 @@
     "requestAccepted": "Request accepted",
     "requestRejected": "Request rejected",
     "notificationsRead": "Notifications marked read",
+    "notificationCopy": {
+      "subscriptionRequest": {
+        "title": "New follow request",
+        "body": "A user wants to follow your profile."
+      },
+      "newSubscriber": {
+        "title": "New follower",
+        "body": "A user followed your profile."
+      },
+      "requestAccepted": {
+        "title": "Request accepted",
+        "body": "Your follow request was accepted."
+      },
+      "postPublished": {
+        "title": "New publication",
+        "body": "Someone you follow published a new post."
+      },
+      "storyPublished": {
+        "title": "New story",
+        "body": "Someone you follow added a new story."
+      },
+      "authorMention": {
+        "title": "New mention",
+        "body": "You were mentioned as an author."
+      },
+      "postComment": {
+        "title": "New comment",
+        "body": "Someone commented on your post."
+      }
+    },
     "prefs": {
       "inAppSubscriptions": "Subscriptions",
       "inAppSubscriptionsHint": "Requests and subscription changes",

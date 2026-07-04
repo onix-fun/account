@@ -3,16 +3,18 @@ import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
 import { useProfileSocialStore } from "@/infra/store";
-import type { NotificationAction } from "@/api/services/ProfileSocialService";
+import type { NotificationAction, NotificationItem } from "@/api/services/ProfileSocialService";
 
 const emit = defineEmits<{
   back: [];
   message: [message: string, tone?: "success" | "error" | "warning" | "info"];
 }>();
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const socialStore = useProfileSocialStore();
 const busyKey = ref<string | null>(null);
+const completedActionKeys = ref(new Set<string>());
+const completedFollowNotificationIds = ref(new Set<string>());
 
 onMounted(() => {
   socialStore.loadNotifications().catch((cause) => emit("message", apiErrorMessage(cause), "error"));
@@ -34,6 +36,53 @@ function actionIcon(action: NotificationAction) {
   return "pi pi-external-link";
 }
 
+function actionKey(notificationId: string, action: NotificationAction) {
+  if ("targetUserId" in action) return `${notificationId}:${action.kind}:${action.targetUserId}`;
+  if ("href" in action) return `${notificationId}:${action.kind}:${action.href}`;
+  return notificationId;
+}
+
+function visibleActions(item: NotificationItem) {
+  return item.metadata.actions.filter((action) => {
+    if (completedActionKeys.value.has(actionKey(item.id, action))) return false;
+    if (completedFollowNotificationIds.value.has(item.id) && (action.kind === "accept_follow" || action.kind === "reject_follow")) return false;
+    return true;
+  });
+}
+
+function notificationCopyVariant(item: NotificationItem) {
+  if (item.metadata.titleKey && te(`social.notificationCopy.${item.metadata.titleKey}.title`)) return item.metadata.titleKey;
+  if (item.type === "subscription_request") return "subscriptionRequest";
+  if (item.type === "subscription_accepted" && item.title === "New subscriber") return "newSubscriber";
+  if (item.type === "subscription_accepted") return "requestAccepted";
+  if (item.type === "post_published") return "postPublished";
+  if (item.type === "story_published") return "storyPublished";
+  if (item.type === "author_mention") return "authorMention";
+  if (item.type === "post_comment") return "postComment";
+  return "";
+}
+
+function notificationTitle(item: NotificationItem) {
+  const key = item.metadata.titleKey || notificationCopyVariant(item);
+  return key && te(`social.notificationCopy.${key}.title`) ? t(`social.notificationCopy.${key}.title`) : item.title;
+}
+
+function notificationBody(item: NotificationItem) {
+  const key = item.metadata.bodyKey || notificationCopyVariant(item);
+  return key && te(`social.notificationCopy.${key}.body`) ? t(`social.notificationCopy.${key}.body`) : item.body;
+}
+
+function notificationIcon(item: NotificationItem) {
+  if (item.type === "subscription_request") return "pi pi-user-plus";
+  if (item.type === "subscription_accepted" && item.title === "New subscriber") return "pi pi-user-plus";
+  if (item.type === "subscription_accepted") return "pi pi-check-circle";
+  if (item.type === "post_published") return "pi pi-send";
+  if (item.type === "story_published") return "pi pi-bolt";
+  if (item.type === "author_mention") return "pi pi-at";
+  if (item.type === "post_comment") return "pi pi-comments";
+  return item.isRead ? "pi pi-bell" : "pi pi-bell-fill";
+}
+
 async function runAction(notificationId: string, action: NotificationAction) {
   busyKey.value = `${notificationId}:${action.kind}`;
   try {
@@ -45,6 +94,10 @@ async function runAction(notificationId: string, action: NotificationAction) {
       emit("message", t("social.requestRejected"));
     } else {
       window.open(action.href, "_blank", "noopener,noreferrer");
+    }
+    if (action.kind === "accept_follow" || action.kind === "reject_follow") {
+      completedActionKeys.value = new Set([...completedActionKeys.value, actionKey(notificationId, action)]);
+      completedFollowNotificationIds.value = new Set([...completedFollowNotificationIds.value, notificationId]);
     }
     await socialStore.markNotificationRead(notificationId);
   } catch (cause) {
@@ -113,18 +166,18 @@ async function markAllRead() {
       >
         <div class="flex items-start gap-3 min-w-0">
           <span class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
-            <i :class="item.isRead ? 'pi pi-bell' : 'pi pi-bell-fill'"></i>
+            <i :class="notificationIcon(item)"></i>
           </span>
           <div class="min-w-0 flex-1">
-            <h3 class="m-0 text-[15px] font-bold text-[var(--text)] leading-tight">{{ item.title }}</h3>
-            <p class="m-0 mt-1 text-sm text-[var(--muted)] leading-relaxed">{{ item.body }}</p>
+            <h3 class="m-0 text-[15px] font-bold text-[var(--text)] leading-tight">{{ notificationTitle(item) }}</h3>
+            <p class="m-0 mt-1 text-sm text-[var(--muted)] leading-relaxed">{{ notificationBody(item) }}</p>
             <small class="block mt-2 text-xs text-[var(--subtle)]">{{ formatDate(item.createdAt) }}</small>
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center justify-end gap-2">
+        <div v-if="visibleActions(item).length || !item.isRead" class="flex flex-wrap items-center justify-end gap-2">
           <PButton
-            v-for="action in item.metadata.actions"
+            v-for="action in visibleActions(item)"
             :key="action.kind + ('targetUserId' in action ? action.targetUserId : 'href' in action ? action.href : '')"
             :icon="actionIcon(action)"
             :label="actionLabel(action)"

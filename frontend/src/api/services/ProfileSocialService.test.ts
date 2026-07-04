@@ -22,6 +22,8 @@ describe("ProfileSocialService", () => {
     const { parseNotificationMetadata } = await import("@/api/services/ProfileSocialService");
     const metadata = parseNotificationMetadata(JSON.stringify({
       href: "/posts/1",
+      titleKey: "postPublished",
+      bodyKey: "postPublished",
       actions: [
         { kind: "accept_follow", targetUserId: "user-1" },
         { kind: "reject_follow", targetUserId: "user-1" },
@@ -32,6 +34,8 @@ describe("ProfileSocialService", () => {
     }));
 
     expect(metadata.href).toBe("/posts/1");
+    expect(metadata.titleKey).toBe("postPublished");
+    expect(metadata.bodyKey).toBe("postPublished");
     expect(metadata.actions).toEqual([
       { kind: "accept_follow", targetUserId: "user-1" },
       { kind: "reject_follow", targetUserId: "user-1" },

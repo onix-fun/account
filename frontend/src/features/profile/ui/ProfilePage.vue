@@ -62,6 +62,7 @@ const editingFields = reactive<Record<EditableProfileField, boolean>>({
 
 const backUrl = computed(() => trustedRedirectUrl(route.query.redirect));
 const avatarPreview = computed(() => avatarPreviewUrl.value || authStore.currentUser?.avatarUrl || "");
+const showRequests = computed(() => socialStore.privacy.isPrivate);
 const queryView = computed<ProfileView | null>(() => {
   const value = route.query.view;
   return isProfileView(value) ? value : null;
@@ -123,6 +124,11 @@ watch(queryView, (view) => {
   if (view === "following") socialStore.loadFollowing().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
   if (view === "notifications") socialStore.loadNotifications().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
 }, { immediate: true });
+watch(showRequests, (enabled) => {
+  if (enabled) return;
+  if (activeTab.value === "requests") activeTab.value = "profile";
+  if (queryView.value === "requests") closeView();
+});
 
 onMounted(async () => {
   await Promise.allSettled([
@@ -297,9 +303,9 @@ function revokeAvatarPreview() {
       :class="queryView ? 'max-w-[720px] w-full mx-auto' : 'lg:grid-cols-[52px_minmax(0,720px)]'"
     >
       <div v-if="!queryView" class="hidden lg:block">
-        <ProfileNav v-model:active-tab="activeTab" @search="isSearchOpen = true" />
+        <ProfileNav v-model:active-tab="activeTab" :show-requests="showRequests" @search="isSearchOpen = true" />
       </div>
-      <ProfileMobileMenu v-if="!queryView" @search="openView('search')" @open-view="openView" />
+      <ProfileMobileMenu v-if="!queryView" :show-requests="showRequests" @search="openView('search')" @open-view="openView" />
 
       <div class="min-w-0" :class="{ 'hidden lg:block': !queryView }">
         <ProfileSearchOverlay
@@ -360,10 +366,10 @@ function revokeAvatarPreview() {
                 class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[132px_minmax(0,1fr)_auto] items-center gap-3 sm:gap-4 bg-[var(--surface)] p-3 sm:p-4 rounded-xl transition-colors border-0"
                 :class="{ 'bg-[var(--surface-active)]': editingFields[field.key] }"
               >
-                <label class="text-[13px] font-bold text-[var(--muted)]" :for="`profile-${field.key}`">{{ field.label }}</label>
+                <label class="col-span-2 sm:col-span-1 sm:col-start-1 sm:row-start-1 text-[13px] font-bold text-[var(--muted)]" :for="`profile-${field.key}`">{{ field.label }}</label>
 
                 <PButton
-                  class="self-center justify-self-end sm:col-start-3 sm:row-start-1 sm:self-start shrink-0"
+                  class="col-start-2 row-start-2 self-center justify-self-end sm:col-start-3 sm:row-start-1 sm:self-start shrink-0"
                   :disabled="isSavingProfile || (field.key === 'username' && editingFields.username && !canSaveUsername)"
                   icon="pi pi-pencil"
                   variant="text"
@@ -376,7 +382,7 @@ function revokeAvatarPreview() {
                   </template>
                 </PButton>
 
-                <div class="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+                <div class="col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
                   <PInputText
                     v-if="editingFields[field.key] && field.type === 'text'"
                     :id="`profile-${field.key}`"

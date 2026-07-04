@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
 export type ProfileTab = "profile" | "requests" | "close" | "blocked" | "settings" | "sessions" | "system";
 
-defineProps<{
+const props = withDefaults(defineProps<{
   activeTab: ProfileTab;
-}>();
+  showRequests?: boolean;
+}>(), {
+  showRequests: true,
+});
 
 const emit = defineEmits<{
   "update:activeTab": [tab: ProfileTab];
@@ -23,6 +27,7 @@ const tabs: Array<{ key: ProfileTab; icon: string }> = [
   { key: "sessions", icon: "pi pi-desktop" },
   { key: "system", icon: "pi pi-cog" },
 ];
+const visibleTabs = computed(() => tabs.filter((tab) => props.showRequests || tab.key !== "requests"));
 </script>
 
 <template>
@@ -39,7 +44,7 @@ const tabs: Array<{ key: ProfileTab; icon: string }> = [
     <div class="w-px h-7 lg:w-7 lg:h-px bg-[var(--surface-active)] mx-1 lg:mx-0" aria-hidden="true"></div>
     <div class="flex lg:flex-col items-center gap-2">
       <PButton
-        v-for="tab in tabs"
+        v-for="tab in visibleTabs"
         :key="tab.key"
         v-tooltip.right="t(`profile.${tab.key}`)"
         :icon="tab.icon"

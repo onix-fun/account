@@ -113,11 +113,10 @@ async function remove(user: PublicUser) {
         <div class="relative">
           <PInputText
             v-model="addSearch"
-            class="w-full !pl-11"
+            class="w-full"
             :placeholder="t('social.searchFollowingPlaceholder')"
             autocomplete="off"
           />
-          <i class="pi pi-search absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"></i>
         </div>
 
         <div class="grid gap-1.5 max-h-[55vh] overflow-y-auto pr-1">

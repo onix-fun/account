@@ -49,7 +49,36 @@ const logoutCurrent = async () => {
   }
 };
 
-const sessionDevice = (session: AuthSession) => session.userAgent || session.deviceId || t("profile.unknownDevice");
+const sessionDevice = (session: AuthSession) => {
+  const browser = sessionBrowser(session.userAgent);
+  const platform = sessionPlatform(session.userAgent);
+  if (browser && platform) return `${browser} · ${platform}`;
+  return session.userAgent || session.deviceId || t("profile.unknownDevice");
+};
+const sessionBrowser = (userAgent?: string | null) => {
+  if (!userAgent) return "";
+  if (/Edg\//.test(userAgent)) return "Edge";
+  if (/Firefox\//.test(userAgent)) return "Firefox";
+  if (/Chrome\//.test(userAgent) && !/Chromium\//.test(userAgent)) return "Chrome";
+  if (/Safari\//.test(userAgent) && /Version\//.test(userAgent)) return "Safari";
+  return "";
+};
+const sessionPlatform = (userAgent?: string | null) => {
+  if (!userAgent) return "";
+  if (/iPad/.test(userAgent)) return "iPadOS";
+  if (/iPhone/.test(userAgent)) return "iOS";
+  if (/Android/.test(userAgent)) return "Android";
+  if (/Mac OS X|Macintosh/.test(userAgent)) return "macOS";
+  if (/Windows/.test(userAgent)) return "Windows";
+  if (/Linux/.test(userAgent)) return "Linux";
+  return "";
+};
+const sessionIcon = (session: AuthSession) => {
+  const userAgent = session.userAgent || "";
+  if (/iPad|Tablet/.test(userAgent)) return "pi pi-tablet";
+  if (/Mobile|Android|iPhone/.test(userAgent)) return "pi pi-mobile";
+  return "pi pi-desktop";
+};
 const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleString() : t("common.unknown"));
 </script>
 
@@ -87,42 +116,172 @@ const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleS
       <article
         v-for="session in authStore.sessions"
         :key="session.id"
-        class="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3.5 rounded-xl transition-colors bg-[var(--surface)] border-0"
-        :class="{ '!bg-[var(--surface-active)]': session.isCurrent }"
+        class="session-card"
+        :class="{ 'session-card-current': session.isCurrent }"
       >
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
-          <i class="pi pi-desktop text-lg"></i>
+        <div class="session-heading">
+          <span class="session-icon" aria-hidden="true">
+            <i :class="sessionIcon(session)"></i>
+          </span>
+          <span class="session-title-wrap">
+            <strong class="session-title">{{ sessionDevice(session) }}</strong>
+            <span v-if="session.isCurrent" class="session-badge">{{ t("common.current") }}</span>
+          </span>
         </div>
-        <div class="flex-1 min-w-0 grid gap-0.5">
-          <strong class="text-sm font-bold text-[var(--text)] truncate">
-            {{ sessionDevice(session) }}
-            <span v-if="session.isCurrent" class="text-[var(--muted)] font-medium">({{ t("common.current") }})</span>
-          </strong>
-          <small class="text-[13px] text-[var(--muted)]">
-            {{ session.ipAddress || t("common.unknown") }} · {{ t("profile.lastActive") }}
-            {{ formatDate(session.lastUsedAt) }}
-          </small>
+
+        <div class="session-meta">
+          <div class="session-meta-item">
+            <span>{{ t("profile.ipAddress") }}</span>
+            <strong>{{ session.ipAddress || t("common.unknown") }}</strong>
+          </div>
+          <div class="session-meta-item">
+            <span>{{ t("profile.lastActive") }}</span>
+            <strong>{{ formatDate(session.lastUsedAt) }}</strong>
+          </div>
+          <div class="session-meta-item">
+            <span>{{ t("profile.createdAt") }}</span>
+            <strong>{{ formatDate(session.createdAt) }}</strong>
+          </div>
+          <div class="session-meta-item">
+            <span>{{ t("profile.expires") }}</span>
+            <strong>{{ formatDate(session.expiresAt) }}</strong>
+          </div>
         </div>
-        <span class="text-[13px] text-[var(--muted)] whitespace-nowrap">{{ t("profile.expires") }} {{ formatDate(session.expiresAt) }}</span>
-        <PButton
-          v-if="session.isCurrent"
-          :label="t('profile.logout')"
-          variant="text"
-          severity="danger"
-          size="small"
-          class="self-end sm:self-center"
-          @click="logoutCurrent"
-        />
-        <PButton
-          v-else
-          :label="t('profile.revoke')"
-          variant="text"
-          severity="danger"
-          size="small"
-          class="self-end sm:self-center"
-          @click="revokeSession(session)"
-        />
+
+        <div class="session-actions">
+          <PButton
+            v-if="session.isCurrent"
+            :label="t('profile.logout')"
+            icon="pi pi-sign-out"
+            variant="text"
+            severity="danger"
+            size="small"
+            @click="logoutCurrent"
+          />
+          <PButton
+            v-else
+            :label="t('profile.revoke')"
+            icon="pi pi-times"
+            variant="text"
+            severity="danger"
+            size="small"
+            @click="revokeSession(session)"
+          />
+        </div>
       </article>
     </div>
   </section>
 </template>
+
+<style scoped>
+.session-card {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 0;
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+
+.session-card-current {
+  background: var(--surface-active);
+}
+
+.session-icon {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.session-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-title-wrap {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-title {
+  min-width: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-badge {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--btn-primary-text);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.session-meta {
+  display: grid;
+  gap: 6px;
+}
+
+.session-meta-item {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-meta-item span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.session-meta-item strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-actions {
+  justify-self: end;
+}
+
+@media (min-width: 640px) {
+  .session-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px 16px;
+  }
+
+  .session-heading,
+  .session-meta {
+    grid-column: 1;
+  }
+
+  .session-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+}
+</style>

@@ -52,4 +52,14 @@ describe("ProfileMobileMenu", () => {
     expect(wrapper.emitted("search")).toHaveLength(1);
     expect(wrapper.emitted("openView")).toEqual([["profile"], ["blocked"]]);
   });
+
+  it("hides follow requests for public profiles", () => {
+    const wrapper = mount(ProfileMobileMenu, {
+      props: { showRequests: false },
+      global: { plugins: [i18n] },
+    });
+
+    expect(wrapper.text()).not.toContain("Requests");
+    expect(wrapper.findAll(".profile-menu-row")).toHaveLength(7);
+  });
 });

@@ -1,6 +1,13 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ProfileTab } from "@/features/profile/ui/ProfileNav.vue";
+
+const props = withDefaults(defineProps<{
+  showRequests?: boolean;
+}>(), {
+  showRequests: true,
+});
 
 defineEmits<{
   search: [];
@@ -18,6 +25,7 @@ const menuItems: Array<{ key: ProfileTab; icon: string; description: string }> =
   { key: "sessions", icon: "pi pi-desktop", description: "profile.menu.sessions" },
   { key: "system", icon: "pi pi-cog", description: "profile.menu.system" },
 ];
+const visibleMenuItems = computed(() => menuItems.filter((item) => props.showRequests || item.key !== "requests"));
 </script>
 
 <template>
@@ -32,7 +40,7 @@ const menuItems: Array<{ key: ProfileTab; icon: string; description: string }> =
     </button>
 
     <button
-      v-for="item in menuItems"
+      v-for="item in visibleMenuItems"
       :key="item.key"
       class="profile-menu-row"
       type="button"

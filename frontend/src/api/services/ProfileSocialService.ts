@@ -63,6 +63,8 @@ export type NotificationAction =
 
 export interface NotificationMetadata {
   href?: string;
+  titleKey?: string;
+  bodyKey?: string;
   actions: NotificationAction[];
 }
 
@@ -115,6 +117,8 @@ export function parseNotificationMetadata(input?: string | Partial<NotificationM
   const actions = Array.isArray(source.actions) ? source.actions.map(normalizeAction).filter(Boolean) as NotificationAction[] : [];
   return {
     href: typeof source.href === "string" ? source.href : undefined,
+    titleKey: typeof source.titleKey === "string" ? source.titleKey : undefined,
+    bodyKey: typeof source.bodyKey === "string" ? source.bodyKey : undefined,
     actions,
   };
 }
