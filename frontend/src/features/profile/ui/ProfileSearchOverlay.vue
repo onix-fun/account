@@ -10,9 +10,11 @@ const props = withDefaults(defineProps<{
   visible: boolean;
   mode?: "default" | "close-friends" | "blocked";
   followingCandidates?: RelatedUser[];
+  page?: boolean;
 }>(), {
   mode: "default",
   followingCandidates: () => [],
+  page: false,
 });
 
 const emit = defineEmits<{
@@ -46,6 +48,7 @@ watch(
     await nextTick();
     searchInput.value?.focus();
   },
+  { immediate: true },
 );
 
 watch(
@@ -96,7 +99,58 @@ async function runAction(user: PublicUser, action: () => Promise<void>, successK
 </script>
 
 <template>
+  <section v-if="page && visible" class="grid gap-3">
+    <header class="grid gap-3">
+      <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="emit('close')" />
+      <div class="flex items-center gap-3 px-1">
+        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+          <i class="pi pi-search"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h2 class="m-0 text-base font-bold text-[var(--text)]">{{ title }}</h2>
+          <p class="m-0 text-xs text-[var(--muted)]">{{ t("social.searchShortcutStyle") }}</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="relative">
+      <PInputText
+        ref="searchInput"
+        v-model="query"
+        class="w-full !pl-11"
+        :placeholder="t('social.searchPlaceholder')"
+        autocomplete="off"
+        @keydown.esc="emit('close')"
+      />
+      <i class="pi pi-search absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"></i>
+    </div>
+
+    <div class="grid gap-1.5 overflow-y-auto pr-1">
+      <div v-if="isSearching" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
+        <i class="pi pi-spinner pi-spin mr-2"></i>{{ t("common.loading") }}
+      </div>
+      <div v-else-if="!results.length" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
+        {{ emptyText }}
+      </div>
+      <ProfileUserRow
+        v-for="user in results"
+        v-else
+        :key="user.id"
+        :user="user"
+        :relationship="user.relationship"
+        :mode="mode === 'close-friends' ? 'close-add' : 'default'"
+        :busy="busyUserId === user.id"
+        @follow="(target) => runAction(target, () => socialStore.follow(target).then(() => undefined), 'social.followActionDone')"
+        @unfollow="(target) => runAction(target, () => socialStore.unfollow(target), 'social.unfollowActionDone')"
+        @block="(target) => runAction(target, () => socialStore.block(target), 'social.blockActionDone')"
+        @unblock="(target) => runAction(target, () => socialStore.unblock(target), 'social.unblockActionDone')"
+        @add-close="(target) => runAction(target, () => socialStore.addCloseFriend(target), 'social.closeFriendAdded')"
+      />
+    </div>
+  </section>
+
   <PDialog
+    v-else
     :visible="visible"
     modal
     dismissable-mask

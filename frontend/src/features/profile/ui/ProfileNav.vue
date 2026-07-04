@@ -28,12 +28,12 @@ const tabs: Array<{ key: ProfileTab; icon: string }> = [
 <template>
   <nav class="lg:sticky lg:top-6 flex lg:flex-col items-center justify-center gap-2" aria-label="Profile sections">
     <PButton
+      v-tooltip.right="t('social.search')"
       icon="pi pi-search"
       variant="text"
       severity="secondary"
       class="w-11 h-11 border-0"
       :aria-label="t('social.search')"
-      :title="t('social.search')"
       @click="emit('search')"
     />
     <div class="w-px h-7 lg:w-7 lg:h-px bg-[var(--surface-active)] mx-1 lg:mx-0" aria-hidden="true"></div>
@@ -41,12 +41,12 @@ const tabs: Array<{ key: ProfileTab; icon: string }> = [
       <PButton
         v-for="tab in tabs"
         :key="tab.key"
+        v-tooltip.right="t(`profile.${tab.key}`)"
         :icon="tab.icon"
         :variant="activeTab === tab.key ? 'primary' : 'text'"
         :severity="activeTab === tab.key ? undefined : 'secondary'"
         class="w-11 h-11 border-0"
         :aria-label="t(`profile.${tab.key}`)"
-        :title="t(`profile.${tab.key}`)"
         @click="emit('update:activeTab', tab.key)"
       />
     </div>

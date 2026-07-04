@@ -71,6 +71,7 @@
     "blocked": "Blocked",
     "settings": "Settings",
     "sessions": "Sessions",
+    "system": "System",
     "switchAccount": "Switch account",
     "addAccount": "Add account",
     "signOutAll": "Sign out all",
@@ -105,7 +106,17 @@
     "accountsTitle": "Accounts",
     "zoom": "Zoom",
     "rotate": "Rotate",
-    "cropInstructions": "Drag the image and adjust zoom."
+    "cropInstructions": "Drag the image and adjust zoom.",
+    "menu": {
+      "search": "Find people and manage relationships.",
+      "profile": "Name, username, avatar, and profile bio.",
+      "requests": "Incoming follow requests.",
+      "close": "Close friends and adding from following.",
+      "blocked": "People you have blocked.",
+      "settings": "Profile privacy and notification settings.",
+      "sessions": "Active devices and account sign-out.",
+      "system": "Language, theme, email, password, and account deletion."
+    }
   },
   "social": {
     "notifications": "Notifications",

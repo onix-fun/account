@@ -80,21 +80,21 @@ async function markAllRead() {
 
 <template>
   <section class="grid gap-4">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-h-[40px]">
-      <div class="flex items-center gap-2 min-w-0">
-        <PButton icon="pi pi-arrow-left" variant="text" severity="secondary" class="w-10 h-10 -ml-2" :aria-label="t('common.back')" @click="emit('back')" />
+    <div class="grid gap-2">
+      <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="emit('back')" />
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-h-[40px]">
         <h2 class="text-base font-bold m-0 text-[var(--text)] truncate">{{ t("social.notifications") }}</h2>
+        <PButton
+          icon="pi pi-check-circle"
+          :label="t('social.markAllRead')"
+          variant="text"
+          severity="secondary"
+          size="small"
+          :loading="busyKey === 'read-all'"
+          :disabled="!socialStore.notifications.items.length"
+          @click="markAllRead"
+        />
       </div>
-      <PButton
-        icon="pi pi-check-circle"
-        :label="t('social.markAllRead')"
-        variant="text"
-        severity="secondary"
-        size="small"
-        :loading="busyKey === 'read-all'"
-        :disabled="!socialStore.notifications.items.length"
-        @click="markAllRead"
-      />
     </div>
 
     <div class="grid gap-1.5">

@@ -43,7 +43,7 @@ onBeforeUnmount(() => document.removeEventListener("click", closeOnOutsideClick)
   </div>
   <div v-else ref="root" class="relative inline-block text-left" @keydown.esc="isOpen = false">
     <button
-      class="min-w-[120px] min-h-[40px] border-0 rounded-[10px] bg-[var(--surface-muted)] text-[var(--text)] px-3 flex items-center justify-between gap-4 text-xs font-bold hover:bg-[var(--surface-active)] transition-colors cursor-pointer"
+      class="min-w-[104px] min-h-[40px] border-0 rounded-[10px] bg-[var(--surface-muted)] text-[var(--text)] px-3 flex items-center justify-between gap-3 text-xs font-bold hover:bg-[var(--surface-active)] transition-colors cursor-pointer"
       type="button"
       :aria-label="t('auth.language')"
       :aria-expanded="isOpen"

@@ -14,6 +14,7 @@ import BlockedUsersTab from "@/features/profile/ui/BlockedUsersTab.vue";
 import CloseFriendsTab from "@/features/profile/ui/CloseFriendsTab.vue";
 import NotificationsPage from "@/features/profile/ui/NotificationsPage.vue";
 import ProfileListPage from "@/features/profile/ui/ProfileListPage.vue";
+import ProfileMobileMenu from "@/features/profile/ui/ProfileMobileMenu.vue";
 import ProfileNav, { type ProfileTab } from "@/features/profile/ui/ProfileNav.vue";
 import ProfileSearchOverlay from "@/features/profile/ui/ProfileSearchOverlay.vue";
 import ProfileTopCard from "@/features/profile/ui/ProfileTopCard.vue";
@@ -22,7 +23,7 @@ import SessionsTab from "@/features/sessions/ui/SessionsTab.vue";
 import SocialSettingsTab from "@/features/profile/ui/SocialSettingsTab.vue";
 import SystemTab from "@/features/profile/ui/SystemTab.vue";
 
-type ProfileView = "followers" | "following" | "notifications";
+type ProfileView = ProfileTab | "followers" | "following" | "notifications" | "search";
 type EditableProfileField = "username" | "firstName" | "lastName" | "bio";
 type UsernameAvailability = "idle" | "checking" | "available" | "taken" | "invalid";
 
@@ -63,8 +64,9 @@ const backUrl = computed(() => trustedRedirectUrl(route.query.redirect));
 const avatarPreview = computed(() => avatarPreviewUrl.value || authStore.currentUser?.avatarUrl || "");
 const queryView = computed<ProfileView | null>(() => {
   const value = route.query.view;
-  return value === "followers" || value === "following" || value === "notifications" ? value : null;
+  return isProfileView(value) ? value : null;
 });
+const contentView = computed<ProfileView>(() => queryView.value ?? activeTab.value);
 const isProfileDirty = computed(() => {
   const user = authStore.currentUser;
   return (
@@ -164,6 +166,22 @@ function closeView() {
   const nextQuery = { ...route.query };
   delete nextQuery.view;
   router.push({ query: nextQuery });
+}
+
+function isProfileView(value: unknown): value is ProfileView {
+  return (
+    value === "profile" ||
+    value === "requests" ||
+    value === "close" ||
+    value === "blocked" ||
+    value === "settings" ||
+    value === "sessions" ||
+    value === "system" ||
+    value === "followers" ||
+    value === "following" ||
+    value === "notifications" ||
+    value === "search"
+  );
 }
 
 function openFieldEdit(field: EditableProfileField) {
@@ -278,17 +296,28 @@ function revokeAvatarPreview() {
       class="grid grid-cols-1 justify-center items-start gap-7"
       :class="queryView ? 'max-w-[720px] w-full mx-auto' : 'lg:grid-cols-[52px_minmax(0,720px)]'"
     >
-      <ProfileNav v-if="!queryView" v-model:active-tab="activeTab" @search="isSearchOpen = true" />
+      <div v-if="!queryView" class="hidden lg:block">
+        <ProfileNav v-model:active-tab="activeTab" @search="isSearchOpen = true" />
+      </div>
+      <ProfileMobileMenu v-if="!queryView" @search="openView('search')" @open-view="openView" />
 
-      <div class="min-w-0">
+      <div class="min-w-0" :class="{ 'hidden lg:block': !queryView }">
+        <ProfileSearchOverlay
+          v-if="contentView === 'search'"
+          visible
+          page
+          @close="closeView"
+          @message="setMessage"
+        />
+
         <NotificationsPage
-          v-if="queryView === 'notifications'"
+          v-else-if="contentView === 'notifications'"
           @back="closeView"
           @message="setMessage"
         />
 
         <ProfileListPage
-          v-else-if="queryView === 'followers'"
+          v-else-if="contentView === 'followers'"
           :title="t('social.followers')"
           :items="socialStore.followers.items"
           :total-count="socialStore.followers.totalCount"
@@ -303,7 +332,7 @@ function revokeAvatarPreview() {
         />
 
         <ProfileListPage
-          v-else-if="queryView === 'following'"
+          v-else-if="contentView === 'following'"
           :title="t('social.following')"
           :items="socialStore.following.items"
           :total-count="socialStore.following.totalCount"
@@ -317,8 +346,9 @@ function revokeAvatarPreview() {
           @message="setMessage"
         />
 
-        <section v-else-if="activeTab === 'profile'" class="grid gap-4">
+        <section v-else-if="contentView === 'profile'" class="grid gap-4">
           <div class="flex items-center justify-between gap-3 min-h-[40px]">
+            <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2" @click="closeView" />
             <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.profile") }}</h2>
           </div>
 
@@ -327,12 +357,26 @@ function revokeAvatarPreview() {
               <article
                 v-for="field in editableProfileFields"
                 :key="field.key"
-                class="grid grid-cols-[1fr_auto] sm:grid-cols-[132px_1fr_auto] items-center gap-3 sm:gap-4 bg-[var(--surface)] p-3 sm:p-4 rounded-xl transition-colors border-0"
+                class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[132px_minmax(0,1fr)_auto] items-center gap-3 sm:gap-4 bg-[var(--surface)] p-3 sm:p-4 rounded-xl transition-colors border-0"
                 :class="{ 'bg-[var(--surface-active)]': editingFields[field.key] }"
               >
                 <label class="text-[13px] font-bold text-[var(--muted)]" :for="`profile-${field.key}`">{{ field.label }}</label>
 
-                <div class="col-span-2 sm:col-span-1 min-w-0">
+                <PButton
+                  class="self-center justify-self-end sm:col-start-3 sm:row-start-1 sm:self-start shrink-0"
+                  :disabled="isSavingProfile || (field.key === 'username' && editingFields.username && !canSaveUsername)"
+                  icon="pi pi-pencil"
+                  variant="text"
+                  severity="secondary"
+                  rounded
+                  @click="editingFields[field.key] ? confirmFieldEdit(field.key) : openFieldEdit(field.key)"
+                >
+                  <template #icon>
+                    <i :class="isSavingProfile && editingFields[field.key] ? 'pi pi-spinner pi-spin' : editingFields[field.key] ? 'pi pi-check' : 'pi pi-pencil'"></i>
+                  </template>
+                </PButton>
+
+                <div class="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
                   <PInputText
                     v-if="editingFields[field.key] && field.type === 'text'"
                     :id="`profile-${field.key}`"
@@ -377,31 +421,40 @@ function revokeAvatarPreview() {
                     }}
                   </div>
                 </div>
-
-                <PButton
-                  class="self-center sm:self-start"
-                  :disabled="isSavingProfile || (field.key === 'username' && editingFields.username && !canSaveUsername)"
-                  icon="pi pi-pencil"
-                  variant="text"
-                  severity="secondary"
-                  rounded
-                  @click="editingFields[field.key] ? confirmFieldEdit(field.key) : openFieldEdit(field.key)"
-                >
-                  <template #icon>
-                    <i :class="isSavingProfile && editingFields[field.key] ? 'pi pi-spinner pi-spin' : editingFields[field.key] ? 'pi pi-check' : 'pi pi-pencil'"></i>
-                  </template>
-                </PButton>
               </article>
             </div>
           </form>
         </section>
 
-        <RequestsTab v-else-if="activeTab === 'requests'" @message="setMessage" />
-        <CloseFriendsTab v-else-if="activeTab === 'close'" @message="setMessage" />
-        <BlockedUsersTab v-else-if="activeTab === 'blocked'" @message="setMessage" />
-        <SocialSettingsTab v-else-if="activeTab === 'settings'" @message="setMessage" />
-        <SessionsTab v-else-if="activeTab === 'sessions'" @message="setMessage" />
-        <SystemTab v-else @message="setMessage" />
+        <section v-else-if="contentView === 'requests'" class="grid gap-4">
+          <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
+          <RequestsTab @message="setMessage" />
+        </section>
+
+        <section v-else-if="contentView === 'close'" class="grid gap-4">
+          <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
+          <CloseFriendsTab @message="setMessage" />
+        </section>
+
+        <section v-else-if="contentView === 'blocked'" class="grid gap-4">
+          <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
+          <BlockedUsersTab @message="setMessage" />
+        </section>
+
+        <section v-else-if="contentView === 'settings'" class="grid gap-4">
+          <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
+          <SocialSettingsTab @message="setMessage" />
+        </section>
+
+        <section v-else-if="contentView === 'sessions'" class="grid gap-4">
+          <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
+          <SessionsTab @message="setMessage" />
+        </section>
+
+        <section v-else class="grid gap-4">
+          <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
+          <SystemTab @message="setMessage" />
+        </section>
       </div>
     </div>
 

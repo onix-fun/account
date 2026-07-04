@@ -154,7 +154,7 @@ const deleteAccount = async () => {
       <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("system.title") }}</h2>
     </div>
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <section class="bg-[var(--surface)] p-4 rounded-2xl flex flex-row items-center justify-between gap-3">
       <div class="flex items-center gap-3.5 min-w-0">
         <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
           <i class="pi pi-language text-lg"></i>
@@ -164,7 +164,7 @@ const deleteAccount = async () => {
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed truncate">{{ t("system.languageHint") }}</p>
         </div>
       </div>
-      <LocaleSwitcher variant="dropdown" class="shrink-0 w-full sm:w-auto" />
+      <LocaleSwitcher variant="dropdown" class="shrink-0" />
     </section>
 
     <section class="bg-[var(--surface)] p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">

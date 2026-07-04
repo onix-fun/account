@@ -85,7 +85,7 @@ async function setPref(key: keyof NotificationPrefs, value: boolean) {
       </div>
 
       <div class="grid gap-1.5">
-        <article v-for="row in prefRows" :key="row.key" class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[var(--surface-muted)]">
+        <article v-for="row in prefRows" :key="row.key" class="flex flex-row items-center justify-between gap-3 p-3 rounded-xl bg-[var(--surface-muted)]">
           <div class="flex items-center gap-3 min-w-0">
             <span class="w-9 h-9 rounded-lg bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] shrink-0">
               <i :class="row.icon"></i>
@@ -143,8 +143,8 @@ async function setPref(key: keyof NotificationPrefs, value: boolean) {
 }
 
 .profile-switch {
-  width: 54px;
-  height: 32px;
+  width: 44px;
+  height: 26px;
   border: 0;
   padding: 0;
   border-radius: 999px;
@@ -154,8 +154,8 @@ async function setPref(key: keyof NotificationPrefs, value: boolean) {
 }
 
 .profile-switch-track {
-  width: 54px;
-  height: 32px;
+  width: 44px;
+  height: 26px;
   border-radius: 999px;
   padding: 3px;
   display: block;
@@ -164,8 +164,8 @@ async function setPref(key: keyof NotificationPrefs, value: boolean) {
 }
 
 .profile-switch-thumb {
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
@@ -183,7 +183,7 @@ async function setPref(key: keyof NotificationPrefs, value: boolean) {
 }
 
 .profile-switch[aria-checked="true"] .profile-switch-thumb {
-  transform: translateX(22px);
+  transform: translateX(18px);
 }
 
 .profile-switch:disabled {

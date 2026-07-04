@@ -168,6 +168,41 @@ html, body, #app {
   padding: 0 !important;
 }
 
+.p-tooltip {
+  --p-tooltip-background: var(--surface-raised);
+  --p-tooltip-color: var(--text);
+  --p-tooltip-shadow: var(--shadow);
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+}
+
+.p-tooltip .p-tooltip-text {
+  background: var(--surface-raised) !important;
+  color: var(--text) !important;
+  border-radius: 9px !important;
+  padding: 7px 9px !important;
+  box-shadow: var(--shadow) !important;
+  border: 1px solid var(--surface-active) !important;
+}
+
+.p-tooltip-right .p-tooltip-arrow {
+  border-right-color: var(--surface-raised) !important;
+}
+
+.p-tooltip-left .p-tooltip-arrow {
+  border-left-color: var(--surface-raised) !important;
+}
+
+.p-tooltip-top .p-tooltip-arrow {
+  border-top-color: var(--surface-raised) !important;
+}
+
+.p-tooltip-bottom .p-tooltip-arrow {
+  border-bottom-color: var(--surface-raised) !important;
+}
+
 /* Toast Restoration and Fix */
 .p-toast {
   max-width: 380px !important;
