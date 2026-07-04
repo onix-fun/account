@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
 import type { AuthSession } from "@/domain";
 import { useAuthStore } from "@/infra/store";
+import QrLoginDialog from "@/features/sessions/ui/QrLoginDialog.vue";
 
 const emit = defineEmits<{
   message: [message: string, tone?: "success" | "error" | "warning"];
@@ -12,6 +13,7 @@ const emit = defineEmits<{
 const authStore = useAuthStore();
 const { t } = useI18n();
 const isLoadingSessions = ref(false);
+const isQrDialogOpen = ref(false);
 
 const refreshSessions = async () => {
   isLoadingSessions.value = true;
@@ -47,6 +49,15 @@ const logoutCurrent = async () => {
   } catch (cause) {
     emit("message", apiErrorMessage(cause), "error");
   }
+};
+
+const onQrConsumed = async () => {
+  isQrDialogOpen.value = false;
+  await refreshSessions();
+};
+
+const forwardQrMessage = (message: string, tone?: "success" | "error" | "warning" | "info") => {
+  emit("message", message, tone === "info" ? "success" : tone);
 };
 
 const sessionDevice = (session: AuthSession) => {
@@ -87,6 +98,15 @@ const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleS
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 min-h-[40px]">
       <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.sessions") }}</h2>
       <div class="flex gap-2 w-full sm:w-auto">
+        <PButton
+          icon="pi pi-qrcode"
+          :label="t('auth.qr.otherDeviceAction')"
+          variant="text"
+          severity="secondary"
+          size="small"
+          class="flex-1 sm:flex-initial"
+          @click="isQrDialogOpen = true"
+        />
         <PButton
           icon="pi pi-refresh"
           :label="t('profile.refresh')"
@@ -170,6 +190,13 @@ const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleS
         </div>
       </article>
     </div>
+
+    <QrLoginDialog
+      :visible="isQrDialogOpen"
+      @close="isQrDialogOpen = false"
+      @consumed="onQrConsumed"
+      @message="forwardQrMessage"
+    />
   </section>
 </template>
 

@@ -57,6 +57,21 @@ export const useAuthStore = defineStore("auth", () => {
     }
   };
 
+  const consumeQrLogin = async (payload: { scanToken?: string; manualCode?: string }) => {
+    isLoading.value = true;
+    error.value = null;
+    try {
+      currentUser.value = await AuthService.consumeQrLogin(payload);
+      syncAccounts();
+      await fetchSessions();
+    } catch (cause) {
+      error.value = apiErrorMessage(cause);
+      throw cause;
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
   const register = async (payload: {
     email: string;
     username: string;
@@ -284,6 +299,7 @@ export const useAuthStore = defineStore("auth", () => {
     switchAccount,
     promptAddAccount,
     login,
+    consumeQrLogin,
     register,
     confirmRegistration,
     resendRegistrationCode,

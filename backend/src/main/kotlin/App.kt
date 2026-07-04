@@ -100,7 +100,7 @@ fun Application.module() {
     install(DefaultHeaders) {
         header("X-Content-Type-Options", "nosniff")
         header("X-Frame-Options", "DENY")
-        header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        header("Permissions-Policy", "camera=(self), microphone=(), geolocation=()")
         val csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; font-src 'self'; connect-src 'self' http://localhost:8089 http://127.0.0.1:8089 http://localhost:8091 http://127.0.0.1:8091; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
         header("Content-Security-Policy", csp)
     }
@@ -200,6 +200,16 @@ fun Application.module() {
                 else -> ValidationResult.Valid
             }
         }
+        validate<QrLoginConsumeRequest> { request ->
+            val hasScanToken = !request.scanToken.isNullOrBlank()
+            val hasManualCode = !request.manualCode.isNullOrBlank()
+            when {
+                hasScanToken == hasManualCode -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "scanToken,manualCode")
+                hasManualCode && request.manualCode.orEmpty().filter(Char::isLetterOrDigit).length != 12 ->
+                    invalid(profile.shared.ApiErrorCode.AUTH_QR_CODE_INVALID, "manualCode")
+                else -> ValidationResult.Valid
+            }
+        }
         validate<RequestEmailChangeRequest> { request ->
             when {
                 request.currentPassword.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "currentPassword")
@@ -238,6 +248,8 @@ fun Application.module() {
         route("/api/auth/token/refresh", max = 30, windowSeconds = 60)
         route("/api/auth/refresh", max = 30, windowSeconds = 60)
         route("/api/auth/switch", max = 30, windowSeconds = 60)
+        route("/api/auth/qr/consume", max = 20, windowSeconds = 60)
+        route("/api/auth/qr/challenges", max = 20, windowSeconds = 60)
         route("/api/auth/logout", max = 30, windowSeconds = 60)
         route("/api/users/me/avatar", max = 20, windowSeconds = 60)
     }

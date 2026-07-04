@@ -154,7 +154,7 @@ async function runAction(user: PublicUser, action: () => Promise<void>, successK
     modal
     dismissable-mask
     :show-header="false"
-    class="w-[min(720px,calc(100vw-24px))]"
+    class="mobile-fullscreen-dialog w-[min(720px,calc(100vw-24px))]"
     @update:visible="emit('close')"
   >
     <section class="grid gap-3 p-2 sm:p-3">

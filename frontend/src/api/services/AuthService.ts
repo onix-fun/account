@@ -43,6 +43,21 @@ interface LoginPayload {
   password: string;
 }
 
+export interface QrLoginChallenge {
+  id: string;
+  scanToken: string;
+  manualCode: string;
+  status: "PENDING" | "CONSUMED" | "CANCELLED" | "EXPIRED";
+  expiresAt: string;
+}
+
+export interface QrLoginChallengeStatus {
+  id: string;
+  status: "PENDING" | "CONSUMED" | "CANCELLED" | "EXPIRED";
+  expiresAt: string;
+  consumedAt?: string | null;
+}
+
 interface UpdateProfilePayload {
   username?: string;
   firstName?: string;
@@ -119,6 +134,31 @@ export class AuthService {
 
   static async login(payload: LoginPayload): Promise<User> {
     const response = await profileClient.post<BrowserAuthResponse>("/auth/login", {
+      ...payload,
+      deviceId: DeviceIdManager.getId(),
+    });
+    const user = rememberUser(normalizeUser(response.data.user));
+    await this.loadAccounts();
+    return user;
+  }
+
+  static async createQrLoginChallenge(): Promise<QrLoginChallenge> {
+    const response = await profileClient.post<QrLoginChallenge>("/auth/qr/challenges");
+    return response.data;
+  }
+
+  static async getQrLoginChallenge(id: string): Promise<QrLoginChallengeStatus> {
+    const response = await profileClient.get<QrLoginChallengeStatus>(`/auth/qr/challenges/${id}`);
+    return response.data;
+  }
+
+  static async cancelQrLoginChallenge(id: string): Promise<QrLoginChallengeStatus> {
+    const response = await profileClient.delete<QrLoginChallengeStatus>(`/auth/qr/challenges/${id}`);
+    return response.data;
+  }
+
+  static async consumeQrLogin(payload: { scanToken?: string; manualCode?: string }): Promise<User> {
+    const response = await profileClient.post<BrowserAuthResponse>("/auth/qr/consume", {
       ...payload,
       deviceId: DeviceIdManager.getId(),
     });

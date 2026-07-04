@@ -112,7 +112,39 @@ fun Route.authRouting(authController: AuthController, sessionController: Session
             response { code(HttpStatusCode.OK) { description = "Browser session refreshed"; body<BrowserAuthResponse> { } } }
         }) { authController.refresh(call) }
 
+        post("/qr/consume", {
+            tags = setOf("Auth")
+            summary = "Consume QR login code"
+            description = "Consumes a QR login scan token or manual code and starts a browser session"
+            request { body<QrLoginConsumeRequest> { description = "QR token or manual code" } }
+            response { code(HttpStatusCode.OK) { description = "QR login successful"; body<BrowserAuthResponse> { } } }
+        }) { authController.consumeQrChallenge(call) }
+
         authenticate {
+            post("/qr/challenges", {
+                tags = setOf("Auth")
+                securitySchemeNames("BearerToken")
+                summary = "Create QR login challenge"
+                description = "Creates a short-lived one-time QR login challenge for the authenticated account"
+                response { code(HttpStatusCode.Created) { description = "QR login challenge"; body<QrLoginChallengeCreatedResponse> { } } }
+            }) { authController.createQrChallenge(call) }
+
+            get("/qr/challenges/{id}", {
+                tags = setOf("Auth")
+                securitySchemeNames("BearerToken")
+                summary = "Get QR login challenge status"
+                request { pathParameter<String>("id") { description = "QR challenge UUID" } }
+                response { code(HttpStatusCode.OK) { description = "QR login challenge status"; body<QrLoginChallengeStatusResponse> { } } }
+            }) { authController.getQrChallenge(call) }
+
+            delete("/qr/challenges/{id}", {
+                tags = setOf("Auth")
+                securitySchemeNames("BearerToken")
+                summary = "Cancel QR login challenge"
+                request { pathParameter<String>("id") { description = "QR challenge UUID" } }
+                response { code(HttpStatusCode.OK) { description = "QR login challenge cancelled"; body<QrLoginChallengeStatusResponse> { } } }
+            }) { authController.cancelQrChallenge(call) }
+
             post("/verify-email", {
                 tags = setOf("Auth")
                 securitySchemeNames("BearerToken")

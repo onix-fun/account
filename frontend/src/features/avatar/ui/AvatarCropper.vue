@@ -129,11 +129,13 @@ const applyCrop = async () => {
     :visible="true"
     modal
     dismissable-mask
-    class="w-full max-w-[460px]"
+    class="mobile-fullscreen-dialog w-full max-w-[460px]"
     :header="t('profile.cropPhoto')"
     @update:visible="emit('cancel')"
   >
     <div class="grid gap-4 py-2">
+      <h2 class="m-0 text-base font-bold text-[var(--text)] lg:hidden">{{ t("profile.cropPhoto") }}</h2>
+
       <div class="grid gap-3 justify-items-center">
         <div 
           class="w-full max-w-[300px] aspect-square relative overflow-hidden rounded-xl bg-[#101828] touch-none cursor-move"

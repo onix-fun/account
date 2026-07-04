@@ -62,7 +62,25 @@
     "confirmationFailed": "Не удалось подтвердить email",
     "profileFailed": "Не удалось обновить профиль",
     "resetFailed": "Не удалось сбросить пароль",
-    "language": "Язык"
+    "language": "Язык",
+    "qr": {
+      "signInTitle": "Войти по QR",
+      "signInAction": "Войти",
+      "otherDeviceTitle": "Войти на другом устройстве",
+      "otherDeviceAction": "Войти на другом",
+      "generatorHint": "Откройте вход на другом устройстве, нажмите «Войти по QR» и отсканируйте код. QR одноразовый.",
+      "manualCode": "Ручной код",
+      "refreshCode": "Обновить код",
+      "waiting": "Ожидаем сканирование",
+      "consumed": "Вход выполнен",
+      "cancelled": "Код отменён",
+      "expired": "Код истёк",
+      "timeLeft": "Осталось {time}",
+      "loginConfirmed": "Вход на другом устройстве выполнен.",
+      "cameraStarting": "Открываем камеру...",
+      "cameraUnavailable": "Камера недоступна. Введите ручной код.",
+      "cameraDenied": "Не удалось открыть камеру. Проверьте разрешение или введите ручной код."
+    }
   },
   "profile": {
     "profile": "Профиль",
@@ -274,6 +292,10 @@
     "AUTH_CODE_LOCKED": "Слишком много неверных попыток. Запросите новый код.",
     "AUTH_CODE_RESEND_TOO_SOON": "Код уже отправлен. Повторите позже.",
     "AUTH_EMAIL_CHANGE_NOT_FOUND": "Запрос смены email не найден.",
+    "AUTH_QR_CHALLENGE_NOT_FOUND": "QR-код не найден. Создайте новый код.",
+    "AUTH_QR_CHALLENGE_EXPIRED": "QR-код истёк. Создайте новый код.",
+    "AUTH_QR_CHALLENGE_CONSUMED": "QR-код уже использован.",
+    "AUTH_QR_CODE_INVALID": "QR-код неверен или истёк.",
     "AVATAR_INVALID_IMAGE": "Не удалось прочитать изображение.",
     "AVATAR_DIMENSIONS_TOO_LARGE": "Размеры изображения слишком большие.",
     "USER_NOT_FOUND": "Пользователь не найден.",

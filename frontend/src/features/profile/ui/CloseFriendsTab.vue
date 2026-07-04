@@ -106,10 +106,13 @@ async function remove(user: PublicUser) {
       modal
       dismissable-mask
       :header="t('social.addCloseFriend')"
-      class="w-[min(680px,calc(100vw-24px))]"
+      class="mobile-fullscreen-dialog w-[min(680px,calc(100vw-24px))]"
       @update:visible="isAddOpen = false"
     >
       <section class="grid gap-3">
+        <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="mobile-dialog-back" @click="isAddOpen = false" />
+        <h2 class="m-0 text-base font-bold text-[var(--text)] lg:hidden">{{ t("social.addCloseFriend") }}</h2>
+
         <div class="relative">
           <PInputText
             v-model="addSearch"

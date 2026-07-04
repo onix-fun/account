@@ -5,10 +5,25 @@ import { useAuthFlow } from "@/features/auth/model/useAuthFlow";
 import LocaleSwitcher from "@/shared/ui/LocaleSwitcher.vue";
 import VerificationCodeInput from "@/shared/ui/VerificationCodeInput.vue";
 import PasswordInput from "@/shared/ui/PasswordInput.vue";
+import QrLoginScanner from "@/features/auth/ui/QrLoginScanner.vue";
+import { apiErrorMessage } from "@/api/client";
+import { ref } from "vue";
 
 const authStore = useAuthStore();
 const { t } = useI18n();
 const flow = useAuthFlow();
+const isQrScannerOpen = ref(false);
+const qrError = ref("");
+
+async function submitQrLogin(payload: { scanToken?: string; manualCode?: string }) {
+  qrError.value = "";
+  try {
+    await flow.qrLogin(payload);
+    isQrScannerOpen.value = false;
+  } catch (cause) {
+    qrError.value = apiErrorMessage(cause);
+  }
+}
 
 const steps = [
   { key: "account", label: "auth.steps.account", icon: "pi pi-user" },
@@ -64,7 +79,10 @@ const steps = [
           <PButton :label="t('auth.createAccount')" variant="text" severity="secondary" @click="flow.mode.value = 'register'" />
           <PButton type="submit" :label="t('common.continue')" :disabled="flow.isLookupLoading.value || Boolean(flow.identifierError.value)" :loading="flow.isLookupLoading.value" />
         </div>
-        <PButton :label="t('auth.forgotPassword')" variant="text" severity="secondary" size="small" class="self-start -ml-2" @click="flow.showForgotStep" />
+        <div class="flex flex-wrap items-center gap-2">
+          <PButton :label="t('auth.qr.signInTitle')" icon="pi pi-qrcode" variant="text" severity="secondary" size="small" class="-ml-2" @click="isQrScannerOpen = true" />
+          <PButton :label="t('auth.forgotPassword')" variant="text" severity="secondary" size="small" class="-ml-2" @click="flow.showForgotStep" />
+        </div>
       </form>
 
       <form v-else-if="flow.mode.value === 'password'" class="grid gap-4" @submit.prevent="flow.login">
@@ -260,5 +278,12 @@ const steps = [
     </main>
 
     <LocaleSwitcher class="fixed left-1/2 bottom-[max(18px,env(safe-area-inset-bottom))] -translate-x-1/2" />
+    <QrLoginScanner
+      :visible="isQrScannerOpen"
+      :loading="authStore.isLoading"
+      :message="qrError"
+      @close="isQrScannerOpen = false"
+      @submit="submitQrLogin"
+    />
   </section>
 </template>

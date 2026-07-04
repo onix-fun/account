@@ -240,7 +240,7 @@ class AuthService(
         return createSession(user, deviceId, userAgent, ipAddress)
     }
 
-    private fun createSession(user: User, deviceId: String?, userAgent: String?, ipAddress: String?): LoginResult {
+    fun createSession(user: User, deviceId: String?, userAgent: String?, ipAddress: String?): LoginResult {
         val refreshToken = generateRefreshToken()
         val refreshTokenHash = TokenHasher.hash(refreshToken)
 

@@ -250,6 +250,33 @@ class ServerTest {
         val activeCookie = cookieWithPrefix(loginResponse, "active_user=")
         assertNotNull(activeCookie, "Active account cookie not found in response")
 
+        val qrChallengeResponse = client.post("/api/auth/qr/challenges") {
+            header(HttpHeaders.Cookie, cookiePair(accessCookie))
+        }
+        assertEquals(HttpStatusCode.Created, qrChallengeResponse.status, "QR challenge failed: ${qrChallengeResponse.bodyAsText()}")
+        val qrChallengeBody = Json.parseToJsonElement(qrChallengeResponse.bodyAsText()).jsonObject
+        val qrChallengeId = qrChallengeBody["id"]?.toString()?.replace("\"", "")
+        val manualCode = qrChallengeBody["manualCode"]?.toString()?.replace("\"", "")
+        assertNotNull(qrChallengeId)
+        assertNotNull(manualCode)
+        assertNull(qrChallengeBody["refreshToken"], "QR challenge must not expose a session token")
+
+        val qrLoginResponse = client.post("/api/auth/qr/consume") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"manualCode":"$manualCode","deviceId":"qr-device"}""")
+        }
+        assertEquals(HttpStatusCode.OK, qrLoginResponse.status, "QR login failed: ${qrLoginResponse.bodyAsText()}")
+        assertNotNull(cookieWithPrefix(qrLoginResponse, "refresh_token_$userId="), "QR login should set refresh cookie")
+        assertNotNull(cookieWithPrefix(qrLoginResponse, "access_token="), "QR login should set access cookie")
+        assertNotNull(cookieWithPrefix(qrLoginResponse, "active_user="), "QR login should set active account cookie")
+
+        val reusedQrLoginResponse = client.post("/api/auth/qr/consume") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"manualCode":"$manualCode","deviceId":"qr-device-2"}""")
+        }
+        assertEquals(HttpStatusCode.Conflict, reusedQrLoginResponse.status)
+        assertTrue(reusedQrLoginResponse.bodyAsText().contains("\"code\":\"AUTH_QR_CHALLENGE_CONSUMED\""))
+
         // 3. Get sessions using the HttpOnly-style browser access cookie.
         val sessionsResponse = client.get("/api/sessions") {
             header(HttpHeaders.Cookie, cookiePair(accessCookie))

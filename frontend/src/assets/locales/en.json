@@ -62,7 +62,25 @@
     "confirmationFailed": "Confirmation failed",
     "profileFailed": "Profile update failed",
     "resetFailed": "Password reset failed",
-    "language": "Language"
+    "language": "Language",
+    "qr": {
+      "signInTitle": "Sign in with QR",
+      "signInAction": "Sign in",
+      "otherDeviceTitle": "Sign in on another device",
+      "otherDeviceAction": "Sign in elsewhere",
+      "generatorHint": "Open sign-in on another device, choose “Sign in with QR”, and scan this code. The QR code is one-time use.",
+      "manualCode": "Manual code",
+      "refreshCode": "Refresh code",
+      "waiting": "Waiting for scan",
+      "consumed": "Signed in",
+      "cancelled": "Code cancelled",
+      "expired": "Code expired",
+      "timeLeft": "{time} left",
+      "loginConfirmed": "Sign-in on another device completed.",
+      "cameraStarting": "Opening camera...",
+      "cameraUnavailable": "Camera is unavailable. Enter the manual code.",
+      "cameraDenied": "Could not open the camera. Check permission or enter the manual code."
+    }
   },
   "profile": {
     "profile": "Profile",
@@ -274,6 +292,10 @@
     "AUTH_CODE_LOCKED": "Too many incorrect attempts. Request a new code.",
     "AUTH_CODE_RESEND_TOO_SOON": "A code was already sent. Try again later.",
     "AUTH_EMAIL_CHANGE_NOT_FOUND": "Email change request was not found.",
+    "AUTH_QR_CHALLENGE_NOT_FOUND": "QR code was not found. Create a new code.",
+    "AUTH_QR_CHALLENGE_EXPIRED": "QR code expired. Create a new code.",
+    "AUTH_QR_CHALLENGE_CONSUMED": "QR code was already used.",
+    "AUTH_QR_CODE_INVALID": "QR code is invalid or expired.",
     "AVATAR_INVALID_IMAGE": "The image could not be decoded.",
     "AVATAR_DIMENSIONS_TOO_LARGE": "The image dimensions are too large.",
     "USER_NOT_FOUND": "User not found.",
