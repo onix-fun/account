@@ -7,16 +7,16 @@ COPY frontend/ ./
 RUN if [ ! -d "dist" ]; then npm ci && npm run build; fi
 
 # Stage 2: Backend (Build or Use existing)
-FROM maven:3.9.9-eclipse-temurin-23 AS backend-build
+FROM eclipse-temurin:23-jdk AS backend-build
 WORKDIR /src
-COPY backend/pom.xml ./
+COPY backend/gradlew backend/build.gradle.kts backend/settings.gradle.kts backend/gradle.properties ./
+COPY backend/gradle ./gradle
 # Only download dependencies if we actually need to build
 COPY backend/src ./src
-COPY backend/target ./target
-# If the shaded jar already exists, skip maven build
-RUN if [ ! -f "target/"*"-with-dependencies.jar" ]; then \
-    mvn --batch-mode dependency:go-offline && \
-    mvn --batch-mode -DskipTests package; \
+COPY backend/build/libs ./build/libs
+# If the shaded jar already exists, skip gradle build
+RUN if [ ! -f "build/libs/"*"-with-dependencies.jar" ]; then \
+    ./gradlew build -x test; \
     fi
 
 # Stage 3: Runtime
@@ -42,7 +42,7 @@ RUN useradd -M -u 1001 appuser
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
 
 # Copy Backend artifacts
-COPY --from=backend-build /src/target/*-with-dependencies.jar /app/app.jar
+COPY --from=backend-build /src/build/libs/*-with-dependencies.jar /app/app.jar
 
 # Copy OTel agent
 ARG OTEL_JAVA_AGENT_VERSION=2.27.0
