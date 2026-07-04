@@ -10,13 +10,15 @@ import profile.infrastructure.*
 import profile.usecases.*
 import profile.domain.*
 import java.util.UUID
+import profile.users.toBirthdayParts
 
 fun Route.profileRoutes(
     userService: UserService,
     socialRepo: SocialRepo,
     privacyRepo: PrivacyRepo,
     socialUseCases: SocialUseCases,
-    notificationRepo: NotificationRepo
+    notificationRepo: NotificationRepo,
+    birthdayNotificationService: BirthdayNotificationService
 ) {
     route("/api/profile") {
         get("/me") {
@@ -29,6 +31,7 @@ fun Route.profileRoutes(
             val followersCount = socialRepo.countFollowers(uid)
             val followingCount = socialRepo.countFollowing(uid)
             val privacy = privacyRepo.get(uid)
+            runCatching { birthdayNotificationService.generateFor(uid.toString()) }
             val unreadCount = notificationRepo.countUnread(uid)
             val pendingCount = socialUseCases.getPendingRequests(uid, 1, 1).second
 
@@ -38,6 +41,9 @@ fun Route.profileRoutes(
                 firstName = user.firstName,
                 lastName = user.lastName,
                 bio = user.bio,
+                birthDate = user.birthDate,
+                birthday = user.birthDate?.toBirthdayParts(),
+                socialLinks = user.socialLinks,
                 avatarUrl = user.avatarUrl,
                 followersCount = followersCount,
                 followingCount = followingCount,
@@ -61,13 +67,18 @@ fun Route.profileRoutes(
             val followingCount = socialRepo.countFollowing(targetId)
             val privacy = privacyRepo.get(targetId)
             val relationship = socialUseCases.getRelationship(currentUserId, targetId)
+            val showBio = ProfileVisibility.canView(targetId, currentUserId, relationship, privacy, privacy.fieldVisibility.bio)
+            val showBirthday = ProfileVisibility.canView(targetId, currentUserId, relationship, privacy, privacy.fieldVisibility.birthday)
+            val showSocialLinks = ProfileVisibility.canView(targetId, currentUserId, relationship, privacy, privacy.fieldVisibility.socialLinks)
 
             call.respond(PublicProfileResponse(
                 id = user.id,
                 username = user.username,
                 firstName = user.firstName,
                 lastName = user.lastName,
-                bio = user.bio,
+                bio = user.bio.takeIf { showBio },
+                birthday = user.birthDate?.toBirthdayParts().takeIf { showBirthday },
+                socialLinks = if (showSocialLinks) user.socialLinks else emptyList(),
                 avatarUrl = user.avatarUrl,
                 followersCount = followersCount,
                 followingCount = followingCount,

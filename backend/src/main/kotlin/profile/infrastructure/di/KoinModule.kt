@@ -12,13 +12,15 @@ import profile.infrastructure.db.VerificationTokenRepository
 import profile.infrastructure.db.SessionRepository
 import profile.infrastructure.db.PendingEmailChangeRepository
 import profile.infrastructure.db.QrLoginChallengeRepository
+import profile.infrastructure.db.AccountLoginFailureRepository
 import profile.infrastructure.db.AuditRepository
+import profile.infrastructure.db.PendingRegistrationStore
+import profile.infrastructure.db.RateLimitRepository
 import profile.infrastructure.events.EmailEventConsumer
 import profile.infrastructure.events.EventPublisher
 import profile.infrastructure.events.SmtpEmailSender
 import profile.infrastructure.jwt.JwtIssuer
 import profile.infrastructure.jwt.JwksProvider
-import profile.infrastructure.redis.PendingRegistrationStore
 import profile.infrastructure.redis.RedisManager
 import profile.search.SearchController
 import profile.search.SearchService
@@ -155,11 +157,13 @@ fun koinModule(config: ApplicationConfig) = module {
     single { QrLoginChallengeRepository(get()) }
     single { VerificationTokenRepository(get()) }
     single { PendingEmailChangeRepository(get()) }
+    single { AccountLoginFailureRepository(get()) }
+    single { RateLimitRepository(get()) }
     single { AuditRepository(get()) }
     single { SearchService(get<UserRepository>(), get<RedisManager>()) }
 
     // 3. Services
-    single { AuthService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { AuthService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { QrLoginService(get(), get(), get(), get()) }
     single { UserService(get(), get(), get(), get()) }
     single { SessionService(get(), get()) }

@@ -112,6 +112,7 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
                         inAppAuthorMentions = rs.getBoolean("in_app_author_mentions"),
                         inAppPostComments = rs.getBoolean("in_app_post_comments"),
                         inAppNewStories = rs.getBoolean("in_app_new_stories"),
+                        inAppBirthdays = rs.getBoolean("in_app_birthdays"),
                         updatedAt = rs.getTimestamp("updated_at").toInstant()
                     ) else NotificationPrefs(userId = userId)
                 }
@@ -123,20 +124,22 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
         ds.connection.use { conn ->
             try {
                 conn.prepareStatement("""
-                    INSERT INTO notification_preferences (user_id, in_app_subscriptions, in_app_publications, in_app_author_mentions, in_app_post_comments, in_app_new_stories, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO notification_preferences (user_id, in_app_subscriptions, in_app_publications, in_app_author_mentions, in_app_post_comments, in_app_new_stories, in_app_birthdays, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (user_id) DO UPDATE SET
                         in_app_subscriptions = EXCLUDED.in_app_subscriptions,
                         in_app_publications = EXCLUDED.in_app_publications,
                         in_app_author_mentions = EXCLUDED.in_app_author_mentions,
                         in_app_post_comments = EXCLUDED.in_app_post_comments,
                         in_app_new_stories = EXCLUDED.in_app_new_stories,
+                        in_app_birthdays = EXCLUDED.in_app_birthdays,
                         updated_at = EXCLUDED.updated_at
                 """.trimIndent()).use { ps ->
                     ps.setObject(1, prefs.userId)
                     ps.setBoolean(2, prefs.inAppSubscriptions); ps.setBoolean(3, prefs.inAppPublications)
                     ps.setBoolean(4, prefs.inAppAuthorMentions); ps.setBoolean(5, prefs.inAppPostComments)
-                    ps.setBoolean(6, prefs.inAppNewStories); ps.setTimestamp(7, Timestamp.from(prefs.updatedAt))
+                    ps.setBoolean(6, prefs.inAppNewStories); ps.setBoolean(7, prefs.inAppBirthdays)
+                    ps.setTimestamp(8, Timestamp.from(prefs.updatedAt))
                     ps.executeUpdate()
                 }
                 conn.commit()

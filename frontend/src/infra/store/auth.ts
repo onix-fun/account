@@ -118,7 +118,14 @@ export const useAuthStore = defineStore("auth", () => {
     }
   };
 
-  const updateProfile = async (payload: { username?: string; firstName?: string; lastName?: string; bio?: string }) => {
+  const updateProfile = async (payload: {
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+    bio?: string;
+    birthDate?: string | null;
+    socialLinks?: Array<{ label: string; url: string }>;
+  }) => {
     isLoading.value = true;
     error.value = null;
     try {

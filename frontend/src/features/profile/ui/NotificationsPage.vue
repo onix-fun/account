@@ -59,6 +59,7 @@ function notificationCopyVariant(item: NotificationItem) {
   if (item.type === "story_published") return "storyPublished";
   if (item.type === "author_mention") return "authorMention";
   if (item.type === "post_comment") return "postComment";
+  if (item.type === "birthday_today") return "birthdayToday";
   return "";
 }
 
@@ -80,6 +81,7 @@ function notificationIcon(item: NotificationItem) {
   if (item.type === "story_published") return "pi pi-bolt";
   if (item.type === "author_mention") return "pi pi-at";
   if (item.type === "post_comment") return "pi pi-comments";
+  if (item.type === "birthday_today") return "pi pi-gift";
   return item.isRead ? "pi pi-bell" : "pi pi-bell-fill";
 }
 

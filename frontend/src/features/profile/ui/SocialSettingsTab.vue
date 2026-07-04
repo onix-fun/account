@@ -2,7 +2,7 @@
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
-import type { NotificationPrefs } from "@/api/services/ProfileSocialService";
+import type { NotificationPrefs, PrivacySettings, VisibilityAudience } from "@/api/services/ProfileSocialService";
 import { useProfileSocialStore } from "@/infra/store";
 
 const emit = defineEmits<{
@@ -19,7 +19,16 @@ const prefRows: Array<{ key: keyof NotificationPrefs; icon: string }> = [
   { key: "inAppAuthorMentions", icon: "pi pi-at" },
   { key: "inAppPostComments", icon: "pi pi-comments" },
   { key: "inAppNewStories", icon: "pi pi-bolt" },
+  { key: "inAppBirthdays", icon: "pi pi-gift" },
 ];
+
+const visibilityRows: Array<{ key: keyof PrivacySettings["fieldVisibility"]; icon: string }> = [
+  { key: "bio", icon: "pi pi-align-left" },
+  { key: "birthday", icon: "pi pi-gift" },
+  { key: "socialLinks", icon: "pi pi-link" },
+];
+
+const visibilityOptions: VisibilityAudience[] = ["public", "followers", "friends", "private"];
 
 onMounted(() => {
   socialStore.loadSettings().catch((cause) => emit("message", apiErrorMessage(cause), "error"));
@@ -41,6 +50,18 @@ async function setPref(key: keyof NotificationPrefs, value: boolean) {
   savingKey.value = key;
   try {
     await socialStore.setNotificationPref(key, value);
+    emit("message", t("social.settingsSaved"));
+  } catch (cause) {
+    emit("message", apiErrorMessage(cause), "error");
+  } finally {
+    savingKey.value = null;
+  }
+}
+
+async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], value: VisibilityAudience) {
+  savingKey.value = `visibility:${key}`;
+  try {
+    await socialStore.setFieldVisibility(key, value);
     emit("message", t("social.settingsSaved"));
   } catch (cause) {
     emit("message", apiErrorMessage(cause), "error");
@@ -71,6 +92,45 @@ async function setPref(key: keyof NotificationPrefs, value: boolean) {
         <i v-if="savingKey === 'privacy'" class="pi pi-spinner pi-spin"></i>
         <i v-else :class="socialStore.privacy.isPrivate ? 'pi pi-lock' : 'pi pi-globe'"></i>
       </button>
+    </section>
+
+    <section class="bg-[var(--surface)] p-4 rounded-2xl grid gap-3">
+      <div class="flex items-start gap-3.5">
+        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+          <i class="pi pi-eye text-lg"></i>
+        </div>
+        <div class="min-w-0">
+          <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("social.visibility") }}</h3>
+          <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed">{{ t("social.visibilityHint") }}</p>
+        </div>
+      </div>
+
+      <div class="grid gap-1.5">
+        <article v-for="row in visibilityRows" :key="row.key" class="grid gap-3 p-3 rounded-xl bg-[var(--surface-muted)]">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-9 h-9 rounded-lg bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] shrink-0">
+              <i :class="row.icon"></i>
+            </span>
+            <span class="min-w-0">
+              <strong class="block text-sm text-[var(--text)] truncate">{{ t(`social.visibilityFields.${row.key}`) }}</strong>
+              <small class="block text-xs text-[var(--muted)] truncate">{{ t(`social.visibilityFields.${row.key}Hint`) }}</small>
+            </span>
+          </div>
+          <div class="profile-segmented" role="radiogroup" :aria-label="t(`social.visibilityFields.${row.key}`)">
+            <button
+              v-for="option in visibilityOptions"
+              :key="option"
+              type="button"
+              role="radio"
+              :aria-checked="socialStore.privacy.fieldVisibility[row.key] === option"
+              :disabled="savingKey === `visibility:${row.key}`"
+              @click="setVisibility(row.key, option)"
+            >
+              {{ t(`social.visibilityOptions.${option}`) }}
+            </button>
+          </div>
+        </article>
+      </div>
     </section>
 
     <section class="bg-[var(--surface)] p-4 rounded-2xl grid gap-3">
@@ -188,6 +248,37 @@ async function setPref(key: keyof NotificationPrefs, value: boolean) {
 
 .profile-switch:disabled {
   opacity: 0.75;
+  cursor: wait;
+}
+
+.profile-segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.profile-segmented button {
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.profile-segmented button[aria-checked="true"] {
+  background: var(--text);
+  color: var(--btn-primary-text);
+}
+
+.profile-segmented button:disabled {
+  opacity: 0.7;
   cursor: wait;
 }
 </style>

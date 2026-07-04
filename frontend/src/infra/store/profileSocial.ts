@@ -11,6 +11,7 @@ import {
   type RelatedUser,
   type Relationship,
   type SubscriptionRequest,
+  type VisibilityAudience,
 } from "@/api/services/ProfileSocialService";
 
 type PagedState<T> = Page<T> & { page: number; limit: number; isLoading: boolean };
@@ -25,11 +26,21 @@ const defaultPrefs: NotificationPrefs = {
   inAppAuthorMentions: true,
   inAppPostComments: true,
   inAppNewStories: true,
+  inAppBirthdays: true,
+};
+
+const defaultPrivacy: PrivacySettings = {
+  isPrivate: false,
+  fieldVisibility: {
+    bio: "public",
+    birthday: "private",
+    socialLinks: "public",
+  },
 };
 
 export const useProfileSocialStore = defineStore("profileSocial", () => {
   const summary = ref<ProfileSummary | null>(null);
-  const privacy = ref<PrivacySettings>({ isPrivate: false });
+  const privacy = ref<PrivacySettings>({ ...defaultPrivacy, fieldVisibility: { ...defaultPrivacy.fieldVisibility } });
   const notificationPrefs = ref<NotificationPrefs>({ ...defaultPrefs });
   const followers = ref<PagedState<RelatedUser>>(emptyPage());
   const following = ref<PagedState<RelatedUser>>(emptyPage());
@@ -46,7 +57,7 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
     isLoadingSummary.value = true;
     try {
       summary.value = await ProfileSocialService.getSummary();
-      privacy.value = { isPrivate: summary.value.isPrivate };
+      privacy.value = { ...privacy.value, isPrivate: summary.value.isPrivate };
     } finally {
       isLoadingSummary.value = false;
     }
@@ -62,14 +73,28 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
   }
 
   async function setPrivacy(isPrivate: boolean) {
-    const previous = privacy.value.isPrivate;
-    privacy.value = { isPrivate };
+    const previous = { ...privacy.value, fieldVisibility: { ...privacy.value.fieldVisibility } };
+    privacy.value = { ...privacy.value, isPrivate };
     if (summary.value) summary.value = { ...summary.value, isPrivate };
     try {
-      await ProfileSocialService.updatePrivacy(isPrivate);
+      await ProfileSocialService.updatePrivacy(privacy.value);
     } catch (cause) {
-      privacy.value = { isPrivate: previous };
-      if (summary.value) summary.value = { ...summary.value, isPrivate: previous };
+      privacy.value = previous;
+      if (summary.value) summary.value = { ...summary.value, isPrivate: previous.isPrivate };
+      throw cause;
+    }
+  }
+
+  async function setFieldVisibility(key: keyof PrivacySettings["fieldVisibility"], value: VisibilityAudience) {
+    const previous = { ...privacy.value, fieldVisibility: { ...privacy.value.fieldVisibility } };
+    privacy.value = {
+      ...privacy.value,
+      fieldVisibility: { ...privacy.value.fieldVisibility, [key]: value },
+    };
+    try {
+      await ProfileSocialService.updatePrivacy(privacy.value);
+    } catch (cause) {
+      privacy.value = previous;
       throw cause;
     }
   }
@@ -222,6 +247,7 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
     refreshSummary,
     loadSettings,
     setPrivacy,
+    setFieldVisibility,
     setNotificationPref,
     loadFollowers,
     loadFollowing,

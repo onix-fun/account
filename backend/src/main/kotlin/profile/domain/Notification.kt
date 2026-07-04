@@ -26,6 +26,7 @@ data class NotificationPrefs(
     val inAppAuthorMentions: Boolean = true,
     val inAppPostComments: Boolean = true,
     val inAppNewStories: Boolean = true,
+    val inAppBirthdays: Boolean = true,
     val updatedAt: Instant = Instant.now()
 )
 

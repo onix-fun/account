@@ -400,6 +400,7 @@ fun Application.module() {
     val sseManager by inject<profile.infrastructure.SseManager>()
     val eventBus by inject<profile.infrastructure.EventBus>()
     val notificationOutboxWorker by inject<profile.infrastructure.NotificationOutboxWorker>()
+    val birthdayNotificationService by inject<profile.usecases.BirthdayNotificationService>()
     val socialRepo by inject<profile.infrastructure.SocialRepo>()
     val privacyRepo by inject<profile.infrastructure.PrivacyRepo>()
     val notificationRepo by inject<profile.infrastructure.NotificationRepo>()
@@ -493,7 +494,7 @@ fun Application.module() {
 
             authenticate {
                 searchRoutes(searchService, socialUseCases)
-                profileRoutes(userService, socialRepo, privacyRepo, socialUseCases, notificationRepo)
+                profileRoutes(userService, socialRepo, privacyRepo, socialUseCases, notificationRepo, birthdayNotificationService)
                 socialRoutes(userService, socialUseCases, notificationUseCases, sseManager)
                 notificationRoutes(userService, notificationUseCases, sseManager)
                 settingsRoutes(socialUseCases, notificationUseCases)

@@ -79,11 +79,15 @@ private val notificationMetadataJson = Json { ignoreUnknownKeys = true }
 private fun normalizedMetadata(n: Notification): NotificationMetadataResponse {
     val actions = mutableListOf<NotificationActionResponse>()
     var href: String? = null
+    var titleKey: String? = null
+    var bodyKey: String? = null
 
     runCatching {
         val root = notificationMetadataJson.parseToJsonElement(n.metadataJson)
         if (root is JsonObject) {
             href = root["href"]?.jsonPrimitive?.contentOrNull
+            titleKey = root["titleKey"]?.jsonPrimitive?.contentOrNull
+            bodyKey = root["bodyKey"]?.jsonPrimitive?.contentOrNull
             root["actions"]?.jsonArray?.forEach { item ->
                 val action = item as? JsonObject ?: return@forEach
                 val kind = action["kind"]?.jsonPrimitive?.contentOrNull ?: return@forEach
@@ -111,5 +115,5 @@ private fun normalizedMetadata(n: Notification): NotificationMetadataResponse {
         }
     }
 
-    return NotificationMetadataResponse(href = href, actions = actions)
+    return NotificationMetadataResponse(href = href, titleKey = titleKey, bodyKey = bodyKey, actions = actions)
 }

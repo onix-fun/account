@@ -5,6 +5,9 @@ import profile.domain.Notification
 import profile.domain.NotificationPrefs
 import profile.domain.PrivacySettings
 import profile.domain.Relationship
+import profile.domain.BirthdayParts
+import profile.domain.FieldVisibilityResponse
+import profile.domain.SocialLink
 import profile.domain.Subscription
 import profile.users.UserPublicDto
 
@@ -40,6 +43,9 @@ data class ProfileSummaryResponse(
     val firstName: String? = null,
     val lastName: String? = null,
     val bio: String? = null,
+    val birthDate: String? = null,
+    val birthday: BirthdayParts? = null,
+    val socialLinks: List<SocialLink> = emptyList(),
     val avatarUrl: String? = null,
     val followersCount: Long,
     val followingCount: Long,
@@ -55,6 +61,8 @@ data class PublicProfileResponse(
     val firstName: String? = null,
     val lastName: String? = null,
     val bio: String? = null,
+    val birthday: BirthdayParts? = null,
+    val socialLinks: List<SocialLink> = emptyList(),
     val avatarUrl: String? = null,
     val followersCount: Long,
     val followingCount: Long,
@@ -86,7 +94,16 @@ data class SubscriptionPageResponse(
 )
 
 @Serializable
-data class PrivacySettingsResponse(val isPrivate: Boolean)
+data class PrivacySettingsResponse(
+    val isPrivate: Boolean,
+    val fieldVisibility: FieldVisibilityResponse = FieldVisibilityResponse()
+)
+
+@Serializable
+data class PrivacySettingsUpdateRequest(
+    val isPrivate: Boolean = false,
+    val fieldVisibility: FieldVisibilityResponse? = null
+)
 
 @Serializable
 data class NotificationPrefsResponse(
@@ -94,7 +111,8 @@ data class NotificationPrefsResponse(
     val inAppPublications: Boolean,
     val inAppAuthorMentions: Boolean,
     val inAppPostComments: Boolean,
-    val inAppNewStories: Boolean
+    val inAppNewStories: Boolean,
+    val inAppBirthdays: Boolean
 )
 
 @Serializable
@@ -121,6 +139,8 @@ data class NotificationResponse(
 @Serializable
 data class NotificationMetadataResponse(
     val href: String? = null,
+    val titleKey: String? = null,
+    val bodyKey: String? = null,
     val actions: List<NotificationActionResponse> = emptyList()
 )
 
@@ -158,14 +178,18 @@ fun Subscription.toResponse(subscriber: UserPublicDto? = null) = SubscriptionRes
     subscriber = subscriber
 )
 
-fun PrivacySettings.toResponse() = PrivacySettingsResponse(isPrivate = isPrivate)
+fun PrivacySettings.toResponse() = PrivacySettingsResponse(
+    isPrivate = isPrivate,
+    fieldVisibility = fieldVisibility.toResponse()
+)
 
 fun NotificationPrefs.toResponse() = NotificationPrefsResponse(
     inAppSubscriptions = inAppSubscriptions,
     inAppPublications = inAppPublications,
     inAppAuthorMentions = inAppAuthorMentions,
     inAppPostComments = inAppPostComments,
-    inAppNewStories = inAppNewStories
+    inAppNewStories = inAppNewStories,
+    inAppBirthdays = inAppBirthdays
 )
 
 fun Notification.toResponse(metadata: NotificationMetadataResponse) = NotificationResponse(

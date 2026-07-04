@@ -12,6 +12,10 @@ import profile.infrastructure.db.VerificationTokenRepository
 import profile.infrastructure.db.PendingEmailChange
 import profile.infrastructure.db.PendingEmailChangeRepository
 import profile.infrastructure.db.AuditRepository
+import profile.infrastructure.db.AccountLoginFailureRepository
+import profile.infrastructure.db.PendingRegistration
+import profile.infrastructure.db.PendingRegistrationStore
+import profile.infrastructure.db.RateLimitRepository
 import profile.infrastructure.config.SecurityConfig
 import profile.infrastructure.events.EventPublisher
 import profile.infrastructure.events.PasswordResetEmailPayload
@@ -20,13 +24,11 @@ import profile.infrastructure.events.SecurityNotificationPayload
 import profile.infrastructure.events.EmailLocale
 import profile.infrastructure.events.SecurityNoticeType
 import profile.infrastructure.jwt.JwtIssuer
-import profile.infrastructure.redis.PendingRegistration
-import profile.infrastructure.redis.PendingRegistrationStore
-import profile.infrastructure.redis.RedisManager
 import profile.infrastructure.security.PasswordHasher
 import profile.infrastructure.security.TokenHasher
 import profile.infrastructure.security.EmailNormalizer
 import profile.search.SearchService
+import profile.usecases.BirthdayNotificationService
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
 import java.security.SecureRandom
@@ -45,7 +47,9 @@ class AuthService(
     private val sessionConfig: SessionConfig,
     private val securityConfig: SecurityConfig,
     private val pendingEmailChangeRepository: PendingEmailChangeRepository,
-    private val redisManager: RedisManager,
+    private val accountLoginFailureRepository: AccountLoginFailureRepository,
+    private val rateLimitRepository: RateLimitRepository,
+    private val birthdayNotificationService: BirthdayNotificationService,
     private val auditRepository: AuditRepository
 ) {
     private val random = SecureRandom()
@@ -180,7 +184,6 @@ class AuthService(
         val newPasswordHash = PasswordHasher.hash(newPassword)
         userRepository.updatePassword(user.id, newPasswordHash)
         verificationTokenRepository.invalidateAll(user.id, "PASSWORD_RESET")
-        revokeCachedSessions(user.id)
         sessionRepository.revokeAllForUser(user.id)
         auditRepository.record(user.id, "PASSWORD_RESET", "SUCCESS")
         val userEmail = userRepository.findById(user.id)?.email
@@ -196,7 +199,6 @@ class AuthService(
         }
 
         userRepository.updatePassword(userId, PasswordHasher.hash(newPassword))
-        revokeCachedSessions(userId)
         sessionRepository.revokeAllForUser(userId)
         auditRepository.record(userId, "PASSWORD_CHANGED", "SUCCESS")
         publishSecurityNotice(user.email, SecurityNoticeType.PASSWORD_CHANGED, locale)
@@ -208,11 +210,6 @@ class AuthService(
             apiError(ApiErrorCode.AUTH_INVALID_PASSWORD, "password")
         }
 
-        val activeSessions = sessionRepository.findActiveByUserId(userId)
-        val cacheCleared = activeSessions.all { redisManager.revokeSession(it.id) }
-        if (!cacheCleared && redisManager.requiresAvailability) {
-            apiError(ApiErrorCode.INFRASTRUCTURE_SERVICE_UNAVAILABLE)
-        }
         userRepository.delete(userId)
     }
 
@@ -227,16 +224,16 @@ class AuthService(
         if (user.status != "ACTIVE") apiError(ApiErrorCode.AUTH_ACCOUNT_BLOCKED, "identifier")
         if (!user.emailVerified) apiError(ApiErrorCode.AUTH_EMAIL_NOT_VERIFIED, "identifier")
 
-        if (redisManager.getAccountFailedAttempts(user.id) >= 5) {
+        if (accountLoginFailureRepository.getAttempts(user.id) >= 5) {
             apiError(ApiErrorCode.AUTH_ACCOUNT_BLOCKED, "identifier")
         }
 
         if (!PasswordHasher.verify(user.passwordHash, password)) {
-            redisManager.incrementAccountFailedAttempts(user.id)
+            accountLoginFailureRepository.increment(user.id)
             apiError(ApiErrorCode.AUTH_INVALID_CREDENTIALS, "password")
         }
 
-        redisManager.clearAccountFailedAttempts(user.id)
+        accountLoginFailureRepository.clear(user.id)
         return createSession(user, deviceId, userAgent, ipAddress)
     }
 
@@ -253,7 +250,7 @@ class AuthService(
             expiresAt = Instant.now().plus(sessionConfig.refreshTokenExpDays, ChronoUnit.DAYS)
         )
         val sessionId = sessionRepository.create(session)
-        redisManager.activateSession(sessionId, user.id, sessionConfig.refreshTokenExpDays * 86400)
+        runCatching { birthdayNotificationService.generateFor(user.id) }
 
         val accessToken = jwtIssuer.createToken(user.id, sessionId)
 
@@ -300,12 +297,10 @@ class AuthService(
         val refreshTokenHash = TokenHasher.hash(refreshToken)
         val session = sessionRepository.findByTokenHash(refreshTokenHash) ?: return
         sessionRepository.revoke(session.id)
-        redisManager.revokeSession(session.id)
         auditRepository.record(session.userId, "SESSION_REVOKED", "SUCCESS")
     }
 
     fun logoutAll(userId: String) {
-        revokeCachedSessions(userId)
         sessionRepository.revokeAllForUser(userId)
         auditRepository.record(userId, "SESSIONS_REVOKED_ALL", "SUCCESS")
     }
@@ -394,7 +389,6 @@ class AuthService(
         if (userRepository.findByEmail(pending.newEmail) != null) apiError(ApiErrorCode.AUTH_EMAIL_IN_USE, "newEmail")
         userRepository.updateEmail(userId, pending.newEmail)
         pendingEmailChangeRepository.delete(userId)
-        sessionRepository.findActiveByUserId(userId).filter { it.id != sessionId }.forEach { redisManager.revokeSession(it.id) }
         sessionRepository.revokeAllExcept(userId, sessionId)
         auditRepository.record(userId, "EMAIL_CHANGED", "SUCCESS")
         publishSecurityNotice(oldEmail, SecurityNoticeType.EMAIL_CHANGED, locale)
@@ -416,11 +410,7 @@ class AuthService(
 
     private fun enforcePublicRate(scope: String, identifier: String) {
         val key = TokenHasher.challenge(securityConfig.otpHmacSecret, "RATE", scope, identifier.trim().lowercase())
-        if (!redisManager.checkRateLimit(scope, key, 20, 3600)) apiError(ApiErrorCode.INFRASTRUCTURE_RATE_LIMITED)
-    }
-
-    private fun revokeCachedSessions(userId: String) {
-        sessionRepository.findActiveByUserId(userId).forEach { redisManager.revokeSession(it.id) }
+        if (!rateLimitRepository.checkAndIncrement(scope, key, 20, 3600)) apiError(ApiErrorCode.INFRASTRUCTURE_RATE_LIMITED)
     }
 
     private fun publishSecurityNotice(email: String, type: SecurityNoticeType, locale: EmailLocale) {

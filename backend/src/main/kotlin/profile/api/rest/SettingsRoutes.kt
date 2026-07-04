@@ -21,8 +21,12 @@ fun Route.settingsRoutes(
 
         put("/privacy") {
             val uid = requireUserId(call)
-            val body = call.receive<Map<String, Boolean>>()
-            socialUseCases.updatePrivacySettings(uid, body["isPrivate"] ?: false)
+            val body = call.receive<PrivacySettingsUpdateRequest>()
+            socialUseCases.updatePrivacySettings(
+                uid,
+                body.isPrivate,
+                body.fieldVisibility?.let { FieldVisibility.fromResponse(it) }
+            )
             call.respond(SuccessResponse())
         }
     }
@@ -44,6 +48,7 @@ fun Route.settingsRoutes(
                 inAppAuthorMentions = body["inAppAuthorMentions"] ?: true,
                 inAppPostComments = body["inAppPostComments"] ?: true,
                 inAppNewStories = body["inAppNewStories"] ?: true,
+                inAppBirthdays = body["inAppBirthdays"] ?: true,
             ))
             call.respond(SuccessResponse())
         }

@@ -26,6 +26,7 @@ data class UserBlock(
 data class PrivacySettings(
     val userId: UUID,
     val isPrivate: Boolean = false,
+    val fieldVisibility: FieldVisibility = FieldVisibility(),
     val updatedAt: Instant = Instant.now()
 )
 
@@ -44,6 +45,9 @@ data class Profile(
     val lastName: String?,
     val bio: String?,
     val avatarUrl: String?,
+    val birthDate: String?,
+    val birthday: BirthdayParts?,
+    val socialLinks: List<SocialLink>,
     val followersCount: Long,
     val followingCount: Long,
     val isPrivate: Boolean,

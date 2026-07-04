@@ -6,11 +6,8 @@ import io.ktor.server.plugins.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import org.koin.ktor.ext.inject
-import profile.infrastructure.config.AppConfig
-import profile.infrastructure.redis.RedisManager
-import profile.infrastructure.security.TrustedProxy
+import profile.infrastructure.db.RateLimitRepository
 import profile.shared.ApiErrorResponse
-import java.security.MessageDigest
 
 data class RateLimitRule(
     val max: Long,
@@ -26,7 +23,7 @@ class RateLimitConfig {
 }
 
 val RateLimit = createApplicationPlugin("RateLimit", ::RateLimitConfig) {
-    val redisManager = application.inject<RedisManager>().value
+    val rateLimitRepository = application.inject<RateLimitRepository>().value
     val rules = pluginConfig.rules
 
     onCall { call ->
@@ -38,7 +35,7 @@ val RateLimit = createApplicationPlugin("RateLimit", ::RateLimitConfig) {
         if (matchedRule != null) {
             val ipKey = call.request.origin.remoteHost
             val allowed = runCatching {
-                redisManager.checkRateLimit("ratelimit:${matchedRule.hashCode()}:ip", ipKey, matchedRule.max, matchedRule.windowSeconds)
+                rateLimitRepository.checkAndIncrement("ratelimit:${matchedRule.hashCode()}:ip", ipKey, matchedRule.max, matchedRule.windowSeconds)
             }.getOrElse {
                 call.respond(
                     HttpStatusCode.ServiceUnavailable,

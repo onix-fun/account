@@ -107,6 +107,12 @@
     "emailChanged": "Email changed successfully.",
     "cancelEmailChange": "Cancel email change",
     "bio": "Bio",
+    "birthDate": "Birth date",
+    "socialLinks": "Social links",
+    "socialLinksHint": "Add public links visible to the audiences you choose.",
+    "socialLinkLabel": "Label",
+    "socialLinkUrl": "https://example.com",
+    "noSocialLinks": "No links added",
     "notSpecified": "Not specified",
     "editField": "Edit",
     "finishEditing": "Done",
@@ -219,6 +225,10 @@
       "postComment": {
         "title": "New comment",
         "body": "Someone commented on your post."
+      },
+      "birthdayToday": {
+        "title": "Birthday today",
+        "body": "Someone you follow has a birthday today."
       }
     },
     "prefs": {
@@ -231,7 +241,25 @@
       "inAppPostComments": "Comments",
       "inAppPostCommentsHint": "Comments on publications",
       "inAppNewStories": "Stories",
-      "inAppNewStoriesHint": "New stories from following"
+      "inAppNewStoriesHint": "New stories from following",
+      "inAppBirthdays": "Birthdays",
+      "inAppBirthdaysHint": "When visible following accounts have a birthday"
+    },
+    "visibility": "Data visibility",
+    "visibilityHint": "Choose who can see individual profile data.",
+    "visibilityFields": {
+      "bio": "Bio",
+      "bioHint": "Profile description",
+      "birthday": "Birth date",
+      "birthdayHint": "Others see only day and month",
+      "socialLinks": "Social links",
+      "socialLinksHint": "External links list"
+    },
+    "visibilityOptions": {
+      "public": "Public",
+      "followers": "Followers",
+      "friends": "Friends",
+      "private": "Only me"
     }
   },
   "system": {

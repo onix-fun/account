@@ -22,6 +22,7 @@ val socialModule = module {
 
     single { SocialUseCases(get(), get(), get()) }
     single { NotificationUseCases(get(), get()) }
+    single { BirthdayNotificationService(get(), get(), get<PrivacyRepository>(), get()) }
 
     single { SseManager() }
 

@@ -1,5 +1,8 @@
 package profile.infrastructure
 
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import profile.domain.*
 import profile.usecases.BlockRepository
 import profile.usecases.PrivacyRepository
@@ -232,14 +235,17 @@ class BlockRepo(private val ds: DataSource) : BlockRepository {
 }
 
 class PrivacyRepo(private val ds: DataSource) : PrivacyRepository {
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
     override fun get(userId: UUID): PrivacySettings {
         return ds.connection.use { conn ->
-            conn.prepareStatement("SELECT user_id, is_private FROM social.privacy_settings WHERE user_id = ?").use { ps ->
+            conn.prepareStatement("SELECT user_id, is_private, field_visibility FROM social.privacy_settings WHERE user_id = ?").use { ps ->
                 ps.setObject(1, userId)
                 ps.executeQuery().use { rs ->
                     if (rs.next()) PrivacySettings(
                         userId = rs.getObject("user_id") as UUID,
-                        isPrivate = rs.getBoolean("is_private")
+                        isPrivate = rs.getBoolean("is_private"),
+                        fieldVisibility = decodeVisibility(rs.getString("field_visibility"))
                     ) else PrivacySettings(userId = userId)
                 }
             }
@@ -250,11 +256,16 @@ class PrivacyRepo(private val ds: DataSource) : PrivacyRepository {
         ds.connection.use { conn ->
             try {
                 conn.prepareStatement("""
-                    INSERT INTO social.privacy_settings (user_id, is_private, updated_at) VALUES (?, ?, ?)
-                    ON CONFLICT (user_id) DO UPDATE SET is_private = EXCLUDED.is_private, updated_at = EXCLUDED.updated_at
+                    INSERT INTO social.privacy_settings (user_id, is_private, field_visibility, updated_at)
+                    VALUES (?, ?, ?::jsonb, ?)
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        is_private = EXCLUDED.is_private,
+                        field_visibility = EXCLUDED.field_visibility,
+                        updated_at = EXCLUDED.updated_at
                 """.trimIndent()).use { ps ->
                     ps.setObject(1, settings.userId); ps.setBoolean(2, settings.isPrivate)
-                    ps.setTimestamp(3, Timestamp.from(settings.updatedAt)); ps.executeUpdate()
+                    ps.setString(3, json.encodeToString(settings.fieldVisibility.toResponse()))
+                    ps.setTimestamp(4, Timestamp.from(settings.updatedAt)); ps.executeUpdate()
                 }
                 conn.commit()
             } catch (error: Throwable) {
@@ -262,5 +273,12 @@ class PrivacyRepo(private val ds: DataSource) : PrivacyRepository {
                 throw error
             }
         }
+    }
+
+    private fun decodeVisibility(raw: String?): FieldVisibility {
+        if (raw.isNullOrBlank()) return FieldVisibility()
+        return runCatching {
+            FieldVisibility.fromResponse(json.decodeFromString<FieldVisibilityResponse>(raw))
+        }.getOrDefault(FieldVisibility())
     }
 }

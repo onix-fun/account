@@ -15,6 +15,9 @@ import profile.domain.UserActivityEvent
 import profile.domain.UserActivityType
 import profile.domain.UserBlock
 import profile.domain.PrivacySettings
+import profile.domain.FieldVisibility
+import profile.domain.ProfileVisibility
+import profile.domain.VisibilityAudience
 import profile.api.grpc.SocialGrpcService
 import profile.infrastructure.NotificationOutboxWorker
 import profile.infrastructure.SseManager
@@ -125,6 +128,52 @@ class SocialNotificationUseCasesTest {
 
         assertEquals(PublishActivityStatus.ACCEPTED, first.status)
         assertEquals(PublishActivityStatus.DUPLICATE, second.status)
+    }
+
+    @Test
+    fun `profile field visibility respects private profile gate and friends`() {
+        val ownerId = UUID.randomUUID()
+        val viewerId = UUID.randomUUID()
+        val follower = profile.domain.Relationship(
+            isFollowing = true,
+            isFollowedBy = false,
+            isFriend = false,
+            isBlocked = false,
+            hasPendingRequest = false
+        )
+        val friend = follower.copy(isFollowedBy = true, isFriend = true)
+        val privateProfile = PrivacySettings(
+            userId = ownerId,
+            isPrivate = true,
+            fieldVisibility = FieldVisibility(
+                bio = VisibilityAudience.PUBLIC,
+                birthday = VisibilityAudience.FRIENDS,
+                socialLinks = VisibilityAudience.FOLLOWERS
+            )
+        )
+
+        assertTrue(ProfileVisibility.canView(ownerId, viewerId, follower, privateProfile, privateProfile.fieldVisibility.bio))
+        assertFalse(ProfileVisibility.canView(ownerId, viewerId, follower, privateProfile, privateProfile.fieldVisibility.birthday))
+        assertTrue(ProfileVisibility.canView(ownerId, viewerId, friend, privateProfile, privateProfile.fieldVisibility.birthday))
+        assertTrue(ProfileVisibility.canView(ownerId, ownerId, follower, privateProfile, VisibilityAudience.PRIVATE))
+    }
+
+    @Test
+    fun `birthday notification is idempotent and respects birthday preferences`() {
+        val repo = FakeNotificationRepository()
+        val useCases = NotificationUseCases(repo, FakeOutboxRepository())
+        val recipientId = UUID.randomUUID()
+        val birthdayUserId = UUID.randomUUID()
+
+        val first = useCases.createBirthdayNotification(recipientId, birthdayUserId, "2026-07-04")
+        val duplicate = useCases.createBirthdayNotification(recipientId, birthdayUserId, "2026-07-04")
+
+        assertNotNull(first)
+        assertNull(duplicate)
+        assertEquals("birthday_today", repo.saved.single().type)
+
+        repo.prefs[recipientId] = NotificationPrefs(userId = recipientId, inAppBirthdays = false)
+        assertNull(useCases.createBirthdayNotification(recipientId, UUID.randomUUID(), "2026-07-04"))
     }
 
     @Test

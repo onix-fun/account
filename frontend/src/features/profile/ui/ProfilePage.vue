@@ -24,7 +24,7 @@ import SocialSettingsTab from "@/features/profile/ui/SocialSettingsTab.vue";
 import SystemTab from "@/features/profile/ui/SystemTab.vue";
 
 type ProfileView = ProfileTab | "followers" | "following" | "notifications" | "search";
-type EditableProfileField = "username" | "firstName" | "lastName" | "bio";
+type EditableProfileField = "username" | "firstName" | "lastName" | "bio" | "birthDate";
 type UsernameAvailability = "idle" | "checking" | "available" | "taken" | "invalid";
 
 const authStore = useAuthStore();
@@ -51,13 +51,16 @@ const profileForm = reactive({
   firstName: "",
   lastName: "",
   bio: "",
+  birthDate: "",
 });
+const socialLinks = ref<Array<{ label: string; url: string }>>([]);
 
 const editingFields = reactive<Record<EditableProfileField, boolean>>({
   username: false,
   firstName: false,
   lastName: false,
   bio: false,
+  birthDate: false,
 });
 
 const backUrl = computed(() => trustedRedirectUrl(route.query.redirect));
@@ -74,6 +77,8 @@ const isProfileDirty = computed(() => {
     profileForm.firstName !== (user?.firstName || "") ||
     profileForm.lastName !== (user?.lastName || "") ||
     profileForm.bio !== (user?.bio || "") ||
+    profileForm.birthDate !== (user?.birthDate || "") ||
+    JSON.stringify(normalizedSocialLinks(socialLinks.value)) !== JSON.stringify(user?.socialLinks || []) ||
     profileForm.username.trim() !== (user?.username || "")
   );
 });
@@ -83,11 +88,12 @@ const canSaveUsername = computed(() => {
   return usernameAvailability.value === "available";
 });
 const editableProfileFields = computed<
-  Array<{ key: EditableProfileField; label: string; type: "text" | "textarea"; autocomplete?: string }>
+  Array<{ key: EditableProfileField; label: string; type: "text" | "date" | "textarea"; autocomplete?: string }>
 >(() => [
   { key: "username", label: t("auth.username"), type: "text", autocomplete: "username" },
   { key: "firstName", label: t("auth.firstName"), type: "text", autocomplete: "given-name" },
   { key: "lastName", label: t("auth.lastName"), type: "text", autocomplete: "family-name" },
+  { key: "birthDate", label: t("profile.birthDate"), type: "date" },
   { key: "bio", label: t("profile.bio"), type: "textarea" },
 ]);
 
@@ -152,6 +158,8 @@ function syncProfileForm() {
   profileForm.firstName = authStore.currentUser?.firstName || "";
   profileForm.lastName = authStore.currentUser?.lastName || "";
   profileForm.bio = authStore.currentUser?.bio || "";
+  profileForm.birthDate = authStore.currentUser?.birthDate || "";
+  socialLinks.value = (authStore.currentUser?.socialLinks || []).map((link) => ({ ...link }));
 }
 
 function setMessage(message: string, tone: "success" | "error" | "warn" | "warning" | "info" = "success") {
@@ -208,6 +216,7 @@ function closeFieldEdits() {
   editingFields.firstName = false;
   editingFields.lastName = false;
   editingFields.bio = false;
+  editingFields.birthDate = false;
 }
 
 async function saveProfile() {
@@ -218,6 +227,8 @@ async function saveProfile() {
       firstName: profileForm.firstName,
       lastName: profileForm.lastName,
       bio: profileForm.bio,
+      birthDate: profileForm.birthDate || null,
+      socialLinks: normalizedSocialLinks(socialLinks.value),
     });
     await socialStore.refreshSummary().catch(() => undefined);
     closeFieldEdits();
@@ -227,6 +238,21 @@ async function saveProfile() {
   } finally {
     isSavingProfile.value = false;
   }
+}
+
+function normalizedSocialLinks(links: Array<{ label: string; url: string }>) {
+  return links
+    .map((link) => ({ label: link.label.trim(), url: link.url.trim() }))
+    .filter((link) => link.label || link.url);
+}
+
+function addSocialLink() {
+  if (socialLinks.value.length >= 10) return;
+  socialLinks.value = [...socialLinks.value, { label: "", url: "" }];
+}
+
+function removeSocialLink(index: number) {
+  socialLinks.value = socialLinks.value.filter((_, current) => current !== index);
 }
 
 function openAvatarPicker() {
@@ -384,9 +410,10 @@ function revokeAvatarPreview() {
 
                 <div class="col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
                   <PInputText
-                    v-if="editingFields[field.key] && field.type === 'text'"
+                    v-if="editingFields[field.key] && (field.type === 'text' || field.type === 'date')"
                     :id="`profile-${field.key}`"
                     v-model="profileForm[field.key]"
+                    :type="field.type === 'date' ? 'date' : 'text'"
                     class="w-full"
                     :autocomplete="field.autocomplete"
                     autofocus
@@ -429,6 +456,28 @@ function revokeAvatarPreview() {
                 </div>
               </article>
             </div>
+
+            <section class="grid gap-3 bg-[var(--surface)] p-3 sm:p-4 rounded-xl">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="m-0 text-[15px] font-bold text-[var(--text)]">{{ t("profile.socialLinks") }}</h3>
+                  <p class="m-0 mt-1 text-xs text-[var(--muted)]">{{ t("profile.socialLinksHint") }}</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <PButton icon="pi pi-plus" rounded variant="text" severity="secondary" :disabled="socialLinks.length >= 10 || isSavingProfile" @click="addSocialLink" />
+                  <PButton icon="pi pi-check" rounded variant="text" severity="secondary" :loading="isSavingProfile" :disabled="!isProfileDirty" @click="saveProfile" />
+                </div>
+              </div>
+
+              <div class="grid gap-2">
+                <div v-if="!socialLinks.length" class="text-sm text-[var(--subtle)] px-1">{{ t("profile.noSocialLinks") }}</div>
+                <article v-for="(link, index) in socialLinks" :key="index" class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-2 items-center">
+                  <PInputText v-model="link.label" :placeholder="t('profile.socialLinkLabel')" maxlength="60" class="w-full" />
+                  <PInputText v-model="link.url" :placeholder="t('profile.socialLinkUrl')" class="w-full" />
+                  <PButton icon="pi pi-trash" rounded variant="text" severity="secondary" :disabled="isSavingProfile" @click="removeSocialLink(index)" />
+                </article>
+              </div>
+            </section>
           </form>
         </section>
 

@@ -20,7 +20,7 @@ import profile.auth.RegisterRequest
 import profile.auth.ResetPasswordRequest
 import profile.infrastructure.db.VerificationTokenRepository
 import profile.infrastructure.db.UserRepository
-import profile.infrastructure.redis.PendingRegistrationStore
+import profile.infrastructure.db.PendingRegistrationStore
 import profile.infrastructure.security.TokenHasher
 import profile.infrastructure.config.PostgresConfig
 import profile.infrastructure.db.DatabaseFactory

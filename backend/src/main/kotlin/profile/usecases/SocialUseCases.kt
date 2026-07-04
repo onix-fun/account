@@ -108,8 +108,14 @@ class SocialUseCases(
 
     fun getPrivacySettings(userId: UUID): PrivacySettings = privacyRepo.get(userId)
 
-    fun updatePrivacySettings(userId: UUID, isPrivate: Boolean): PrivacySettings {
-        val settings = PrivacySettings(userId, isPrivate, Instant.now())
+    fun updatePrivacySettings(userId: UUID, isPrivate: Boolean, fieldVisibility: FieldVisibility? = null): PrivacySettings {
+        val current = privacyRepo.get(userId)
+        val settings = PrivacySettings(
+            userId = userId,
+            isPrivate = isPrivate,
+            fieldVisibility = fieldVisibility ?: current.fieldVisibility,
+            updatedAt = Instant.now()
+        )
         privacyRepo.save(settings)
         return settings
     }

@@ -14,6 +14,9 @@ interface UserResponse {
   lastName?: string | null;
   avatarUrl?: string | null;
   bio?: string | null;
+  birthDate?: string | null;
+  birthday?: { day: number; month: number } | null;
+  socialLinks?: Array<{ label: string; url: string }>;
   emailVerified?: boolean;
   role?: string;
   status?: string;
@@ -63,6 +66,8 @@ interface UpdateProfilePayload {
   firstName?: string;
   lastName?: string;
   bio?: string;
+  birthDate?: string | null;
+  socialLinks?: Array<{ label: string; url: string }>;
 }
 
 let currentUser: User | null = null;
@@ -77,6 +82,9 @@ function normalizeUser(user: UserResponse): User {
     lastName: user.lastName,
     avatarUrl: user.avatarUrl,
     bio: user.bio,
+    birthDate: user.birthDate,
+    birthday: user.birthday,
+    socialLinks: user.socialLinks || [],
     emailVerified: user.emailVerified,
     role: user.role,
   };

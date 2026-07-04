@@ -17,7 +17,9 @@ java -jar app.jar serve --role=all
 
 ## Зависимости
 
-PostgreSQL, Redis, SMTP и S3-compatible storage обязательны. Все настройки
+PostgreSQL, Redis, SMTP и S3-compatible storage обязательны. Redis используется
+только как runtime-индекс поиска пользователей по username; auth/session/rate
+state хранится в PostgreSQL. Все настройки
 задаются через `ACCOUNT_*`; секреты дополнительно поддерживают `*_FILE`.
 
 Основные группы: `ACCOUNT_DATABASE_*`, `ACCOUNT_REDIS_*`, `ACCOUNT_SMTP_*`,

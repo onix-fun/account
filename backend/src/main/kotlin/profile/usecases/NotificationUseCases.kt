@@ -47,6 +47,7 @@ class NotificationUseCases(
             "story_published" -> prefs.inAppNewStories
             "author_mention" -> prefs.inAppAuthorMentions
             "subscription_request", "subscription_accepted" -> prefs.inAppSubscriptions
+            "birthday_today" -> prefs.inAppBirthdays
             else -> true
         }
         if (!allowed) return null
@@ -144,6 +145,20 @@ class NotificationUseCases(
             actorId = sub.subscribedToId,
             entityType = "user",
             entityId = sub.subscribedToId.toString()
+        )
+    }
+
+    fun createBirthdayNotification(recipientId: UUID, birthdayUserId: UUID, dateKey: String): Notification? {
+        return createFromEvent(
+            eventId = "birthday:$recipientId:$birthdayUserId:$dateKey",
+            recipientId = recipientId,
+            type = "birthday_today",
+            title = "Birthday today",
+            body = "Someone you follow has a birthday today",
+            actorId = birthdayUserId,
+            entityType = "user",
+            entityId = birthdayUserId.toString(),
+            metadataJson = """{"titleKey":"birthdayToday","bodyKey":"birthdayToday"}"""
         )
     }
 }

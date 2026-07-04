@@ -107,6 +107,12 @@
     "emailChanged": "Email успешно изменён.",
     "cancelEmailChange": "Отменить смену email",
     "bio": "О себе",
+    "birthDate": "Дата рождения",
+    "socialLinks": "Социальные ссылки",
+    "socialLinksHint": "Добавьте публичные ссылки, которые смогут видеть выбранные аудитории.",
+    "socialLinkLabel": "Название",
+    "socialLinkUrl": "https://example.com",
+    "noSocialLinks": "Ссылки не добавлены",
     "notSpecified": "Не указано",
     "editField": "Изменить",
     "finishEditing": "Готово",
@@ -219,6 +225,10 @@
       "postComment": {
         "title": "Новый комментарий",
         "body": "Кто-то прокомментировал ваш пост."
+      },
+      "birthdayToday": {
+        "title": "День рождения сегодня",
+        "body": "У пользователя из ваших подписок сегодня день рождения."
       }
     },
     "prefs": {
@@ -231,7 +241,25 @@
       "inAppPostComments": "Комментарии",
       "inAppPostCommentsHint": "Комментарии к публикациям",
       "inAppNewStories": "Истории",
-      "inAppNewStoriesHint": "Новые истории подписок"
+      "inAppNewStoriesHint": "Новые истории подписок",
+      "inAppBirthdays": "Дни рождения",
+      "inAppBirthdaysHint": "Когда у видимых подписок день рождения"
+    },
+    "visibility": "Видимость данных",
+    "visibilityHint": "Выберите, кто может видеть отдельные данные профиля.",
+    "visibilityFields": {
+      "bio": "О себе",
+      "bioHint": "Описание профиля",
+      "birthday": "Дата рождения",
+      "birthdayHint": "Другие увидят только день и месяц",
+      "socialLinks": "Социальные ссылки",
+      "socialLinksHint": "Список внешних ссылок"
+    },
+    "visibilityOptions": {
+      "public": "Все",
+      "followers": "Подписчики",
+      "friends": "Друзья",
+      "private": "Только я"
     }
   },
   "system": {

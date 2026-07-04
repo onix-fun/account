@@ -6,6 +6,18 @@ export interface PublicUser {
   firstName?: string | null;
   lastName?: string | null;
   avatarUrl?: string | null;
+  birthday?: BirthdayParts | null;
+  socialLinks?: SocialLink[];
+}
+
+export interface BirthdayParts {
+  day: number;
+  month: number;
+}
+
+export interface SocialLink {
+  label: string;
+  url: string;
 }
 
 export interface Relationship {
@@ -22,6 +34,7 @@ export interface RelatedUser extends PublicUser {
 
 export interface ProfileSummary extends PublicUser {
   bio?: string | null;
+  birthDate?: string | null;
   followersCount: number;
   followingCount: number;
   isPrivate: boolean;
@@ -46,6 +59,15 @@ export interface SubscriptionRequest {
 
 export interface PrivacySettings {
   isPrivate: boolean;
+  fieldVisibility: FieldVisibility;
+}
+
+export type VisibilityAudience = "public" | "followers" | "friends" | "private";
+
+export interface FieldVisibility {
+  bio: VisibilityAudience;
+  birthday: VisibilityAudience;
+  socialLinks: VisibilityAudience;
 }
 
 export interface NotificationPrefs {
@@ -54,6 +76,7 @@ export interface NotificationPrefs {
   inAppAuthorMentions: boolean;
   inAppPostComments: boolean;
   inAppNewStories: boolean;
+  inAppBirthdays: boolean;
 }
 
 export type NotificationAction =
@@ -204,8 +227,8 @@ export class ProfileSocialService {
     return response.data;
   }
 
-  static async updatePrivacy(isPrivate: boolean): Promise<void> {
-    await profileClient.put("/profile/me/privacy", { isPrivate });
+  static async updatePrivacy(settings: PrivacySettings | boolean): Promise<void> {
+    await profileClient.put("/profile/me/privacy", typeof settings === "boolean" ? { isPrivate: settings } : settings);
   }
 
   static async getNotificationPrefs(): Promise<NotificationPrefs> {
