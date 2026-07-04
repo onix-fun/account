@@ -9,6 +9,7 @@ import io.ktor.server.request.*
 import io.ktor.server.plugins.*
 import io.ktor.server.response.*
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import profile.infrastructure.db.User
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
@@ -40,7 +41,7 @@ class UserController(
 
     suspend fun updateMe(call: ApplicationCall) {
         val userId = call.principal<JWTPrincipal>()!!.payload.subject
-        val request = call.receive<UpdateProfileRequest>()
+        val request = UpdateProfileRequest.fromJson(call.receive<JsonObject>())
         
         val updatedUser = userService.updateProfile(userId, request)
         call.respond(HttpStatusCode.OK, updatedUser.toProfileDto())
@@ -180,4 +181,3 @@ class UserController(
         }
     }
 }
-

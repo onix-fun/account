@@ -6,8 +6,21 @@ export interface User {
   lastName?: string | null;
   avatarUrl?: string | null;
   bio?: string | null;
+  birthDate?: string | null;
+  birthday?: BirthdayParts | null;
+  socialLinks?: SocialLink[];
   emailVerified?: boolean;
   role?: string;
+}
+
+export interface BirthdayParts {
+  day: number;
+  month: number;
+}
+
+export interface SocialLink {
+  label: string;
+  url: string;
 }
 
 export interface AuthSession {

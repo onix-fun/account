@@ -62,11 +62,34 @@
     "confirmationFailed": "Confirmation failed",
     "profileFailed": "Profile update failed",
     "resetFailed": "Password reset failed",
-    "language": "Language"
+    "language": "Language",
+    "qr": {
+      "signInTitle": "Sign in with QR",
+      "signInAction": "Sign in",
+      "otherDeviceTitle": "Sign in on another device",
+      "otherDeviceAction": "Sign in elsewhere",
+      "generatorHint": "Open sign-in on another device, choose “Sign in with QR”, and scan this code. The QR code is one-time use.",
+      "manualCode": "Manual code",
+      "refreshCode": "Refresh code",
+      "waiting": "Waiting for scan",
+      "consumed": "Signed in",
+      "cancelled": "Code cancelled",
+      "expired": "Code expired",
+      "timeLeft": "{time} left",
+      "loginConfirmed": "Sign-in on another device completed.",
+      "cameraStarting": "Opening camera...",
+      "cameraUnavailable": "Camera is unavailable. Enter the manual code.",
+      "cameraDenied": "Could not open the camera. Check permission or enter the manual code."
+    }
   },
   "profile": {
     "profile": "Profile",
+    "requests": "Requests",
+    "close": "Close friends",
+    "blocked": "Blocked",
+    "settings": "Settings",
     "sessions": "Sessions",
+    "system": "System",
     "switchAccount": "Switch account",
     "addAccount": "Add account",
     "signOutAll": "Sign out all",
@@ -84,6 +107,12 @@
     "emailChanged": "Email changed successfully.",
     "cancelEmailChange": "Cancel email change",
     "bio": "Bio",
+    "birthDate": "Birth date",
+    "socialLinks": "Social links",
+    "socialLinksHint": "Add public links visible to the audiences you choose.",
+    "socialLinkLabel": "Label",
+    "socialLinkUrl": "https://example.com",
+    "noSocialLinks": "No links added",
     "notSpecified": "Not specified",
     "editField": "Edit",
     "finishEditing": "Done",
@@ -97,11 +126,141 @@
     "noSessions": "No active sessions",
     "expires": "expires",
     "lastActive": "last active",
+    "createdAt": "created",
+    "ipAddress": "IP address",
     "unknownDevice": "Unknown device",
     "accountsTitle": "Accounts",
     "zoom": "Zoom",
     "rotate": "Rotate",
-    "cropInstructions": "Drag the image and adjust zoom."
+    "cropInstructions": "Drag the image and adjust zoom.",
+    "menu": {
+      "search": "Find people and manage relationships.",
+      "profile": "Name, username, avatar, and profile bio.",
+      "requests": "Incoming follow requests.",
+      "close": "Close friends and adding from following.",
+      "blocked": "People you have blocked.",
+      "settings": "Profile privacy and notification settings.",
+      "sessions": "Active devices and account sign-out.",
+      "system": "Language, theme, email, password, and account deletion."
+    }
+  },
+  "social": {
+    "notifications": "Notifications",
+    "followers": "Followers",
+    "following": "Following",
+    "friendsOnly": "Friends",
+    "search": "Search",
+    "searchUsers": "Search users",
+    "searchPlaceholder": "Type a name or username",
+    "searchFollowingPlaceholder": "Search following",
+    "searchHint": "Enter at least 2 characters.",
+    "searchShortcutStyle": "Fast account search",
+    "noUsersFound": "No users found",
+    "follow": "Follow",
+    "unfollow": "Unfollow",
+    "requested": "Requested",
+    "block": "Block",
+    "unblock": "Unblock",
+    "blockUser": "Block user",
+    "accept": "Accept",
+    "reject": "Reject",
+    "open": "Open",
+    "add": "Add",
+    "remove": "Remove",
+    "addCloseFriend": "Add close friend",
+    "alreadyCloseFriend": "Already close",
+    "markRead": "Read",
+    "markAllRead": "Mark all read",
+    "previous": "Previous",
+    "next": "Next",
+    "noFollowers": "No followers yet",
+    "noFollowing": "Not following anyone yet",
+    "noRequests": "No follow requests",
+    "noCloseFriends": "No close friends added",
+    "noBlockedUsers": "Blocked list is empty",
+    "noNotifications": "No notifications yet",
+    "privateProfile": "Private profile",
+    "privateProfileHint": "New followers will send a request before access.",
+    "public": "Public",
+    "private": "Private",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "notificationPrefs": "Notification preferences",
+    "notificationPrefsHint": "Choose which events appear inside the account.",
+    "settingsSaved": "Settings saved",
+    "followActionDone": "Follow state updated",
+    "unfollowActionDone": "Unfollowed",
+    "blockActionDone": "User blocked",
+    "unblockActionDone": "User unblocked",
+    "closeFriendAdded": "User added to close friends",
+    "closeFriendRemoved": "User removed from close friends",
+    "requestAccepted": "Request accepted",
+    "requestRejected": "Request rejected",
+    "notificationsRead": "Notifications marked read",
+    "notificationCopy": {
+      "subscriptionRequest": {
+        "title": "New follow request",
+        "body": "A user wants to follow your profile."
+      },
+      "newSubscriber": {
+        "title": "New follower",
+        "body": "A user followed your profile."
+      },
+      "requestAccepted": {
+        "title": "Request accepted",
+        "body": "Your follow request was accepted."
+      },
+      "postPublished": {
+        "title": "New publication",
+        "body": "Someone you follow published a new post."
+      },
+      "storyPublished": {
+        "title": "New story",
+        "body": "Someone you follow added a new story."
+      },
+      "authorMention": {
+        "title": "New mention",
+        "body": "You were mentioned as an author."
+      },
+      "postComment": {
+        "title": "New comment",
+        "body": "Someone commented on your post."
+      },
+      "birthdayToday": {
+        "title": "Birthday today",
+        "body": "Someone you follow has a birthday today."
+      }
+    },
+    "prefs": {
+      "inAppSubscriptions": "Subscriptions",
+      "inAppSubscriptionsHint": "Requests and subscription changes",
+      "inAppPublications": "Publications",
+      "inAppPublicationsHint": "New publications from following",
+      "inAppAuthorMentions": "Author mentions",
+      "inAppAuthorMentionsHint": "When you are added as an author",
+      "inAppPostComments": "Comments",
+      "inAppPostCommentsHint": "Comments on publications",
+      "inAppNewStories": "Stories",
+      "inAppNewStoriesHint": "New stories from following",
+      "inAppBirthdays": "Birthdays",
+      "inAppBirthdaysHint": "When visible following accounts have a birthday"
+    },
+    "visibility": "Data visibility",
+    "visibilityHint": "Choose who can see individual profile data.",
+    "visibilityFields": {
+      "bio": "Bio",
+      "bioHint": "Profile description",
+      "birthday": "Birth date",
+      "birthdayHint": "Others see only day and month",
+      "socialLinks": "Social links",
+      "socialLinksHint": "External links list"
+    },
+    "visibilityOptions": {
+      "public": "Public",
+      "followers": "Followers",
+      "friends": "Friends",
+      "private": "Only me"
+    }
   },
   "system": {
     "title": "System",
@@ -161,6 +320,10 @@
     "AUTH_CODE_LOCKED": "Too many incorrect attempts. Request a new code.",
     "AUTH_CODE_RESEND_TOO_SOON": "A code was already sent. Try again later.",
     "AUTH_EMAIL_CHANGE_NOT_FOUND": "Email change request was not found.",
+    "AUTH_QR_CHALLENGE_NOT_FOUND": "QR code was not found. Create a new code.",
+    "AUTH_QR_CHALLENGE_EXPIRED": "QR code expired. Create a new code.",
+    "AUTH_QR_CHALLENGE_CONSUMED": "QR code was already used.",
+    "AUTH_QR_CODE_INVALID": "QR code is invalid or expired.",
     "AVATAR_INVALID_IMAGE": "The image could not be decoded.",
     "AVATAR_DIMENSIONS_TOO_LARGE": "The image dimensions are too large.",
     "USER_NOT_FOUND": "User not found.",

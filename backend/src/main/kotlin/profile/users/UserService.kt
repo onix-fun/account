@@ -2,12 +2,15 @@ package profile.users
 
 import profile.infrastructure.db.User
 import profile.infrastructure.db.UserRepository
+import profile.infrastructure.db.PendingRegistrationStore
 import profile.infrastructure.storage.S3Client
 import profile.infrastructure.storage.AvatarProcessor
-import profile.infrastructure.redis.PendingRegistrationStore
+import profile.domain.SocialLink
 import profile.search.SearchService
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
+import java.net.URI
+import java.time.LocalDate
 
 class UserService(
     private val userRepository: UserRepository,
@@ -19,10 +22,16 @@ class UserService(
         return userRepository.findById(userId)
     }
 
+    fun getProfileByUsername(username: String): User? {
+        return userRepository.findByUsername(username)
+    }
+
     fun updateProfile(userId: String, request: UpdateProfileRequest): User {
         val user = userRepository.findById(userId) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
         val username = request.username?.trim() ?: user.username
         if (username.length < 3) apiError(ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
+        val birthDate = nextBirthDate(user.birthDate, request)
+        val socialLinks = nextSocialLinks(user.socialLinks, request)
 
         val owner = userRepository.findByUsername(username)
         if (owner != null && owner.id != userId) apiError(ApiErrorCode.AUTH_USERNAME_IN_USE, "username")
@@ -38,12 +47,43 @@ class UserService(
             username = username,
             firstName = request.firstName ?: user.firstName,
             lastName = request.lastName ?: user.lastName,
-            bio = request.bio ?: user.bio
+            bio = request.bio ?: user.bio,
+            birthDate = birthDate,
+            socialLinks = socialLinks
         )
 
         val updated = userRepository.findById(userId)!!
         if (updated.username != user.username) searchService.reindexUser(user, updated)
         return updated
+    }
+
+    private fun nextBirthDate(current: String?, request: UpdateProfileRequest): String? {
+        if (!request.birthDateProvided) return current
+        val raw = request.birthDate?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val parsed = runCatching { LocalDate.parse(raw) }.getOrNull()
+            ?: apiError(ApiErrorCode.VALIDATION_INVALID_REQUEST, "birthDate")
+        if (parsed.isAfter(LocalDate.now())) apiError(ApiErrorCode.VALIDATION_INVALID_REQUEST, "birthDate")
+        return parsed.toString()
+    }
+
+    private fun nextSocialLinks(current: List<SocialLink>, request: UpdateProfileRequest): List<SocialLink> {
+        if (!request.socialLinksProvided) return current
+        val normalized = (request.socialLinks ?: emptyList()).mapNotNull { link ->
+            val label = link.label.trim()
+            val url = link.url.trim()
+            if (label.isBlank() && url.isBlank()) return@mapNotNull null
+            if (label.isBlank() || url.isBlank() || label.length > 60 || url.length > 2048) {
+                apiError(ApiErrorCode.VALIDATION_INVALID_REQUEST, "socialLinks")
+            }
+            val parsed = runCatching { URI(url) }.getOrNull()
+                ?: apiError(ApiErrorCode.VALIDATION_INVALID_REQUEST, "socialLinks")
+            if (parsed.scheme !in setOf("http", "https") || parsed.host.isNullOrBlank()) {
+                apiError(ApiErrorCode.VALIDATION_INVALID_REQUEST, "socialLinks")
+            }
+            SocialLink(label = label, url = url)
+        }
+        if (normalized.size > 10) apiError(ApiErrorCode.VALIDATION_INVALID_REQUEST, "socialLinks")
+        return normalized
     }
 
     suspend fun getAvatarStream(key: String): java.io.InputStream? {

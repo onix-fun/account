@@ -6,7 +6,7 @@ setup:
 
 up: setup
 	@echo "Building backend JAR..."
-	cd backend && mvn package -q -DskipTests
+	cd backend && ./gradlew shadowJar -q
 	@echo "Starting account development containers..."
 	cd dev && docker compose up -d --build --remove-orphans
 	@echo "Cleaning up frontend port (5174)..."

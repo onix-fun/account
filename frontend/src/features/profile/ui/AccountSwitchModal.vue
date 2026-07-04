@@ -36,10 +36,13 @@ const logoutAll = async () => {
     modal
     dismissable-mask
     :header="t('profile.accountsTitle')"
-    class="w-full max-w-[400px]"
+    class="mobile-fullscreen-dialog w-full max-w-[400px]"
     @update:visible="emit('close')"
   >
-    <div class="grid gap-1.5 p-1">
+    <section class="grid gap-3 p-1">
+      <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="mobile-dialog-back" @click="emit('close')" />
+      <h2 class="m-0 text-base font-bold text-[var(--text)] lg:hidden">{{ t("profile.accountsTitle") }}</h2>
+
       <button
         v-for="account in authStore.storedAccounts"
         :key="account.id"
@@ -71,7 +74,7 @@ const logoutAll = async () => {
           <strong class="text-sm font-bold text-[var(--text)] truncate">{{ t("profile.addAccount") }}</strong>
         </span>
       </button>
-    </div>
+    </section>
 
     <template #footer>
       <div class="flex items-center gap-3 p-3 pt-0">

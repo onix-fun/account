@@ -210,6 +210,18 @@ export function useAuthFlow() {
     }
   };
 
+  const qrLogin = async (payload: { scanToken?: string; manualCode?: string }) => {
+    authMessage.value = "";
+    fieldErrors.value = {};
+    try {
+      await authStore.consumeQrLogin(payload);
+      await handleAuthSuccess();
+    } catch (cause) {
+      captureError(cause);
+      throw cause;
+    }
+  };
+
   const register = async () => {
     authMessage.value = "";
     fieldErrors.value = {};
@@ -355,6 +367,7 @@ export function useAuthFlow() {
     nameForm,
     pendingRegistrationEmail,
     publicVerificationCode,
+    qrLogin,
     register,
     registerForm,
     registerPasswordMismatch,

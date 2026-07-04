@@ -36,6 +36,10 @@ enum class ApiErrorCode(
     AUTH_CODE_LOCKED(2016, "Verification code is locked", HttpStatusCode.TooManyRequests),
     AUTH_CODE_RESEND_TOO_SOON(2017, "Verification code was sent too recently", HttpStatusCode.TooManyRequests),
     AUTH_EMAIL_CHANGE_NOT_FOUND(2018, "Pending email change not found", HttpStatusCode.NotFound),
+    AUTH_QR_CHALLENGE_NOT_FOUND(2019, "QR login challenge not found", HttpStatusCode.NotFound),
+    AUTH_QR_CHALLENGE_EXPIRED(2020, "QR login challenge is expired", HttpStatusCode.BadRequest),
+    AUTH_QR_CHALLENGE_CONSUMED(2021, "QR login challenge is already consumed", HttpStatusCode.Conflict),
+    AUTH_QR_CODE_INVALID(2022, "QR login code is invalid", HttpStatusCode.BadRequest),
 
     USER_NOT_FOUND(3000, "User not found", HttpStatusCode.NotFound),
     AVATAR_FILE_REQUIRED(3001, "Avatar file is required", HttpStatusCode.BadRequest),

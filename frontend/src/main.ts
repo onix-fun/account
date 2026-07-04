@@ -13,6 +13,7 @@ import Password from "primevue/password";
 import Dialog from "primevue/dialog";
 import Message from "primevue/message";
 import Toast from "primevue/toast";
+import Tooltip from "primevue/tooltip";
 
 import { definePreset } from "@primeuix/themes";
 import Aura from "@primeuix/themes/aura";
@@ -96,5 +97,6 @@ app.component("PPassword", Password);
 app.component("PDialog", Dialog);
 app.component("PMessage", Message);
 app.component("PToast", Toast);
+app.directive("tooltip", Tooltip);
 
 app.mount("#app");

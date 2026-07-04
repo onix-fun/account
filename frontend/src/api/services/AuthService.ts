@@ -14,6 +14,9 @@ interface UserResponse {
   lastName?: string | null;
   avatarUrl?: string | null;
   bio?: string | null;
+  birthDate?: string | null;
+  birthday?: { day: number; month: number } | null;
+  socialLinks?: Array<{ label: string; url: string }>;
   emailVerified?: boolean;
   role?: string;
   status?: string;
@@ -43,11 +46,28 @@ interface LoginPayload {
   password: string;
 }
 
+export interface QrLoginChallenge {
+  id: string;
+  scanToken: string;
+  manualCode: string;
+  status: "PENDING" | "CONSUMED" | "CANCELLED" | "EXPIRED";
+  expiresAt: string;
+}
+
+export interface QrLoginChallengeStatus {
+  id: string;
+  status: "PENDING" | "CONSUMED" | "CANCELLED" | "EXPIRED";
+  expiresAt: string;
+  consumedAt?: string | null;
+}
+
 interface UpdateProfilePayload {
   username?: string;
   firstName?: string;
   lastName?: string;
   bio?: string;
+  birthDate?: string | null;
+  socialLinks?: Array<{ label: string; url: string }>;
 }
 
 let currentUser: User | null = null;
@@ -62,6 +82,9 @@ function normalizeUser(user: UserResponse): User {
     lastName: user.lastName,
     avatarUrl: user.avatarUrl,
     bio: user.bio,
+    birthDate: user.birthDate,
+    birthday: user.birthday,
+    socialLinks: user.socialLinks || [],
     emailVerified: user.emailVerified,
     role: user.role,
   };
@@ -73,15 +96,6 @@ function rememberUser(user: User): User {
   if (index >= 0) accounts[index] = { ...accounts[index], ...user };
   else accounts.push(user);
   return user;
-}
-
-export interface UserPublicDto {
-  id: string;
-  username: string;
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  avatarUrl?: string;
 }
 
 export class AuthService {
@@ -103,11 +117,6 @@ export class AuthService {
 
   static async confirmPublicVerification(identifier: string, code: string): Promise<void> {
     await profileClient.post("/auth/public-verification/confirm", { identifier, code });
-  }
-
-  static async searchUsers(query: string): Promise<UserPublicDto[]> {
-    const response = await profileClient.get<UserPublicDto[]>("/search/search", { params: { q: query } });
-    return response.data;
   }
 
   static getStoredAccounts(): User[] {
@@ -133,6 +142,31 @@ export class AuthService {
 
   static async login(payload: LoginPayload): Promise<User> {
     const response = await profileClient.post<BrowserAuthResponse>("/auth/login", {
+      ...payload,
+      deviceId: DeviceIdManager.getId(),
+    });
+    const user = rememberUser(normalizeUser(response.data.user));
+    await this.loadAccounts();
+    return user;
+  }
+
+  static async createQrLoginChallenge(): Promise<QrLoginChallenge> {
+    const response = await profileClient.post<QrLoginChallenge>("/auth/qr/challenges");
+    return response.data;
+  }
+
+  static async getQrLoginChallenge(id: string): Promise<QrLoginChallengeStatus> {
+    const response = await profileClient.get<QrLoginChallengeStatus>(`/auth/qr/challenges/${id}`);
+    return response.data;
+  }
+
+  static async cancelQrLoginChallenge(id: string): Promise<QrLoginChallengeStatus> {
+    const response = await profileClient.delete<QrLoginChallengeStatus>(`/auth/qr/challenges/${id}`);
+    return response.data;
+  }
+
+  static async consumeQrLogin(payload: { scanToken?: string; manualCode?: string }): Promise<User> {
+    const response = await profileClient.post<BrowserAuthResponse>("/auth/qr/consume", {
       ...payload,
       deviceId: DeviceIdManager.getId(),
     });

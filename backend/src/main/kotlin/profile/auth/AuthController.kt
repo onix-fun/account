@@ -19,6 +19,7 @@ import java.util.UUID
 
 class AuthController(
     private val authService: AuthService,
+    private val qrLoginService: QrLoginService,
     private val sessionConfig: profile.infrastructure.config.SessionConfig,
     private val jwtConfig: JwtConfig,
     private val securityConfig: profile.infrastructure.config.SecurityConfig
@@ -133,6 +134,35 @@ class AuthController(
             ?: apiError(ApiErrorCode.AUTH_SESSION_NOT_FOUND)
         val result = refreshBrowserAccount(refreshToken, userId)
         appendBrowserRefresh(call, result)
+        call.respond(HttpStatusCode.OK, BrowserAuthResponse(result.user.toProfileDto()))
+    }
+
+    suspend fun createQrChallenge(call: ApplicationCall) {
+        val userId = call.principal<JWTPrincipal>()!!.payload.subject
+        call.respond(HttpStatusCode.Created, qrLoginService.createChallenge(userId))
+    }
+
+    suspend fun getQrChallenge(call: ApplicationCall) {
+        val userId = call.principal<JWTPrincipal>()!!.payload.subject
+        val id = call.parameters["id"] ?: apiError(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "id")
+        call.respond(HttpStatusCode.OK, qrLoginService.getChallenge(userId, id))
+    }
+
+    suspend fun cancelQrChallenge(call: ApplicationCall) {
+        val userId = call.principal<JWTPrincipal>()!!.payload.subject
+        val id = call.parameters["id"] ?: apiError(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "id")
+        call.respond(HttpStatusCode.OK, qrLoginService.cancelChallenge(userId, id))
+    }
+
+    suspend fun consumeQrChallenge(call: ApplicationCall) {
+        val request = call.receive<QrLoginConsumeRequest>()
+        val result = qrLoginService.consume(
+            request = request,
+            deviceId = request.deviceId,
+            userAgent = call.request.headers["User-Agent"],
+            ipAddress = call.clientIpAddress()
+        )
+        appendBrowserSession(call, result)
         call.respond(HttpStatusCode.OK, BrowserAuthResponse(result.user.toProfileDto()))
     }
 

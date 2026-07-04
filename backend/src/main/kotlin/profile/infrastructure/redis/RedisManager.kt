@@ -3,118 +3,33 @@ package profile.infrastructure.redis
 import io.lettuce.core.RedisClient
 import io.lettuce.core.api.StatefulRedisConnection
 import io.lettuce.core.api.sync.RedisCommands
-import profile.infrastructure.config.RedisConfig
 import profile.infrastructure.config.AppConfig
-import java.util.concurrent.ConcurrentHashMap
 
 class RedisManager(config: AppConfig) {
     private val client: RedisClient?
     private val connection: StatefulRedisConnection<String, String>?
-    private val memoryRateLimit = ConcurrentHashMap<String, Long>()
-    val requiresAvailability: Boolean =
-        config.environment.equals("production", ignoreCase = true)
 
     init {
         val url = config.redis.url
-        if (url != null) {
-            println("DEBUG: Connecting to Redis at $url")
-            val c = RedisClient.create(url)
-            c.setOptions(io.lettuce.core.ClientOptions.builder()
-                .socketOptions(io.lettuce.core.SocketOptions.builder()
-                    .connectTimeout(java.time.Duration.ofSeconds(5))
-                    .build())
+        println("DEBUG: Connecting to Redis at $url")
+        val c = RedisClient.create(url)
+        c.setOptions(io.lettuce.core.ClientOptions.builder()
+            .socketOptions(io.lettuce.core.SocketOptions.builder()
+                .connectTimeout(java.time.Duration.ofSeconds(5))
                 .build())
-            client = c
-            connection = try {
-                c.connect().also { println("DEBUG: Redis connected successfully") }
-            } catch (e: Exception) {
-                println("DEBUG: Redis connection failed: ${e.message}")
-                null
-            }
-        } else {
-            client = null
-            connection = null
+            .build())
+        client = c
+        connection = try {
+            c.connect().also { println("DEBUG: Redis connected successfully") }
+        } catch (e: Exception) {
+            println("DEBUG: Redis connection failed: ${e.message}")
+            null
         }
     }
 
     fun sync(): RedisCommands<String, String>? = connection?.sync()
 
     fun isReady(): Boolean = runCatching { sync()?.ping() == "PONG" }.getOrDefault(false)
-
-    fun pubSubConnection(): io.lettuce.core.pubsub.StatefulRedisPubSubConnection<String, String>? = client?.connectPubSub()
-
-    fun activateSession(sessionId: String, userId: String, ttlSeconds: Long) {
-        sync()?.setex("profile:session:$sessionId", ttlSeconds, userId)
-    }
-
-    fun revokeSession(sessionId: String): Boolean {
-        val redis = sync() ?: return false
-        return runCatching { redis.del("profile:session:$sessionId"); true }.getOrDefault(false)
-    }
-
-    fun checkRateLimit(scope: String, key: String, max: Long, windowSeconds: Long): Boolean {
-        val redis = sync()
-        if (redis != null) {
-            return redisCheckRateLimit(redis, scope, key, max, windowSeconds)
-        }
-        if (requiresAvailability) throw IllegalStateException("Redis is required for rate limiting")
-        return memoryCheckRateLimit(scope, key, max, windowSeconds)
-    }
-
-    fun getAccountFailedAttempts(userId: String): Long {
-        val redis = sync()
-        val key = "profile:account-failures:$userId"
-        if (redis != null) {
-            val raw = redis.get(key)
-            return raw?.toLongOrNull() ?: 0L
-        }
-        val windowKey = "profile:account-failures:$userId:${System.currentTimeMillis() / 300_000}"
-        return memoryRateLimit.getOrDefault(windowKey, 0L)
-    }
-
-    fun incrementAccountFailedAttempts(userId: String): Long {
-        val redis = sync()
-        val key = "profile:account-failures:$userId"
-        if (redis != null) {
-            val count = redis.incr(key)
-            if (count == 1L) redis.expire(key, 900)
-            return count
-        }
-        val windowKey = "profile:account-failures:$userId:${System.currentTimeMillis() / 900_000}"
-        return memoryRateLimit.merge(windowKey, 1L) { old, _ -> old + 1 } ?: 1L
-    }
-
-    fun clearAccountFailedAttempts(userId: String) {
-        sync()?.del("profile:account-failures:$userId")
-    }
-
-    private val rateLimitSha: ThreadLocal<String> = ThreadLocal()
-
-    private fun redisCheckRateLimit(redis: RedisCommands<String, String>, scope: String, key: String, max: Long, windowSeconds: Long): Boolean {
-        val redisKey = "profile:rate:$scope:$key"
-        try {
-            var sha = rateLimitSha.get()
-            try {
-                return redis.evalsha<Boolean>(sha, io.lettuce.core.ScriptOutputType.BOOLEAN, arrayOf(redisKey), windowSeconds.toString(), max.toString())
-            } catch (e: Exception) {
-                sha = redis.scriptLoad("""
-                    local current = redis.call('INCR', KEYS[1])
-                    if current == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end
-                    return current <= tonumber(ARGV[2])
-                """.trimIndent())
-                rateLimitSha.set(sha)
-                return redis.evalsha<Boolean>(sha, io.lettuce.core.ScriptOutputType.BOOLEAN, arrayOf(redisKey), windowSeconds.toString(), max.toString())
-            }
-        } catch (e: Exception) {
-            return memoryCheckRateLimit(scope, key, max, windowSeconds)
-        }
-    }
-
-    private fun memoryCheckRateLimit(scope: String, key: String, max: Long, windowSeconds: Long): Boolean {
-        val windowKey = "$scope:$key:${System.currentTimeMillis() / (windowSeconds * 1000)}"
-        val value = memoryRateLimit.merge(windowKey, 1L) { old, _ -> old + 1 } ?: 1L
-        return value <= max
-    }
 
     fun close() {
         connection?.close()

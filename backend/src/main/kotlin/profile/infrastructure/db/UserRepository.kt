@@ -1,6 +1,11 @@
 package profile.infrastructure.db
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import profile.domain.SocialLink
+import profile.domain.UserProfileMetadata
 import profile.shared.InstantSerializer
 import java.sql.Connection
 import java.sql.SQLException
@@ -22,6 +27,8 @@ data class User(
     val lastName: String? = null,
     val avatarUrl: String? = null,
     val bio: String? = null,
+    val birthDate: String? = null,
+    val socialLinks: List<SocialLink> = emptyList(),
     val role: String = "USER",
     val status: String = "ACTIVE",
     @Serializable(with = InstantSerializer::class)
@@ -32,12 +39,23 @@ data class User(
 
 class UserRepository(private val dataSource: DataSource) {
     companion object {
+        private val metadataJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
         private const val CREATE_SQL = """
             INSERT INTO users (email, username, password_hash, email_verified, first_name, last_name, role, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *
         """
-        private const val UPDATE_PROFILE_SQL = "UPDATE users SET username = ?, first_name = ?, last_name = ?, bio = ?, updated_at = ? WHERE id = ?"
+        private const val UPDATE_PROFILE_SQL = """
+            UPDATE users
+            SET username = ?,
+                first_name = ?,
+                last_name = ?,
+                bio = ?,
+                birth_date = ?,
+                profile_metadata = ?::jsonb,
+                updated_at = ?
+            WHERE id = ?
+        """
         private const val UPDATE_EMAIL_SQL = "UPDATE users SET email = ?, email_verified = TRUE, updated_at = ? WHERE id = ?"
         private const val UPDATE_AVATAR_SQL = "UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?"
         private const val FIND_BY_EMAIL_SQL = "SELECT * FROM users WHERE LOWER(email) = LOWER(?)"
@@ -48,6 +66,16 @@ class UserRepository(private val dataSource: DataSource) {
         private const val FIND_BY_IDS_SQL = "SELECT * FROM users WHERE id IN (%s)"
         private const val FIND_ALL_SQL = "SELECT * FROM users"
         private const val DELETE_SQL = "DELETE FROM users WHERE id = ?"
+        private const val FIND_BIRTHDAYS_FOR_FOLLOWING_SQL = """
+            SELECT u.*
+            FROM users u
+            JOIN social.subscriptions s ON s.subscribed_to_id = u.id
+            WHERE s.subscriber_id = ?
+              AND s.status = 'ACCEPTED'
+              AND u.birth_date IS NOT NULL
+              AND EXTRACT(MONTH FROM u.birth_date) = ?
+              AND EXTRACT(DAY FROM u.birth_date) = ?
+        """
     }
 
     fun create(user: User): User {
@@ -77,7 +105,15 @@ class UserRepository(private val dataSource: DataSource) {
         }
     }
 
-    fun updateProfile(userId: String, username: String, firstName: String?, lastName: String?, bio: String?) {
+    fun updateProfile(
+        userId: String,
+        username: String,
+        firstName: String?,
+        lastName: String?,
+        bio: String?,
+        birthDate: String?,
+        socialLinks: List<SocialLink>
+    ) {
         dataSource.connection.use { conn ->
             try {
                 conn.prepareStatement(UPDATE_PROFILE_SQL).use { stmt ->
@@ -85,8 +121,11 @@ class UserRepository(private val dataSource: DataSource) {
                     stmt.setString(2, firstName)
                     stmt.setString(3, lastName)
                     stmt.setString(4, bio)
-                    stmt.setTimestamp(5, java.sql.Timestamp.from(Instant.now()))
-                    stmt.setObject(6, UUID.fromString(userId))
+                    if (birthDate != null) stmt.setObject(5, java.time.LocalDate.parse(birthDate))
+                    else stmt.setNull(5, java.sql.Types.DATE)
+                    stmt.setString(6, metadataJson.encodeToString(UserProfileMetadata(socialLinks = socialLinks)))
+                    stmt.setTimestamp(7, java.sql.Timestamp.from(Instant.now()))
+                    stmt.setObject(8, UUID.fromString(userId))
                     stmt.executeUpdate()
                 }
                 conn.commit()
@@ -225,6 +264,20 @@ class UserRepository(private val dataSource: DataSource) {
         }
     }
 
+    fun findBirthdaysForFollowing(userId: String, month: Int, day: Int): List<User> {
+        dataSource.connection.use { conn ->
+            conn.prepareStatement(FIND_BIRTHDAYS_FOR_FOLLOWING_SQL).use { stmt ->
+                stmt.setObject(1, UUID.fromString(userId))
+                stmt.setInt(2, month)
+                stmt.setInt(3, day)
+                val rs = stmt.executeQuery()
+                val result = mutableListOf<User>()
+                while (rs.next()) result.add(mapRow(rs))
+                return result
+            }
+        }
+    }
+
     private fun throwUniqueConflict(error: SQLException, emailField: String = "email"): Nothing {
         if (error.sqlState == "23505") {
             val constraint = error.constraintName()
@@ -252,10 +305,18 @@ class UserRepository(private val dataSource: DataSource) {
             lastName = rs.getString("last_name"),
             avatarUrl = rs.getString("avatar_url"),
             bio = rs.getString("bio"),
+            birthDate = rs.getDate("birth_date")?.toLocalDate()?.toString(),
+            socialLinks = parseMetadata(rs.getString("profile_metadata")).socialLinks,
             role = rs.getString("role"),
             status = rs.getString("status"),
             createdAt = rs.getTimestamp("created_at").toInstant(),
             updatedAt = rs.getTimestamp("updated_at").toInstant()
         )
+    }
+
+    private fun parseMetadata(raw: String?): UserProfileMetadata {
+        if (raw.isNullOrBlank()) return UserProfileMetadata()
+        return runCatching { metadataJson.decodeFromString<UserProfileMetadata>(raw) }
+            .getOrDefault(UserProfileMetadata())
     }
 }

@@ -62,11 +62,34 @@
     "confirmationFailed": "Не удалось подтвердить email",
     "profileFailed": "Не удалось обновить профиль",
     "resetFailed": "Не удалось сбросить пароль",
-    "language": "Язык"
+    "language": "Язык",
+    "qr": {
+      "signInTitle": "Войти по QR",
+      "signInAction": "Войти",
+      "otherDeviceTitle": "Войти на другом устройстве",
+      "otherDeviceAction": "Войти на другом",
+      "generatorHint": "Откройте вход на другом устройстве, нажмите «Войти по QR» и отсканируйте код. QR одноразовый.",
+      "manualCode": "Ручной код",
+      "refreshCode": "Обновить код",
+      "waiting": "Ожидаем сканирование",
+      "consumed": "Вход выполнен",
+      "cancelled": "Код отменён",
+      "expired": "Код истёк",
+      "timeLeft": "Осталось {time}",
+      "loginConfirmed": "Вход на другом устройстве выполнен.",
+      "cameraStarting": "Открываем камеру...",
+      "cameraUnavailable": "Камера недоступна. Введите ручной код.",
+      "cameraDenied": "Не удалось открыть камеру. Проверьте разрешение или введите ручной код."
+    }
   },
   "profile": {
     "profile": "Профиль",
+    "requests": "Запросы",
+    "close": "Близкие",
+    "blocked": "Чёрный список",
+    "settings": "Настройки",
     "sessions": "Сессии",
+    "system": "Система",
     "switchAccount": "Сменить аккаунт",
     "addAccount": "Добавить аккаунт",
     "signOutAll": "Выйти со всех",
@@ -84,6 +107,12 @@
     "emailChanged": "Email успешно изменён.",
     "cancelEmailChange": "Отменить смену email",
     "bio": "О себе",
+    "birthDate": "Дата рождения",
+    "socialLinks": "Социальные ссылки",
+    "socialLinksHint": "Добавьте публичные ссылки, которые смогут видеть выбранные аудитории.",
+    "socialLinkLabel": "Название",
+    "socialLinkUrl": "https://example.com",
+    "noSocialLinks": "Ссылки не добавлены",
     "notSpecified": "Не указано",
     "editField": "Изменить",
     "finishEditing": "Готово",
@@ -97,11 +126,141 @@
     "noSessions": "Активных сессий нет",
     "expires": "истекает",
     "lastActive": "последняя активность",
+    "createdAt": "создана",
+    "ipAddress": "IP-адрес",
     "unknownDevice": "Неизвестное устройство",
     "accountsTitle": "Аккаунты",
     "zoom": "Масштаб",
     "rotate": "Повернуть",
-    "cropInstructions": "Перетащите изображение и настройте масштаб."
+    "cropInstructions": "Перетащите изображение и настройте масштаб.",
+    "menu": {
+      "search": "Найти людей и управлять подписками.",
+      "profile": "Имя, ник, аватар и описание профиля.",
+      "requests": "Входящие запросы на подписку.",
+      "close": "Список близких друзей и добавление из подписок.",
+      "blocked": "Пользователи, которых вы заблокировали.",
+      "settings": "Приватность профиля и уведомления.",
+      "sessions": "Активные устройства и выход из аккаунта.",
+      "system": "Язык, тема, email, пароль и удаление аккаунта."
+    }
+  },
+  "social": {
+    "notifications": "Уведомления",
+    "followers": "Подписчики",
+    "following": "Подписки",
+    "friendsOnly": "Друзья",
+    "search": "Поиск",
+    "searchUsers": "Поиск пользователей",
+    "searchPlaceholder": "Введите имя или ник",
+    "searchFollowingPlaceholder": "Поиск по подпискам",
+    "searchHint": "Введите минимум 2 символа.",
+    "searchShortcutStyle": "Быстрый поиск по аккаунтам",
+    "noUsersFound": "Пользователи не найдены",
+    "follow": "Подписаться",
+    "unfollow": "Отписаться",
+    "requested": "Запрошено",
+    "block": "Заблокировать",
+    "unblock": "Разблокировать",
+    "blockUser": "Заблокировать пользователя",
+    "accept": "Принять",
+    "reject": "Отклонить",
+    "open": "Открыть",
+    "add": "Добавить",
+    "remove": "Удалить",
+    "addCloseFriend": "Добавить в близкие",
+    "alreadyCloseFriend": "Уже в близких",
+    "markRead": "Прочитано",
+    "markAllRead": "Прочитать все",
+    "previous": "Назад",
+    "next": "Далее",
+    "noFollowers": "Подписчиков пока нет",
+    "noFollowing": "Подписок пока нет",
+    "noRequests": "Запросов на подписку нет",
+    "noCloseFriends": "Близкие друзья не добавлены",
+    "noBlockedUsers": "Чёрный список пуст",
+    "noNotifications": "Уведомлений пока нет",
+    "privateProfile": "Приватный профиль",
+    "privateProfileHint": "Новые подписчики будут отправлять запрос перед доступом.",
+    "public": "Публичный",
+    "private": "Приватный",
+    "enabled": "Включено",
+    "disabled": "Выключено",
+    "notificationPrefs": "Настройки уведомлений",
+    "notificationPrefsHint": "Выберите, какие события показывать внутри аккаунта.",
+    "settingsSaved": "Настройки сохранены",
+    "followActionDone": "Подписка обновлена",
+    "unfollowActionDone": "Подписка отменена",
+    "blockActionDone": "Пользователь заблокирован",
+    "unblockActionDone": "Пользователь разблокирован",
+    "closeFriendAdded": "Пользователь добавлен в близкие",
+    "closeFriendRemoved": "Пользователь удалён из близких",
+    "requestAccepted": "Запрос принят",
+    "requestRejected": "Запрос отклонён",
+    "notificationsRead": "Уведомления прочитаны",
+    "notificationCopy": {
+      "subscriptionRequest": {
+        "title": "Новый запрос на подписку",
+        "body": "Пользователь хочет подписаться на ваш профиль."
+      },
+      "newSubscriber": {
+        "title": "Новый подписчик",
+        "body": "Пользователь подписался на ваш профиль."
+      },
+      "requestAccepted": {
+        "title": "Запрос принят",
+        "body": "Ваш запрос на подписку был принят."
+      },
+      "postPublished": {
+        "title": "Новая публикация",
+        "body": "Пользователь, на которого вы подписаны, опубликовал новый пост."
+      },
+      "storyPublished": {
+        "title": "Новая история",
+        "body": "Пользователь, на которого вы подписаны, добавил новую историю."
+      },
+      "authorMention": {
+        "title": "Новое упоминание",
+        "body": "Вас упомянули как автора."
+      },
+      "postComment": {
+        "title": "Новый комментарий",
+        "body": "Кто-то прокомментировал ваш пост."
+      },
+      "birthdayToday": {
+        "title": "День рождения сегодня",
+        "body": "У пользователя из ваших подписок сегодня день рождения."
+      }
+    },
+    "prefs": {
+      "inAppSubscriptions": "Подписки",
+      "inAppSubscriptionsHint": "Запросы и изменения подписок",
+      "inAppPublications": "Публикации",
+      "inAppPublicationsHint": "Новые публикации подписок",
+      "inAppAuthorMentions": "Упоминания автора",
+      "inAppAuthorMentionsHint": "Когда вас добавляют как автора",
+      "inAppPostComments": "Комментарии",
+      "inAppPostCommentsHint": "Комментарии к публикациям",
+      "inAppNewStories": "Истории",
+      "inAppNewStoriesHint": "Новые истории подписок",
+      "inAppBirthdays": "Дни рождения",
+      "inAppBirthdaysHint": "Когда у видимых подписок день рождения"
+    },
+    "visibility": "Видимость данных",
+    "visibilityHint": "Выберите, кто может видеть отдельные данные профиля.",
+    "visibilityFields": {
+      "bio": "О себе",
+      "bioHint": "Описание профиля",
+      "birthday": "Дата рождения",
+      "birthdayHint": "Другие увидят только день и месяц",
+      "socialLinks": "Социальные ссылки",
+      "socialLinksHint": "Список внешних ссылок"
+    },
+    "visibilityOptions": {
+      "public": "Все",
+      "followers": "Подписчики",
+      "friends": "Друзья",
+      "private": "Только я"
+    }
   },
   "system": {
     "title": "Система",
@@ -161,6 +320,10 @@
     "AUTH_CODE_LOCKED": "Слишком много неверных попыток. Запросите новый код.",
     "AUTH_CODE_RESEND_TOO_SOON": "Код уже отправлен. Повторите позже.",
     "AUTH_EMAIL_CHANGE_NOT_FOUND": "Запрос смены email не найден.",
+    "AUTH_QR_CHALLENGE_NOT_FOUND": "QR-код не найден. Создайте новый код.",
+    "AUTH_QR_CHALLENGE_EXPIRED": "QR-код истёк. Создайте новый код.",
+    "AUTH_QR_CHALLENGE_CONSUMED": "QR-код уже использован.",
+    "AUTH_QR_CODE_INVALID": "QR-код неверен или истёк.",
     "AVATAR_INVALID_IMAGE": "Не удалось прочитать изображение.",
     "AVATAR_DIMENSIONS_TOO_LARGE": "Размеры изображения слишком большие.",
     "USER_NOT_FOUND": "Пользователь не найден.",
