@@ -1,0 +1,75 @@
+package profile.domain
+
+import java.time.Instant
+import java.util.UUID
+import com.fasterxml.uuid.Generators
+
+data class Notification(
+    val id: UUID = Generators.timeBasedEpochGenerator().generate(),
+    val recipientId: UUID,
+    val type: String,
+    val title: String,
+    val body: String,
+    val metadataJson: String = "{}",
+    val isRead: Boolean = false,
+    val actorId: UUID? = null,
+    val entityType: String? = null,
+    val entityId: String? = null,
+    val sourceEventId: String? = null,
+    val createdAt: Instant = Instant.now()
+)
+
+data class NotificationPrefs(
+    val userId: UUID,
+    val inAppSubscriptions: Boolean = true,
+    val inAppPublications: Boolean = true,
+    val inAppAuthorMentions: Boolean = true,
+    val inAppPostComments: Boolean = true,
+    val inAppNewStories: Boolean = true,
+    val updatedAt: Instant = Instant.now()
+)
+
+data class NotificationPage(
+    val items: List<Notification>,
+    val totalCount: Int
+)
+
+enum class UserActivityType {
+    POST_PUBLISHED,
+    STORY_PUBLISHED,
+    AUTHOR_MENTION,
+    POST_COMMENT
+}
+
+enum class NotificationOutboxStatus {
+    PENDING,
+    SENT,
+    DEAD
+}
+
+data class UserActivityEvent(
+    val sourceEventId: String,
+    val actorId: UUID,
+    val activityType: UserActivityType,
+    val entityType: String? = null,
+    val entityId: String? = null,
+    val metadataJson: String = "{}",
+    val createdAt: Instant = Instant.now()
+)
+
+data class NotificationOutboxItem(
+    val id: UUID,
+    val event: UserActivityEvent,
+    val attempts: Int,
+    val createdAt: Instant
+)
+
+enum class PublishActivityStatus {
+    ACCEPTED,
+    DUPLICATE
+}
+
+data class PublishActivityResult(
+    val status: PublishActivityStatus,
+    val sourceEventId: String
+)

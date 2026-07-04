@@ -75,15 +75,6 @@ function rememberUser(user: User): User {
   return user;
 }
 
-export interface UserPublicDto {
-  id: string;
-  username: string;
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  avatarUrl?: string;
-}
-
 export class AuthService {
   static async isUsernameAvailable(username: string): Promise<boolean> {
     const response = await profileClient.get<{ available: boolean }>("/auth/username-available", {
@@ -103,11 +94,6 @@ export class AuthService {
 
   static async confirmPublicVerification(identifier: string, code: string): Promise<void> {
     await profileClient.post("/auth/public-verification/confirm", { identifier, code });
-  }
-
-  static async searchUsers(query: string): Promise<UserPublicDto[]> {
-    const response = await profileClient.get<UserPublicDto[]>("/search/search", { params: { q: query } });
-    return response.data;
   }
 
   static getStoredAccounts(): User[] {

@@ -1,32 +1,43 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { useToast } from "primevue/usetoast";
 import { apiErrorMessage } from "@/api/client";
 import { AuthService } from "@/api/services/AuthService";
 import { trustedRedirectUrl } from "@/infra/navigation/trustedRedirect";
-import { useAuthStore } from "@/infra/store";
-import AvatarCropper from "@/features/avatar/ui/AvatarCropper.vue";
-import SessionsTab from "@/features/sessions/ui/SessionsTab.vue";
-import SystemTab from "@/features/profile/ui/SystemTab.vue";
-import AccountSwitchModal from "@/features/profile/ui/AccountSwitchModal.vue";
-import { userDisplayName, userInitials } from "@/shared/lib/user";
+import { useAuthStore, useProfileSocialStore } from "@/infra/store";
 import { isUsername } from "@/shared/lib/validation";
+import AvatarCropper from "@/features/avatar/ui/AvatarCropper.vue";
+import AccountSwitchModal from "@/features/profile/ui/AccountSwitchModal.vue";
+import BlockedUsersTab from "@/features/profile/ui/BlockedUsersTab.vue";
+import CloseFriendsTab from "@/features/profile/ui/CloseFriendsTab.vue";
+import NotificationsPage from "@/features/profile/ui/NotificationsPage.vue";
+import ProfileListPage from "@/features/profile/ui/ProfileListPage.vue";
+import ProfileNav, { type ProfileTab } from "@/features/profile/ui/ProfileNav.vue";
+import ProfileSearchOverlay from "@/features/profile/ui/ProfileSearchOverlay.vue";
+import ProfileTopCard from "@/features/profile/ui/ProfileTopCard.vue";
+import RequestsTab from "@/features/profile/ui/RequestsTab.vue";
+import SessionsTab from "@/features/sessions/ui/SessionsTab.vue";
+import SocialSettingsTab from "@/features/profile/ui/SocialSettingsTab.vue";
+import SystemTab from "@/features/profile/ui/SystemTab.vue";
 
-import { useToast } from "primevue/usetoast";
-
-type ProfileTab = "profile" | "sessions" | "system";
+type ProfileView = "followers" | "following" | "notifications";
 type EditableProfileField = "username" | "firstName" | "lastName" | "bio";
 type UsernameAvailability = "idle" | "checking" | "available" | "taken" | "invalid";
 
 const authStore = useAuthStore();
+const socialStore = useProfileSocialStore();
 const route = useRoute();
+const router = useRouter();
 const { t } = useI18n();
 const toast = useToast();
+
 const activeTab = ref<ProfileTab>("profile");
 const isSavingProfile = ref(false);
 const isUploadingAvatar = ref(false);
 const isAccountModalOpen = ref(false);
+const isSearchOpen = ref(false);
 const cropFile = ref<File | null>(null);
 const avatarPreviewUrl = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -40,6 +51,7 @@ const profileForm = reactive({
   lastName: "",
   bio: "",
 });
+
 const editingFields = reactive<Record<EditableProfileField, boolean>>({
   username: false,
   firstName: false,
@@ -47,10 +59,12 @@ const editingFields = reactive<Record<EditableProfileField, boolean>>({
   bio: false,
 });
 
-const displayName = computed(() => userDisplayName(authStore.currentUser));
-const displayInitials = computed(() => userInitials(authStore.currentUser));
-const avatarPreview = computed(() => avatarPreviewUrl.value || authStore.currentUser?.avatarUrl || "");
 const backUrl = computed(() => trustedRedirectUrl(route.query.redirect));
+const avatarPreview = computed(() => avatarPreviewUrl.value || authStore.currentUser?.avatarUrl || "");
+const queryView = computed<ProfileView | null>(() => {
+  const value = route.query.view;
+  return value === "followers" || value === "following" || value === "notifications" ? value : null;
+});
 const isProfileDirty = computed(() => {
   const user = authStore.currentUser;
   return (
@@ -73,13 +87,6 @@ const editableProfileFields = computed<
   { key: "lastName", label: t("auth.lastName"), type: "text", autocomplete: "family-name" },
   { key: "bio", label: t("profile.bio"), type: "textarea" },
 ]);
-
-const syncProfileForm = () => {
-  profileForm.username = authStore.currentUser?.username || "";
-  profileForm.firstName = authStore.currentUser?.firstName || "";
-  profileForm.lastName = authStore.currentUser?.lastName || "";
-  profileForm.bio = authStore.currentUser?.bio || "";
-};
 
 watch(() => authStore.currentUser, syncProfileForm, { immediate: true });
 watch(
@@ -109,10 +116,21 @@ watch(
     }, 450);
   },
 );
+watch(queryView, (view) => {
+  if (view === "followers") socialStore.loadFollowers().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
+  if (view === "following") socialStore.loadFollowing().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
+  if (view === "notifications") socialStore.loadNotifications().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
+}, { immediate: true });
 
 onMounted(async () => {
-  await authStore.fetchSessions().catch((cause) => {
-    setMessage(apiErrorMessage(cause), "error");
+  await Promise.allSettled([
+    authStore.fetchSessions(),
+    socialStore.refreshSummary(),
+    socialStore.loadSettings(),
+  ]).then((results) => {
+    results.forEach((result) => {
+      if (result.status === "rejected") setMessage(apiErrorMessage(result.reason), "error");
+    });
   });
 });
 
@@ -120,6 +138,13 @@ onBeforeUnmount(() => {
   if (usernameCheckTimeout) clearTimeout(usernameCheckTimeout);
   revokeAvatarPreview();
 });
+
+function syncProfileForm() {
+  profileForm.username = authStore.currentUser?.username || "";
+  profileForm.firstName = authStore.currentUser?.firstName || "";
+  profileForm.lastName = authStore.currentUser?.lastName || "";
+  profileForm.bio = authStore.currentUser?.bio || "";
+}
 
 function setMessage(message: string, tone: "success" | "error" | "warn" | "warning" | "info" = "success") {
   const warning = tone === "warn" || tone === "warning";
@@ -131,27 +156,37 @@ function setMessage(message: string, tone: "success" | "error" | "warn" | "warni
   });
 }
 
-const openFieldEdit = (field: EditableProfileField) => {
-  editingFields[field] = true;
-};
+function openView(view: ProfileView) {
+  router.push({ query: { ...route.query, view } });
+}
 
-const confirmFieldEdit = async (field: EditableProfileField) => {
+function closeView() {
+  const nextQuery = { ...route.query };
+  delete nextQuery.view;
+  router.push({ query: nextQuery });
+}
+
+function openFieldEdit(field: EditableProfileField) {
+  editingFields[field] = true;
+}
+
+async function confirmFieldEdit(field: EditableProfileField) {
   if (field === "username" && !canSaveUsername.value) return;
   if (!isProfileDirty.value) {
     editingFields[field] = false;
     return;
   }
   await saveProfile();
-};
+}
 
-const closeFieldEdits = () => {
+function closeFieldEdits() {
   editingFields.username = false;
   editingFields.firstName = false;
   editingFields.lastName = false;
   editingFields.bio = false;
-};
+}
 
-const saveProfile = async () => {
+async function saveProfile() {
   isSavingProfile.value = true;
   try {
     await authStore.updateProfile({
@@ -160,6 +195,7 @@ const saveProfile = async () => {
       lastName: profileForm.lastName,
       bio: profileForm.bio,
     });
+    await socialStore.refreshSummary().catch(() => undefined);
     closeFieldEdits();
     setMessage(t("profile.profileUpdated"));
   } catch (cause) {
@@ -167,13 +203,13 @@ const saveProfile = async () => {
   } finally {
     isSavingProfile.value = false;
   }
-};
+}
 
-const openAvatarPicker = () => {
+function openAvatarPicker() {
   fileInput.value?.click();
-};
+}
 
-const onAvatarChange = (event: Event) => {
+function onAvatarChange(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0] || null;
   input.value = "";
@@ -189,28 +225,28 @@ const onAvatarChange = (event: Event) => {
   }
 
   cropFile.value = file;
-};
+}
 
-const uploadCroppedAvatar = async (file: File, previewUrl: string) => {
+async function uploadCroppedAvatar(file: File, previewUrl: string) {
   revokeAvatarPreview();
   avatarPreviewUrl.value = previewUrl;
   cropFile.value = null;
   isUploadingAvatar.value = true;
   try {
     await authStore.uploadAvatar(file);
+    await socialStore.refreshSummary().catch(() => undefined);
     setMessage(t("profile.avatarUploaded"));
   } catch (cause) {
     setMessage(apiErrorMessage(cause), "error");
   } finally {
     isUploadingAvatar.value = false;
   }
-};
+}
 
-const revokeAvatarPreview = () => {
+function revokeAvatarPreview() {
   if (avatarPreviewUrl.value) URL.revokeObjectURL(avatarPreviewUrl.value);
   avatarPreviewUrl.value = null;
-};
-
+}
 </script>
 
 <template>
@@ -219,63 +255,69 @@ const revokeAvatarPreview = () => {
       <PButton :as="'a'" :href="backUrl" variant="text" icon="pi pi-arrow-left" :label="t('common.back')" severity="secondary" class="-ml-2" />
     </nav>
 
-    <header class="w-full max-w-[800px] mx-auto flex items-center justify-between gap-4 bg-[var(--surface)] rounded-2xl p-5 shadow-sm border-0">
-      <div class="flex items-center gap-4 min-w-0">
-        <button
-          class="relative w-18 h-18 rounded-full overflow-hidden shrink-0 group focus:outline-none focus:ring-3 focus:ring-[var(--focus-ring)] focus:ring-offset-2 border-0"
-          type="button"
-          :disabled="isUploadingAvatar"
-          :aria-label="t('profile.changePhoto')"
-          @click="openAvatarPicker"
-        >
-          <span class="w-full h-full bg-[var(--surface-muted)] flex items-center justify-center text-2xl font-bold text-[var(--text)] border-0">
-            <img v-if="avatarPreview" :src="avatarPreview" alt="" class="w-full h-full object-cover border-0" />
-            <span v-else>{{ displayInitials }}</span>
-          </span>
-          <span class="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-xl opacity-0 group-hover:opacity-100 transition-opacity border-0" aria-hidden="true">
-            <i :class="isUploadingAvatar ? 'pi pi-spinner pi-spin' : 'pi pi-camera'"></i>
-          </span>
-        </button>
-        <input
-          ref="fileInput"
-          class="hidden"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          @change="onAvatarChange"
-        />
-        <div class="min-w-0">
-          <h1 class="text-2xl font-bold m-0 text-[var(--text)] truncate">{{ displayName }}</h1>
-          <p class="m-0 mt-1 text-sm text-[var(--muted)] truncate">{{ authStore.currentUser?.email }}</p>
-        </div>
-      </div>
-      <PButton
-        icon="pi pi-users"
-        variant="text"
-        severity="secondary"
-        class="w-10 h-10 border-0"
-        :aria-label="t('profile.switchAccount')"
-        :title="t('profile.switchAccount')"
-        @click="isAccountModalOpen = true"
-      />
-    </header>
+    <ProfileTopCard
+      v-if="!queryView"
+      :user="authStore.currentUser"
+      :summary="socialStore.summary"
+      :avatar-preview="avatarPreview"
+      :is-uploading-avatar="isUploadingAvatar"
+      @avatar="openAvatarPicker"
+      @switch-account="isAccountModalOpen = true"
+      @open-view="openView"
+    />
 
-    <div class="grid grid-cols-1 lg:grid-cols-[52px_minmax(0,720px)] justify-center items-start gap-7">
-      <nav class="lg:sticky lg:top-6 flex lg:flex-col items-center justify-center gap-2" aria-label="Profile sections">
-        <PButton
-          v-for="tab in (['profile', 'sessions', 'system'] as ProfileTab[])"
-          :key="tab"
-          :icon="tab === 'profile' ? 'pi pi-user' : tab === 'sessions' ? 'pi pi-desktop' : 'pi pi-cog'"
-          :variant="activeTab === tab ? 'primary' : 'text'"
-          :severity="activeTab === tab ? undefined : 'secondary'"
-          class="w-11 h-11 border-0"
-          :aria-label="t(`profile.${tab}`)"
-          :title="t(`profile.${tab}`)"
-          @click="activeTab = tab"
-        />
-      </nav>
+    <input
+      ref="fileInput"
+      class="hidden"
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      @change="onAvatarChange"
+    />
+
+    <div
+      class="grid grid-cols-1 justify-center items-start gap-7"
+      :class="queryView ? 'max-w-[720px] w-full mx-auto' : 'lg:grid-cols-[52px_minmax(0,720px)]'"
+    >
+      <ProfileNav v-if="!queryView" v-model:active-tab="activeTab" @search="isSearchOpen = true" />
 
       <div class="min-w-0">
-        <section v-if="activeTab === 'profile'" class="grid gap-4">
+        <NotificationsPage
+          v-if="queryView === 'notifications'"
+          @back="closeView"
+          @message="setMessage"
+        />
+
+        <ProfileListPage
+          v-else-if="queryView === 'followers'"
+          :title="t('social.followers')"
+          :items="socialStore.followers.items"
+          :total-count="socialStore.followers.totalCount"
+          :page="socialStore.followers.page"
+          :limit="socialStore.followers.limit"
+          :is-loading="socialStore.followers.isLoading"
+          :empty-text="t('social.noFollowers')"
+          show-friend-filter
+          @back="closeView"
+          @page="(page) => socialStore.loadFollowers(page)"
+          @message="setMessage"
+        />
+
+        <ProfileListPage
+          v-else-if="queryView === 'following'"
+          :title="t('social.following')"
+          :items="socialStore.following.items"
+          :total-count="socialStore.following.totalCount"
+          :page="socialStore.following.page"
+          :limit="socialStore.following.limit"
+          :is-loading="socialStore.following.isLoading"
+          :empty-text="t('social.noFollowing')"
+          show-friend-filter
+          @back="closeView"
+          @page="(page) => socialStore.loadFollowing(page)"
+          @message="setMessage"
+        />
+
+        <section v-else-if="activeTab === 'profile'" class="grid gap-4">
           <div class="flex items-center justify-between gap-3 min-h-[40px]">
             <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.profile") }}</h2>
           </div>
@@ -289,7 +331,7 @@ const revokeAvatarPreview = () => {
                 :class="{ 'bg-[var(--surface-active)]': editingFields[field.key] }"
               >
                 <label class="text-[13px] font-bold text-[var(--muted)]" :for="`profile-${field.key}`">{{ field.label }}</label>
-                
+
                 <div class="col-span-2 sm:col-span-1 min-w-0">
                   <PInputText
                     v-if="editingFields[field.key] && field.type === 'text'"
@@ -346,7 +388,7 @@ const revokeAvatarPreview = () => {
                   @click="editingFields[field.key] ? confirmFieldEdit(field.key) : openFieldEdit(field.key)"
                 >
                   <template #icon>
-                     <i :class="isSavingProfile && editingFields[field.key] ? 'pi pi-spinner pi-spin' : editingFields[field.key] ? 'pi pi-check' : 'pi pi-pencil'"></i>
+                    <i :class="isSavingProfile && editingFields[field.key] ? 'pi pi-spinner pi-spin' : editingFields[field.key] ? 'pi pi-check' : 'pi pi-pencil'"></i>
                   </template>
                 </PButton>
               </article>
@@ -354,11 +396,20 @@ const revokeAvatarPreview = () => {
           </form>
         </section>
 
+        <RequestsTab v-else-if="activeTab === 'requests'" @message="setMessage" />
+        <CloseFriendsTab v-else-if="activeTab === 'close'" @message="setMessage" />
+        <BlockedUsersTab v-else-if="activeTab === 'blocked'" @message="setMessage" />
+        <SocialSettingsTab v-else-if="activeTab === 'settings'" @message="setMessage" />
         <SessionsTab v-else-if="activeTab === 'sessions'" @message="setMessage" />
         <SystemTab v-else @message="setMessage" />
       </div>
     </div>
 
+    <ProfileSearchOverlay
+      :visible="isSearchOpen"
+      @close="isSearchOpen = false"
+      @message="setMessage"
+    />
     <AccountSwitchModal :visible="isAccountModalOpen" @close="isAccountModalOpen = false" />
     <AvatarCropper
       v-if="cropFile"

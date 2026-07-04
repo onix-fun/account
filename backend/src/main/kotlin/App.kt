@@ -1,4 +1,4 @@
-package profile
+package bootstrap
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
@@ -26,72 +26,46 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.koin.ktor.ext.inject
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
-import profile.auth.AuthController
-import profile.auth.ChangePasswordRequest
-import profile.auth.ConfirmRegistrationRequest
-import profile.auth.DeleteAccountRequest
-import profile.auth.ForgotPasswordRequest
-import profile.auth.LoginRequest
-import profile.auth.RegisterRequest
-import profile.auth.ResendRegistrationCodeRequest
-import profile.auth.ResetPasswordRequest
-import profile.auth.PublicVerificationConfirmRequest
-import profile.auth.PublicVerificationRequest
-import profile.auth.authRouting
-import profile.grpc.ProfileGrpcServer
+import profile.auth.*
+import profile.grpc.ProfileServiceImpl
+import profile.infrastructure.config.*
 import profile.infrastructure.db.UserRepository
+import profile.infrastructure.db.SessionRepository
 import profile.infrastructure.di.koinModule
 import profile.infrastructure.events.EmailEventConsumer
 import profile.infrastructure.jwt.RsaKeyLoader
-import profile.search.SearchController
-import profile.search.SearchService
-import profile.search.searchRouting
-import profile.sessions.SessionController
-import profile.sessions.sessionRouting
-import profile.shared.ApiErrorCode
-import profile.shared.ApiErrorResponse
-import profile.shared.ApiException
-import profile.shared.ApiFieldError
-import profile.users.UserController
-import profile.users.RequestEmailChangeRequest
-import profile.users.ConfirmEmailChangeRequest
-import profile.users.UpdateProfileRequest
-import profile.infrastructure.db.SessionRepository
-import profile.infrastructure.config.SecurityConfig
-import profile.infrastructure.config.AppConfig
-import profile.infrastructure.config.GrpcConfig
 import profile.infrastructure.ratelimit.RateLimit
-import profile.infrastructure.ratelimit.RateLimitConfig
 import profile.infrastructure.redis.RedisManager
-import profile.infrastructure.security.TrustedProxy
 import profile.infrastructure.storage.S3Client
 import profile.infrastructure.events.SmtpEmailSender
 import profile.infrastructure.jwt.JwksProvider
-import profile.users.userRouting
-import javax.sql.DataSource
+import profile.search.*
+import profile.sessions.*
+import profile.socialModule
+import profile.api.grpc.SocialGrpcService
+import profile.api.rest.*
+import profile.users.*
 import java.lang.management.ManagementFactory
+import javax.sql.DataSource
 
 private const val MAX_BODY_SIZE = 5L * 1024 * 1024
- // 5MB, matches AVATAR_TOO_LARGE
 
-@Serializable
+@kotlinx.serialization.Serializable
 private data class ReadinessResponse(val status: String, val checks: Map<String, Boolean>)
 
 fun Application.module() {
-    val securityConfig by inject<SecurityConfig>()
-
-    // 1. Configure Plugins
     install(Koin) {
         slf4jLogger()
-        modules(koinModule(environment.config))
+        modules(koinModule(environment.config), socialModule)
     }
 
     install(XForwardedHeaders)
+
+    val securityConfig by inject<SecurityConfig>()
 
     install(CallLogging) {
         level = org.slf4j.event.Level.INFO
@@ -106,7 +80,7 @@ fun Application.module() {
             allowHost("localhost:8089", schemes = listOf("http", "https"))
             allowHost("localhost:8091", schemes = listOf("http", "https"))
         } else {
-            origins.forEach { 
+            origins.forEach {
                 val host = it.removePrefix("http://").removePrefix("https://")
                 if (host.isNotBlank()) allowHost(host, schemes = listOf("http", "https"))
             }
@@ -139,12 +113,12 @@ fun Application.module() {
     }
 
     intercept(ApplicationCallPipeline.Setup) {
-        val contentLength = context.request.headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull()
+        val contentLength = context.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
         if (contentLength != null && contentLength > MAX_BODY_SIZE) {
-            context.respond(HttpStatusCode.PayloadTooLarge, ApiErrorResponse(
-                code = ApiErrorCode.AVATAR_TOO_LARGE.name,
-                numericCode = ApiErrorCode.AVATAR_TOO_LARGE.numericCode,
-                message = ApiErrorCode.AVATAR_TOO_LARGE.message,
+            context.respond(HttpStatusCode.PayloadTooLarge, profile.shared.ApiErrorResponse(
+                code = profile.shared.ApiErrorCode.AVATAR_TOO_LARGE.name,
+                numericCode = profile.shared.ApiErrorCode.AVATAR_TOO_LARGE.numericCode,
+                message = profile.shared.ApiErrorCode.AVATAR_TOO_LARGE.message,
                 fieldErrors = emptyList()
             ))
             return@intercept
@@ -154,41 +128,41 @@ fun Application.module() {
     install(RequestValidation) {
         validate<RegisterRequest> { request ->
             when {
-                request.email.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "email")
-                !request.email.contains("@") -> invalid(ApiErrorCode.VALIDATION_INVALID_EMAIL, "email")
-                request.username.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "username")
-                request.username.trim().length < 3 -> invalid(ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
-                request.password.length < 8 -> invalid(ApiErrorCode.VALIDATION_PASSWORD_TOO_SHORT, "password")
+                request.email.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "email")
+                !request.email.contains("@") -> invalid(profile.shared.ApiErrorCode.VALIDATION_INVALID_EMAIL, "email")
+                request.username.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "username")
+                request.username.trim().length < 3 -> invalid(profile.shared.ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
+                request.password.length < 8 -> invalid(profile.shared.ApiErrorCode.VALIDATION_PASSWORD_TOO_SHORT, "password")
                 else -> ValidationResult.Valid
             }
         }
         validate<ConfirmRegistrationRequest> { request ->
             val identifier = request.identifier ?: request.email.orEmpty()
             when {
-                identifier.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
-                !request.code.matches(Regex("\\d{6}")) -> invalid(ApiErrorCode.VALIDATION_INVALID_CODE, "code")
+                identifier.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
+                !request.code.matches(Regex("\\d{6}")) -> invalid(profile.shared.ApiErrorCode.VALIDATION_INVALID_CODE, "code")
                 else -> ValidationResult.Valid
             }
         }
         validate<ResendRegistrationCodeRequest> { request ->
             val identifier = request.identifier ?: request.email.orEmpty()
             when {
-                identifier.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
+                identifier.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
                 else -> ValidationResult.Valid
             }
         }
         validate<LoginRequest> { request ->
             val identifier = request.identifier ?: request.email.orEmpty()
             when {
-                identifier.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
-                request.password.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "password")
+                identifier.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
+                request.password.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "password")
                 else -> ValidationResult.Valid
             }
         }
         validate<ForgotPasswordRequest> { request ->
             val identifier = request.identifier ?: request.email.orEmpty()
             when {
-                identifier.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
+                identifier.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
                 else -> ValidationResult.Valid
             }
         }
@@ -196,52 +170,54 @@ fun Application.module() {
             val identifier = request.identifier ?: request.email.orEmpty()
             val code = request.code ?: request.token.orEmpty()
             when {
-                identifier.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
-                !code.matches(Regex("\\d{6}")) -> invalid(ApiErrorCode.VALIDATION_INVALID_CODE, "code")
-                request.newPassword.length < 8 -> invalid(ApiErrorCode.VALIDATION_PASSWORD_TOO_SHORT, "newPassword")
+                identifier.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
+                !code.matches(Regex("\\d{6}")) -> invalid(profile.shared.ApiErrorCode.VALIDATION_INVALID_CODE, "code")
+                request.newPassword.length < 8 -> invalid(profile.shared.ApiErrorCode.VALIDATION_PASSWORD_TOO_SHORT, "newPassword")
                 else -> ValidationResult.Valid
             }
         }
         validate<ChangePasswordRequest> { request ->
             when {
-                request.currentPassword.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "currentPassword")
-                request.newPassword.length < 8 -> invalid(ApiErrorCode.VALIDATION_PASSWORD_TOO_SHORT, "newPassword")
+                request.currentPassword.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "currentPassword")
+                request.newPassword.length < 8 -> invalid(profile.shared.ApiErrorCode.VALIDATION_PASSWORD_TOO_SHORT, "newPassword")
                 else -> ValidationResult.Valid
             }
         }
         validate<DeleteAccountRequest> { request ->
             when {
-                request.password.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "password")
+                request.password.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "password")
                 else -> ValidationResult.Valid
             }
         }
         validate<PublicVerificationRequest> { request ->
-            if (request.identifier.isBlank()) invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
+            if (request.identifier.isBlank()) invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
             else ValidationResult.Valid
         }
         validate<PublicVerificationConfirmRequest> { request ->
             when {
-                request.identifier.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
-                !request.code.matches(Regex("\\d{6}")) -> invalid(ApiErrorCode.VALIDATION_INVALID_CODE, "code")
+                request.identifier.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "identifier")
+                !request.code.matches(Regex("\\d{6}")) -> invalid(profile.shared.ApiErrorCode.VALIDATION_INVALID_CODE, "code")
                 else -> ValidationResult.Valid
             }
         }
         validate<RequestEmailChangeRequest> { request ->
             when {
-                request.currentPassword.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "currentPassword")
-                request.newEmail.isBlank() -> invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "newEmail")
+                request.currentPassword.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "currentPassword")
+                request.newEmail.isBlank() -> invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "newEmail")
                 else -> ValidationResult.Valid
             }
         }
         validate<ConfirmEmailChangeRequest> { request ->
-            if (!request.code.matches(Regex("\\d{6}"))) invalid(ApiErrorCode.VALIDATION_INVALID_CODE, "code") else ValidationResult.Valid
+            if (!request.code.matches(Regex("\\d{6}"))) invalid(profile.shared.ApiErrorCode.VALIDATION_INVALID_CODE, "code")
+            else ValidationResult.Valid
         }
         validate<UpdateProfileRequest> { request ->
+            val u = request.username
             when {
-                request.username != null && request.username.isBlank() ->
-                    invalid(ApiErrorCode.VALIDATION_REQUIRED_FIELD, "username")
-                request.username != null && request.username.trim().length < 3 ->
-                    invalid(ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
+                u != null && u.isBlank() ->
+                    invalid(profile.shared.ApiErrorCode.VALIDATION_REQUIRED_FIELD, "username")
+                u != null && u.trim().length < 3 ->
+                    invalid(profile.shared.ApiErrorCode.VALIDATION_USERNAME_TOO_SHORT, "username")
                 else -> ValidationResult.Valid
             }
         }
@@ -266,7 +242,6 @@ fun Application.module() {
         route("/api/users/me/avatar", max = 20, windowSeconds = 60)
     }
 
-    // CSRF validation
     intercept(ApplicationCallPipeline.Call) {
         val method = call.request.httpMethod
         if (method in setOf(HttpMethod.Post, HttpMethod.Put, HttpMethod.Patch, HttpMethod.Delete)) {
@@ -282,7 +257,7 @@ fun Application.module() {
                     ?: call.request.cookies["csrf_token"]
                     ?: ""
                 if (headerToken.isBlank() || cookieToken.isBlank() || !java.security.MessageDigest.isEqual(headerToken.toByteArray(), cookieToken.toByteArray())) {
-                    call.respondApiError(ApiErrorCode.SECURITY_CSRF_INVALID)
+                    call.respondApiError(profile.shared.ApiErrorCode.SECURITY_CSRF_INVALID)
                     return@intercept
                 }
             }
@@ -299,23 +274,32 @@ fun Application.module() {
     install(StatusPages) {
         exception<RequestValidationException> { call, cause ->
             val parts = cause.reasons.firstOrNull()?.split("|", limit = 2).orEmpty()
-            val error = parts.firstOrNull()?.let { runCatching { ApiErrorCode.valueOf(it) }.getOrNull() }
-                ?: ApiErrorCode.VALIDATION_INVALID_REQUEST
+            val error = parts.firstOrNull()?.let { runCatching { profile.shared.ApiErrorCode.valueOf(it) }.getOrNull() }
+                ?: profile.shared.ApiErrorCode.VALIDATION_INVALID_REQUEST
             val fields = parts.getOrNull(1)?.split(",")?.filter { it.isNotBlank() }.orEmpty()
-            call.respond(error.status, ApiErrorResponse(error.name, error.numericCode, error.message, fields.map { ApiFieldError(it, error.name, error.numericCode) }))
+            call.respond(error.status, profile.shared.ApiErrorResponse(error.name, error.numericCode, error.message, fields.map { profile.shared.ApiFieldError(it, error.name, error.numericCode) }))
         }
-        exception<ApiException> { call, cause ->
-            call.respond(cause.error.status, ApiErrorResponse(cause.error.name, cause.error.numericCode, cause.error.message, cause.fields.map { ApiFieldError(it, cause.error.name, cause.error.numericCode) }))
+        exception<profile.shared.ApiException> { call, cause ->
+            call.respond(cause.error.status, profile.shared.ApiErrorResponse(cause.error.name, cause.error.numericCode, cause.error.message, cause.fields.map { profile.shared.ApiFieldError(it, cause.error.name, cause.error.numericCode) }))
+        }
+        exception<UnauthorizedException> { call, _ ->
+            val error = profile.shared.ApiErrorCode.AUTH_UNAUTHORIZED
+            call.respond(error.status, profile.shared.ApiErrorResponse(error.name, error.numericCode, error.message))
+        }
+        exception<IllegalArgumentException> { call, cause ->
+            call.application.log.warn("Invalid request: ${cause.message}")
+            val error = profile.shared.ApiErrorCode.VALIDATION_INVALID_REQUEST
+            call.respond(error.status, profile.shared.ApiErrorResponse(error.name, error.numericCode, cause.message ?: error.message))
         }
         exception<IllegalStateException> { call, cause ->
             call.application.log.error("Illegal state: ${cause.message}", cause)
-            val error = ApiErrorCode.INFRASTRUCTURE_SERVICE_UNAVAILABLE
-            call.respond(error.status, ApiErrorResponse(error.name, error.numericCode, error.message))
+            val error = profile.shared.ApiErrorCode.INFRASTRUCTURE_SERVICE_UNAVAILABLE
+            call.respond(error.status, profile.shared.ApiErrorResponse(error.name, error.numericCode, error.message))
         }
         exception<Throwable> { call, cause ->
             call.application.log.error("Internal server error: ${cause.message}", cause)
-            val error = ApiErrorCode.INFRASTRUCTURE_INTERNAL_ERROR
-            call.respond(error.status, ApiErrorResponse(error.name, error.numericCode, error.message))
+            val error = profile.shared.ApiErrorCode.INFRASTRUCTURE_INTERNAL_ERROR
+            call.respond(error.status, profile.shared.ApiErrorResponse(error.name, error.numericCode, error.message))
         }
     }
 
@@ -323,18 +307,14 @@ fun Application.module() {
     val grpcConfig by inject<GrpcConfig>()
     val jwtIssuer = appConfig.jwt.issuer
     val jwtAudience = appConfig.jwt.audience
-    val jwtPublicKey = RsaKeyLoader.loadPublicKey(
-        appConfig.jwt.publicKey
-    )
+    val jwtPublicKey = RsaKeyLoader.loadPublicKey(appConfig.jwt.publicKey)
 
     val sessionRepository by inject<SessionRepository>()
-    val userRepository by inject<UserRepository>()
     install(Authentication) {
         jwt {
             authHeader { call ->
                 val authHeader = call.request.parseAuthorizationHeader()
                 if (authHeader != null) return@authHeader authHeader
-                
                 val cookieToken = call.request.cookies["__Host-access_token"] ?: call.request.cookies["access_token"]
                 cookieToken?.let { HttpAuthHeader.Single("Bearer", it) }
             }
@@ -346,10 +326,10 @@ fun Application.module() {
             )
             validate { credential ->
                 val sid = credential.payload.getClaim("sid").asString()
-                val session = sid?.let(sessionRepository::findById)
+                val session = sid?.let { sessionRepository.findById(it) }
                 val isValid = session != null && session.revokedAt == null && session.expiresAt.isAfter(java.time.Instant.now())
                 if (!isValid) {
-                    application.log.warn("JWT validation failed: sid={}, session_found={}, revoked={}, expired={}", 
+                    application.log.warn("JWT validation failed: sid={}, session_found={}, revoked={}, expired={}",
                         sid, session != null, session?.revokedAt != null, session?.expiresAt?.isBefore(java.time.Instant.now()) ?: "n/a")
                 }
                 if (isValid) JWTPrincipal(credential.payload) else null
@@ -359,9 +339,9 @@ fun Application.module() {
 
     install(SwaggerUI) {
         info {
-            title = "Identity Service API"
+            title = "Account Service API"
             version = "1.0.0"
-            description = "User identity management API"
+            description = "Combined identity and social API"
         }
         security {
             securityScheme("BearerToken") {
@@ -376,15 +356,16 @@ fun Application.module() {
             tag("Users") { description = "User profile management" }
             tag("Sessions") { description = "Session management" }
             tag("Search") { description = "User search and lookup" }
+            tag("Social") { description = "Social features (follow, block, friends)" }
+            tag("Notifications") { description = "In-app notifications" }
             tag("System") { description = "System health" }
         }
         swagger {
             showTagFilterInput = true
         }
     }
-    
-    // 2. Inject Services
-    val searchService by inject<SearchService>()
+
+    val searchService by inject<profile.search.SearchService>()
     val emailEventConsumer by inject<EmailEventConsumer>()
     val authController by inject<AuthController>()
     val userController by inject<UserController>()
@@ -395,12 +376,27 @@ fun Application.module() {
     val readinessS3 by inject<S3Client>()
     val readinessSmtp by inject<SmtpEmailSender>()
     val jwksProvider by inject<JwksProvider>()
-    val role = appConfig.runtime.role
-    val apiEnabled = role == "api" || role == "all"
-    val workerEnabled = role == "worker" || role == "all"
+    val appRole = appConfig.runtime.role
+    val apiEnabled = appRole == "api" || appRole == "all"
+    val workerEnabled = appRole == "worker" || appRole == "all"
     val backgroundEnabled = environment.config.propertyOrNull("identity.background.enabled")?.getString()?.toBoolean() ?: true
-    
-    // 3. Background Tasks
+
+    val userService by inject<UserService>()
+    val socialGrpcService by inject<SocialGrpcService>()
+    val socialUseCases by inject<profile.usecases.SocialUseCases>()
+    val notificationUseCases by inject<profile.usecases.NotificationUseCases>()
+    val sseManager by inject<profile.infrastructure.SseManager>()
+    val eventBus by inject<profile.infrastructure.EventBus>()
+    val notificationOutboxWorker by inject<profile.infrastructure.NotificationOutboxWorker>()
+    val socialRepo by inject<profile.infrastructure.SocialRepo>()
+    val privacyRepo by inject<profile.infrastructure.PrivacyRepo>()
+    val notificationRepo by inject<profile.infrastructure.NotificationRepo>()
+
+    val userRepo by inject<profile.infrastructure.db.UserRepository>()
+
+    eventBus.start()
+    environment.monitor.subscribe(ApplicationStopping) { eventBus.stop() }
+
     if (apiEnabled && backgroundEnabled) {
         launch {
             try {
@@ -412,28 +408,31 @@ fun Application.module() {
     }
     if (workerEnabled) {
         emailEventConsumer.start()
+        notificationOutboxWorker.start()
         environment.monitor.subscribe(ApplicationStopping) { emailEventConsumer.stop() }
+        environment.monitor.subscribe(ApplicationStopping) { notificationOutboxWorker.stop() }
     }
-    
-    // 3b. Start optional mTLS gRPC Server
+
     if (apiEnabled && grpcConfig.enabled) launch {
         try {
-            val grpcServer = ProfileGrpcServer(
-                userRepository, grpcConfig.port,
-                grpcConfig.certificate.orEmpty(),
-                grpcConfig.privateKey.orEmpty(),
-                grpcConfig.clientCa.orEmpty(),
-                grpcConfig.allowedClientSans.joinToString(","),
-                grpcConfig.reflection
+            val identityService = profile.grpc.ProfileServiceImpl(userRepo)
+            val server = GrpcServer(
+                identityService = identityService,
+                socialGrpcService = socialGrpcService,
+                port = grpcConfig.port,
+                certificate = grpcConfig.certificate.orEmpty(),
+                privateKey = grpcConfig.privateKey.orEmpty(),
+                clientCa = grpcConfig.clientCa.orEmpty(),
+                allowedSans = grpcConfig.allowedClientSans.joinToString(","),
+                reflection = grpcConfig.reflection
             )
-            grpcServer.start()
-            environment.monitor.subscribe(ApplicationStopping) { grpcServer.stop() }
+            server.start()
+            environment.monitor.subscribe(ApplicationStopping) { server.stop() }
         } catch (e: Exception) {
             log.error("Failed to start gRPC server: ${e.message}")
         }
     }
 
-    // 4. Configure Routing
     routing {
         get("livez", {
             tags = setOf("System")
@@ -474,26 +473,35 @@ fun Application.module() {
         if (apiEnabled) {
             route("openapi.json") { openApiSpec("api") }
             route("swagger-ui") { swaggerUI("/openapi.json") }
+
             authRouting(authController, sessionController)
             userRouting(userController)
             searchRouting(searchController)
             sessionRouting(sessionController)
+
+            authenticate {
+                searchRoutes(searchService, socialUseCases)
+                profileRoutes(userService, socialRepo, privacyRepo, socialUseCases, notificationRepo)
+                socialRoutes(userService, socialUseCases, notificationUseCases, sseManager)
+                notificationRoutes(userService, notificationUseCases, sseManager)
+                settingsRoutes(socialUseCases, notificationUseCases)
+            }
         }
     }
 }
 
-private fun invalid(error: ApiErrorCode, vararg fields: String): ValidationResult.Invalid {
+private fun invalid(error: profile.shared.ApiErrorCode, vararg fields: String): ValidationResult.Invalid {
     return ValidationResult.Invalid("${error.name}|${fields.joinToString(",")}")
 }
 
-private suspend fun ApplicationCall.respondApiError(error: ApiErrorCode, fields: List<String> = emptyList()) {
+private suspend fun io.ktor.server.application.ApplicationCall.respondApiError(error: profile.shared.ApiErrorCode, fields: List<String> = emptyList()) {
     respond(
         error.status,
-        ApiErrorResponse(
+        profile.shared.ApiErrorResponse(
             code = error.name,
             numericCode = error.numericCode,
             message = error.message,
-            fieldErrors = fields.map { ApiFieldError(it, error.name, error.numericCode) }
+            fieldErrors = fields.map { profile.shared.ApiFieldError(it, error.name, error.numericCode) }
         )
     )
 }

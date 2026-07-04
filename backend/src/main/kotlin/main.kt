@@ -1,8 +1,6 @@
-package profile
+package bootstrap
 
-import io.ktor.server.engine.applicationEnvironment
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.engine.EngineConnectorBuilder
+import io.ktor.server.engine.*
 import io.ktor.server.netty.Netty
 import profile.infrastructure.config.EnvConfig
 import profile.infrastructure.db.DatabaseFactory
@@ -17,8 +15,7 @@ fun main(args: Array<String>) {
         }
         "migrate" -> DatabaseFactory.migrate(appConfigFrom(EnvConfig.load()).postgres)
         "serve" -> {
-            val role = args.firstOrNull { it.startsWith("--role=") }?.substringAfter("=")
-            val config = EnvConfig.load(roleOverride = role)
+            val config = EnvConfig.load()
             val connector = EngineConnectorBuilder().apply {
                 host = config.property("ktor.deployment.host").getString()
                 port = config.property("ktor.deployment.port").getString().toInt()
@@ -30,6 +27,6 @@ fun main(args: Array<String>) {
                 module = { module() }
             ).start(wait = true)
         }
-        else -> error("usage: serve [--role=api|worker|all] | migrate | config validate")
+        else -> error("usage: serve | migrate | config validate")
     }
 }

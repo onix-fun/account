@@ -1,5 +1,6 @@
 package profile
 
+import bootstrap.module
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.*

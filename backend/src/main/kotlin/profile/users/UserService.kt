@@ -19,6 +19,10 @@ class UserService(
         return userRepository.findById(userId)
     }
 
+    fun getProfileByUsername(username: String): User? {
+        return userRepository.findByUsername(username)
+    }
+
     fun updateProfile(userId: String, request: UpdateProfileRequest): User {
         val user = userRepository.findById(userId) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
         val username = request.username?.trim() ?: user.username
