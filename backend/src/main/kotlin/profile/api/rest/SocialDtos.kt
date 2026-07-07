@@ -27,6 +27,13 @@ data class RelationshipResponse(
 )
 
 @Serializable
+data class InternalSocialGraphResponse(
+    val followingIds: List<String> = emptyList(),
+    val friendIds: List<String> = emptyList(),
+    val blockedIds: List<String> = emptyList()
+)
+
+@Serializable
 data class PublicUserRelationshipResponse(
     val id: String,
     val username: String,
@@ -97,6 +104,16 @@ data class SubscriptionPageResponse(
 data class PrivacySettingsResponse(
     val isPrivate: Boolean,
     val fieldVisibility: FieldVisibilityResponse = FieldVisibilityResponse()
+)
+
+@Serializable
+data class InternalVisibilityResponse(
+    val ownerId: String,
+    val viewerId: String?,
+    val isPrivate: Boolean,
+    val relationship: RelationshipResponse,
+    val isBlocked: Boolean,
+    val isCloseFriend: Boolean
 )
 
 @Serializable
