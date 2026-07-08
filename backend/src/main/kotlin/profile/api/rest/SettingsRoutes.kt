@@ -7,10 +7,12 @@ import io.ktor.server.routing.*
 import profile.domain.*
 import profile.infrastructure.*
 import profile.usecases.*
+import profile.users.UserService
 
 fun Route.settingsRoutes(
     socialUseCases: SocialUseCases,
-    notificationUseCases: NotificationUseCases
+    notificationUseCases: NotificationUseCases,
+    userService: UserService
 ) {
     route("/api/profile/me") {
         get("/privacy") {
@@ -32,6 +34,22 @@ fun Route.settingsRoutes(
     }
 
     route("/api/notifications") {
+        get("/settings") {
+            val uid = requireUserId(call)
+            val locale = userService.getProfile(uid.toString())?.preferredLocale
+                ?: call.request.headers["Accept-Language"].orEmpty()
+            call.respond(NotificationSettingsResponse(
+                services = notificationUseCases.getLocalizedSettings(uid, locale).map { it.toResponse() }
+            ))
+        }
+
+        put("/settings") {
+            val uid = requireUserId(call)
+            val body = call.receive<NotificationPreferenceUpdateRequest>()
+            notificationUseCases.savePreference(uid, body.serviceKey, body.typeKey, body.enabled)
+            call.respond(SuccessResponse())
+        }
+
         get("/preferences") {
             val uid = requireUserId(call)
             val prefs = notificationUseCases.getPrefs(uid)

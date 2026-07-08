@@ -2,7 +2,7 @@
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
-import type { NotificationPrefs, PrivacySettings, VisibilityAudience } from "@/api/services/ProfileSocialService";
+import type { PrivacySettings, VisibilityAudience } from "@/api/services/ProfileSocialService";
 import { useProfileSocialStore } from "@/infra/store";
 
 const emit = defineEmits<{
@@ -12,15 +12,6 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const socialStore = useProfileSocialStore();
 const savingKey = ref<string | null>(null);
-
-const prefRows: Array<{ key: keyof NotificationPrefs; icon: string }> = [
-  { key: "inAppSubscriptions", icon: "pi pi-user-plus" },
-  { key: "inAppPublications", icon: "pi pi-send" },
-  { key: "inAppAuthorMentions", icon: "pi pi-at" },
-  { key: "inAppPostComments", icon: "pi pi-comments" },
-  { key: "inAppNewStories", icon: "pi pi-bolt" },
-  { key: "inAppBirthdays", icon: "pi pi-gift" },
-];
 
 const visibilityRows: Array<{ key: keyof PrivacySettings["fieldVisibility"]; icon: string }> = [
   { key: "bio", icon: "pi pi-align-left" },
@@ -46,10 +37,10 @@ async function setPrivacy(value: boolean) {
   }
 }
 
-async function setPref(key: keyof NotificationPrefs, value: boolean) {
-  savingKey.value = key;
+async function setNotificationSetting(serviceKey: string, typeKey: string, value: boolean) {
+  savingKey.value = `notification:${serviceKey}:${typeKey}`;
   try {
-    await socialStore.setNotificationPref(key, value);
+    await socialStore.setNotificationSetting(serviceKey, typeKey, value);
     emit("message", t("social.settingsSaved"));
   } catch (cause) {
     emit("message", apiErrorMessage(cause), "error");
@@ -145,32 +136,43 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
       </div>
 
       <div class="grid gap-1.5">
-        <article v-for="row in prefRows" :key="row.key" class="flex flex-row items-center justify-between gap-3 p-3 rounded-xl bg-[var(--surface-muted)]">
-          <div class="flex items-center gap-3 min-w-0">
-            <span class="w-9 h-9 rounded-lg bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] shrink-0">
-              <i :class="row.icon"></i>
+        <section v-for="service in socialStore.notificationSettings.services" :key="service.serviceKey" class="grid gap-1.5">
+          <div class="flex items-center gap-3 min-w-0 px-1 pt-1">
+            <span class="w-9 h-9 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+              <i :class="service.icon"></i>
             </span>
             <span class="min-w-0">
-              <strong class="block text-sm text-[var(--text)] truncate">{{ t(`social.prefs.${row.key}`) }}</strong>
-              <small class="block text-xs text-[var(--muted)] truncate">{{ t(`social.prefs.${row.key}Hint`) }}</small>
+              <strong class="block text-sm text-[var(--text)] truncate">{{ service.name }}</strong>
+              <small class="block text-xs text-[var(--muted)] truncate">{{ service.description }}</small>
             </span>
           </div>
-          <button
-            class="profile-switch"
-            type="button"
-            role="switch"
-            :aria-checked="socialStore.notificationPrefs[row.key]"
-            :aria-label="t(`social.prefs.${row.key}`)"
-            :disabled="savingKey === row.key"
-            @click="setPref(row.key, !socialStore.notificationPrefs[row.key])"
-          >
-            <span class="profile-switch-track">
-              <span class="profile-switch-thumb">
-                <i v-if="savingKey === row.key" class="pi pi-spinner pi-spin"></i>
+          <article v-for="item in service.items" :key="`${item.serviceKey}:${item.typeKey}`" class="flex flex-row items-center justify-between gap-3 p-3 rounded-xl bg-[var(--surface-muted)]">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="w-9 h-9 rounded-lg bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] shrink-0">
+                <i :class="item.icon"></i>
               </span>
-            </span>
-          </button>
-        </article>
+              <span class="min-w-0">
+                <strong class="block text-sm text-[var(--text)] truncate">{{ item.name }}</strong>
+                <small class="block text-xs text-[var(--muted)] truncate">{{ item.description }}</small>
+              </span>
+            </div>
+            <button
+              class="profile-switch"
+              type="button"
+              role="switch"
+              :aria-checked="item.enabled"
+              :aria-label="item.name"
+              :disabled="savingKey === `notification:${item.serviceKey}:${item.typeKey}`"
+              @click="setNotificationSetting(item.serviceKey, item.typeKey, !item.enabled)"
+            >
+              <span class="profile-switch-track">
+                <span class="profile-switch-thumb">
+                  <i v-if="savingKey === `notification:${item.serviceKey}:${item.typeKey}`" class="pi pi-spinner pi-spin"></i>
+                </span>
+              </span>
+            </button>
+          </article>
+        </section>
       </div>
     </section>
   </section>

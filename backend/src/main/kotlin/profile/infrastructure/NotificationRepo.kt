@@ -1,5 +1,11 @@
 package profile.infrastructure
 
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import profile.domain.*
 import profile.usecases.NotificationOutboxProcessor
 import profile.usecases.NotificationOutboxRepository
@@ -9,21 +15,31 @@ import java.util.UUID
 import javax.sql.DataSource
 
 class NotificationRepo(private val ds: DataSource) : NotificationRepository {
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
     override fun save(n: Notification) {
         ds.connection.use { conn ->
             try {
                 conn.prepareStatement("""
-                    INSERT INTO user_notifications (id, recipient_id, type, title, body, metadata_json, is_read, actor_id, entity_type, entity_id, source_event_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO user_notifications (
+                        id, recipient_id, type, service_key, type_key, title, body, title_i18n, body_i18n,
+                        metadata_json, is_read, actor_id, entity_type, entity_id, source_event_id, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (source_event_id) WHERE source_event_id IS NOT NULL DO NOTHING
                 """.trimIndent()).use { ps ->
                     ps.setObject(1, n.id); ps.setObject(2, n.recipientId)
-                    ps.setString(3, n.type); ps.setString(4, n.title); ps.setString(5, n.body)
-                    ps.setString(6, n.metadataJson); ps.setBoolean(7, n.isRead)
-                    if (n.actorId != null) ps.setObject(8, n.actorId) else ps.setNull(8, java.sql.Types.OTHER)
-                    ps.setString(9, n.entityType); ps.setString(10, n.entityId)
-                    ps.setString(11, n.sourceEventId)
-                    ps.setTimestamp(12, Timestamp.from(n.createdAt))
+                    ps.setString(3, n.type)
+                    ps.setString(4, n.serviceKey)
+                    ps.setString(5, n.typeKey)
+                    ps.setString(6, n.title); ps.setString(7, n.body)
+                    ps.setString(8, n.titleI18nJson)
+                    ps.setString(9, n.bodyI18nJson)
+                    ps.setString(10, n.metadataJson); ps.setBoolean(11, n.isRead)
+                    if (n.actorId != null) ps.setObject(12, n.actorId) else ps.setNull(12, java.sql.Types.OTHER)
+                    ps.setString(13, n.entityType); ps.setString(14, n.entityId)
+                    ps.setString(15, n.sourceEventId)
+                    ps.setTimestamp(16, Timestamp.from(n.createdAt))
                     ps.executeUpdate()
                 }
                 conn.commit()
@@ -49,7 +65,8 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
                 ps.setObject(1, recipientId); ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
             }
             val items = conn.prepareStatement("""
-                SELECT id, recipient_id, type, title, body, metadata_json, is_read, actor_id, entity_type, entity_id, source_event_id, created_at
+                SELECT id, recipient_id, type, service_key, type_key, title, body, title_i18n, body_i18n,
+                       metadata_json, is_read, actor_id, entity_type, entity_id, source_event_id, created_at
                 FROM user_notifications WHERE recipient_id = ?
                 ORDER BY created_at DESC LIMIT ? OFFSET ?
             """.trimIndent()).use { ps ->
@@ -142,6 +159,13 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
                     ps.setTimestamp(8, Timestamp.from(prefs.updatedAt))
                     ps.executeUpdate()
                 }
+                savePreference(conn, prefs.userId, "account", "subscription_request", prefs.inAppSubscriptions)
+                savePreference(conn, prefs.userId, "account", "subscription_accepted", prefs.inAppSubscriptions)
+                savePreference(conn, prefs.userId, "account", "birthday_today", prefs.inAppBirthdays)
+                savePreference(conn, prefs.userId, "content", "post_published", prefs.inAppPublications)
+                savePreference(conn, prefs.userId, "content", "author_mention", prefs.inAppAuthorMentions)
+                savePreference(conn, prefs.userId, "content", "post_comment", prefs.inAppPostComments)
+                savePreference(conn, prefs.userId, "content", "story_published", prefs.inAppNewStories)
                 conn.commit()
             } catch (error: Throwable) {
                 conn.rollback()
@@ -150,14 +174,243 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
         }
     }
 
+    override fun registerCatalog(catalog: NotificationServiceCatalog) {
+        ds.connection.use { conn ->
+            try {
+                conn.prepareStatement("""
+                    INSERT INTO notification_services (service_key, name_i18n, description_i18n, icon, display_order, active, updated_at)
+                    VALUES (?, ?::jsonb, ?::jsonb, ?, ?, true, CURRENT_TIMESTAMP)
+                    ON CONFLICT (service_key) DO UPDATE SET
+                        name_i18n = EXCLUDED.name_i18n,
+                        description_i18n = EXCLUDED.description_i18n,
+                        icon = EXCLUDED.icon,
+                        display_order = EXCLUDED.display_order,
+                        active = true,
+                        updated_at = CURRENT_TIMESTAMP
+                """.trimIndent()).use { ps ->
+                    ps.setString(1, catalog.serviceKey)
+                    ps.setString(2, catalog.name.toJson())
+                    ps.setString(3, catalog.description.toJson())
+                    ps.setString(4, catalog.icon.ifBlank { "pi pi-bell" })
+                    ps.setInt(5, catalog.displayOrder)
+                    ps.executeUpdate()
+                }
+                catalog.types.forEach { type ->
+                    conn.prepareStatement("""
+                        INSERT INTO notification_types (
+                            service_key, type_key, name_i18n, description_i18n, icon,
+                            default_enabled, display_order, active, updated_at
+                        )
+                        VALUES (?, ?, ?::jsonb, ?::jsonb, ?, ?, ?, true, CURRENT_TIMESTAMP)
+                        ON CONFLICT (service_key, type_key) DO UPDATE SET
+                            name_i18n = EXCLUDED.name_i18n,
+                            description_i18n = EXCLUDED.description_i18n,
+                            icon = EXCLUDED.icon,
+                            default_enabled = EXCLUDED.default_enabled,
+                            display_order = EXCLUDED.display_order,
+                            active = true,
+                            updated_at = CURRENT_TIMESTAMP
+                    """.trimIndent()).use { ps ->
+                        ps.setString(1, catalog.serviceKey)
+                        ps.setString(2, type.typeKey)
+                        ps.setString(3, type.name.toJson())
+                        ps.setString(4, type.description.toJson())
+                        ps.setString(5, type.icon.ifBlank { "pi pi-bell" })
+                        ps.setBoolean(6, type.defaultEnabled)
+                        ps.setInt(7, type.displayOrder)
+                        ps.executeUpdate()
+                    }
+                }
+                conn.commit()
+            } catch (error: Throwable) {
+                conn.rollback()
+                throw error
+            }
+        }
+    }
+
+    override fun activateServiceForUser(userId: UUID, serviceKey: String) {
+        ds.connection.use { conn ->
+            try {
+                conn.prepareStatement("""
+                    INSERT INTO user_notification_service_activations (user_id, service_key)
+                    VALUES (?, ?)
+                    ON CONFLICT DO NOTHING
+                """.trimIndent()).use { ps ->
+                    ps.setObject(1, userId)
+                    ps.setString(2, serviceKey)
+                    ps.executeUpdate()
+                }
+                conn.commit()
+            } catch (error: Throwable) {
+                conn.rollback()
+                throw error
+            }
+        }
+    }
+
+    override fun notificationTypeExists(serviceKey: String, typeKey: String): Boolean =
+        ds.connection.use { conn ->
+            conn.prepareStatement("""
+                SELECT 1 FROM notification_types
+                WHERE service_key = ? AND type_key = ? AND active = true
+                LIMIT 1
+            """.trimIndent()).use { ps ->
+                ps.setString(1, serviceKey)
+                ps.setString(2, typeKey)
+                ps.executeQuery().use { it.next() }
+            }
+        }
+
+    override fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String): Boolean =
+        ds.connection.use { conn ->
+            conn.prepareStatement("""
+                SELECT COALESCE(p.enabled, t.default_enabled) AS enabled
+                FROM notification_types t
+                LEFT JOIN user_notification_preferences p
+                    ON p.user_id = ? AND p.service_key = t.service_key AND p.type_key = t.type_key
+                WHERE t.service_key = ? AND t.type_key = ? AND t.active = true
+            """.trimIndent()).use { ps ->
+                ps.setObject(1, userId)
+                ps.setString(2, serviceKey)
+                ps.setString(3, typeKey)
+                ps.executeQuery().use { rs -> if (rs.next()) rs.getBoolean("enabled") else false }
+            }
+        }
+
+    override fun getLocalizedSettings(userId: UUID, locale: String): List<LocalizedNotificationServiceSettings> {
+        val normalizedLocale = if (locale.lowercase().startsWith("ru")) "ru" else "en"
+        return ds.connection.use { conn ->
+            val rows = conn.prepareStatement("""
+                SELECT
+                    s.service_key,
+                    s.name_i18n AS service_name_i18n,
+                    s.description_i18n AS service_description_i18n,
+                    s.icon AS service_icon,
+                    s.display_order AS service_order,
+                    t.type_key,
+                    t.name_i18n AS type_name_i18n,
+                    t.description_i18n AS type_description_i18n,
+                    t.icon AS type_icon,
+                    t.display_order AS type_order,
+                    COALESCE(p.enabled, t.default_enabled) AS enabled
+                FROM user_notification_service_activations a
+                JOIN notification_services s ON s.service_key = a.service_key AND s.active = true
+                JOIN notification_types t ON t.service_key = s.service_key AND t.active = true
+                LEFT JOIN user_notification_preferences p
+                    ON p.user_id = a.user_id AND p.service_key = t.service_key AND p.type_key = t.type_key
+                WHERE a.user_id = ?
+                ORDER BY s.display_order, s.service_key, t.display_order, t.type_key
+            """.trimIndent()).use { ps ->
+                ps.setObject(1, userId)
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) {
+                            add(SettingsRow(
+                                serviceKey = rs.getString("service_key"),
+                                serviceName = localized(rs.getString("service_name_i18n"), normalizedLocale),
+                                serviceDescription = localized(rs.getString("service_description_i18n"), normalizedLocale),
+                                serviceIcon = rs.getString("service_icon"),
+                                typeKey = rs.getString("type_key"),
+                                typeName = localized(rs.getString("type_name_i18n"), normalizedLocale),
+                                typeDescription = localized(rs.getString("type_description_i18n"), normalizedLocale),
+                                typeIcon = rs.getString("type_icon"),
+                                enabled = rs.getBoolean("enabled")
+                            ))
+                        }
+                    }
+                }
+            }
+
+            rows.groupBy { it.serviceKey }.map { (serviceKey, grouped) ->
+                val first = grouped.first()
+                LocalizedNotificationServiceSettings(
+                    serviceKey = serviceKey,
+                    name = first.serviceName,
+                    description = first.serviceDescription,
+                    icon = first.serviceIcon,
+                    items = grouped.map {
+                        LocalizedNotificationTypeSetting(
+                            serviceKey = it.serviceKey,
+                            typeKey = it.typeKey,
+                            name = it.typeName,
+                            description = it.typeDescription,
+                            icon = it.typeIcon,
+                            enabled = it.enabled
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    override fun savePreference(userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean) {
+        ds.connection.use { conn ->
+            try {
+                savePreference(conn, userId, serviceKey, typeKey, enabled)
+                conn.commit()
+            } catch (error: Throwable) {
+                conn.rollback()
+                throw error
+            }
+        }
+    }
+
+    private fun savePreference(conn: java.sql.Connection, userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean) {
+        conn.prepareStatement("""
+            INSERT INTO user_notification_preferences (user_id, service_key, type_key, enabled, updated_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, service_key, type_key) DO UPDATE SET
+                enabled = EXCLUDED.enabled,
+                updated_at = EXCLUDED.updated_at
+        """.trimIndent()).use { ps ->
+            ps.setObject(1, userId)
+            ps.setString(2, serviceKey)
+            ps.setString(3, typeKey)
+            ps.setBoolean(4, enabled)
+            ps.executeUpdate()
+        }
+    }
+
     private fun mapNotification(rs: java.sql.ResultSet) = Notification(
         id = rs.getObject("id") as UUID, recipientId = rs.getObject("recipient_id") as UUID,
-        type = rs.getString("type"), title = rs.getString("title"), body = rs.getString("body"),
+        type = rs.getString("type"),
+        serviceKey = rs.getString("service_key"),
+        typeKey = rs.getString("type_key"),
+        title = rs.getString("title"),
+        body = rs.getString("body"),
+        titleI18nJson = rs.getString("title_i18n"),
+        bodyI18nJson = rs.getString("body_i18n"),
         metadataJson = rs.getString("metadata_json"), isRead = rs.getBoolean("is_read"),
         actorId = rs.getObject("actor_id") as? UUID, entityType = rs.getString("entity_type"),
         entityId = rs.getString("entity_id"), sourceEventId = rs.getObject("source_event_id")?.toString(),
         createdAt = rs.getTimestamp("created_at").toInstant()
     )
+
+    private data class SettingsRow(
+        val serviceKey: String,
+        val serviceName: String,
+        val serviceDescription: String,
+        val serviceIcon: String,
+        val typeKey: String,
+        val typeName: String,
+        val typeDescription: String,
+        val typeIcon: String,
+        val enabled: Boolean
+    )
+
+    private fun LocalizedText.toJson(): String = json.encodeToString(
+        JsonObject(mapOf("ru" to JsonPrimitive(ru), "en" to JsonPrimitive(en)))
+    )
+
+    private fun localized(raw: String?, locale: String): String {
+        if (raw.isNullOrBlank()) return ""
+        val obj = runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return ""
+        return obj[locale]?.jsonPrimitive?.contentOrNull
+            ?: obj["en"]?.jsonPrimitive?.contentOrNull
+            ?: obj["ru"]?.jsonPrimitive?.contentOrNull
+            ?: ""
+    }
 }
 
 class NotificationOutboxRepo(private val ds: DataSource) : NotificationOutboxRepository, NotificationOutboxProcessor {

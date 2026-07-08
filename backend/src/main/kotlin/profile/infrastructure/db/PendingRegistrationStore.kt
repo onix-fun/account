@@ -16,6 +16,7 @@ data class PendingRegistration(
     val passwordHash: String,
     val firstName: String? = null,
     val lastName: String? = null,
+    val preferredLocale: String = "en",
     val codeHash: String,
     val codeAttempts: Int = 0,
     val codeCreatedAtEpochSeconds: Long = Instant.now().epochSecond,
@@ -185,10 +186,11 @@ class PendingRegistrationStore(
         stmt.setString(4, pending.firstName)
         stmt.setString(5, pending.lastName)
         stmt.setString(6, pending.codeHash)
-        stmt.setInt(7, pending.codeAttempts)
-        stmt.setTimestamp(8, Timestamp.from(Instant.ofEpochSecond(pending.codeCreatedAtEpochSeconds)))
-        stmt.setTimestamp(9, Timestamp.from(expiresAt))
-        stmt.setTimestamp(10, Timestamp.from(Instant.ofEpochSecond(pending.createdAtEpochSeconds)))
+        stmt.setString(7, pending.preferredLocale)
+        stmt.setInt(8, pending.codeAttempts)
+        stmt.setTimestamp(9, Timestamp.from(Instant.ofEpochSecond(pending.codeCreatedAtEpochSeconds)))
+        stmt.setTimestamp(10, Timestamp.from(expiresAt))
+        stmt.setTimestamp(11, Timestamp.from(Instant.ofEpochSecond(pending.createdAtEpochSeconds)))
     }
 
     private fun mapRow(rs: ResultSet): PendingRegistration {
@@ -198,6 +200,7 @@ class PendingRegistrationStore(
             passwordHash = rs.getString("password_hash"),
             firstName = rs.getString("first_name"),
             lastName = rs.getString("last_name"),
+            preferredLocale = rs.getString("preferred_locale") ?: "en",
             codeHash = rs.getString("code_hash"),
             codeAttempts = rs.getInt("code_attempts"),
             codeCreatedAtEpochSeconds = rs.getTimestamp("code_created_at").toInstant().epochSecond,
@@ -211,9 +214,9 @@ class PendingRegistrationStore(
         private const val CREATE_SQL = """
             INSERT INTO pending_registrations (
                 email, username, password_hash, first_name, last_name,
-                code_hash, code_attempts, code_created_at, expires_at, created_at
+                code_hash, preferred_locale, code_attempts, code_created_at, expires_at, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         private const val FIND_BY_EMAIL_SQL = """
             SELECT * FROM pending_registrations

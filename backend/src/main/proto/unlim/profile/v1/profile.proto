@@ -6,13 +6,97 @@ option java_package = "com.unlim.profile.grpc.v1";
 option java_multiple_files = true;
 
 service ProfileService {
+  rpc GetCurrentUser(CurrentUserRequest) returns (AccountUser);
+  rpc GetUserById(GetUserByIdRequest) returns (AccountUser);
+  rpc GetProfileByUsername(GetProfileByUsernameRequest) returns (AccountProfile);
+  rpc SearchUsers(SearchUsersRequest) returns (UserListResponse);
   rpc GetRelationship(RelRequest) returns (RelResponse);
+  rpc Follow(FollowRequest) returns (RelResponse);
+  rpc Unfollow(FollowRequest) returns (Empty);
+  rpc ListFollowers(UserPageRequest) returns (UserPageResponse);
+  rpc ListFollowing(UserPageRequest) returns (UserPageResponse);
+  rpc GetVisibility(VisibilityRequest) returns (VisibilityResponse);
+  rpc GetSocialGraph(UserIdRequest) returns (SocialGraphResponse);
   rpc IsBlocked(BlockRequest) returns (BlockResponse);
   rpc GetFollowingIds(FollowingRequest) returns (FollowingResponse);
   rpc CreateNotification(CreateNotifRequest) returns (CreateNotifResponse);
   rpc PublishUserActivity(PublishUserActivityRequest) returns (PublishUserActivityResponse);
+  rpc RegisterNotificationCatalog(RegisterNotificationCatalogRequest) returns (Empty);
+  rpc ActivateNotificationServiceForUser(ActivateNotificationServiceForUserRequest) returns (Empty);
+  rpc SendNotificationToUser(SendNotificationToUserRequest) returns (CreateNotifResponse);
   rpc GetFollowersCount(UserIdRequest) returns (CountResponse);
   rpc GetFollowingCount(UserIdRequest) returns (CountResponse);
+}
+
+message Empty {}
+
+message CurrentUserRequest {}
+
+message GetUserByIdRequest {
+  string user_id = 1;
+}
+
+message GetProfileByUsernameRequest {
+  string username = 1;
+}
+
+message SearchUsersRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message LocalizedText {
+  string ru = 1;
+  string en = 2;
+}
+
+message SocialLink {
+  string label = 1;
+  string url = 2;
+}
+
+message BirthdayParts {
+  int32 day = 1;
+  int32 month = 2;
+}
+
+message AccountUser {
+  string id = 1;
+  string username = 2;
+  string first_name = 3;
+  string last_name = 4;
+  string avatar_url = 5;
+  string bio = 6;
+  BirthdayParts birthday = 7;
+  repeated SocialLink social_links = 8;
+}
+
+message AccountProfile {
+  AccountUser user = 1;
+  int64 followers_count = 2;
+  int64 following_count = 3;
+  bool is_private = 4;
+  RelResponse relationship = 5;
+}
+
+message UserListResponse {
+  repeated AccountUser users = 1;
+}
+
+message UserPageRequest {
+  string user_id = 1;
+  int32 page = 2;
+  int32 limit = 3;
+}
+
+message RelatedUser {
+  AccountUser user = 1;
+  RelResponse relationship = 2;
+}
+
+message UserPageResponse {
+  repeated RelatedUser items = 1;
+  int32 total_count = 2;
 }
 
 message RelRequest {
@@ -26,6 +110,30 @@ message RelResponse {
   bool is_friend = 3;
   bool is_blocked = 4;
   bool has_pending_request = 5;
+}
+
+message FollowRequest {
+  string target_id = 1;
+}
+
+message VisibilityRequest {
+  string owner_id = 1;
+  string viewer_id = 2;
+}
+
+message VisibilityResponse {
+  string owner_id = 1;
+  string viewer_id = 2;
+  bool is_private = 3;
+  RelResponse relationship = 4;
+  bool is_blocked = 5;
+  bool is_close_friend = 6;
+}
+
+message SocialGraphResponse {
+  repeated string following_ids = 1;
+  repeated string friend_ids = 2;
+  repeated string blocked_ids = 3;
 }
 
 message BlockRequest {
@@ -59,6 +167,42 @@ message CreateNotifRequest {
 
 message CreateNotifResponse {
   string notification_id = 1;
+}
+
+message NotificationTypeRegistration {
+  string type_key = 1;
+  LocalizedText name = 2;
+  LocalizedText description = 3;
+  string icon = 4;
+  bool default_enabled = 5;
+  int32 display_order = 6;
+}
+
+message RegisterNotificationCatalogRequest {
+  string service_key = 1;
+  LocalizedText name = 2;
+  LocalizedText description = 3;
+  string icon = 4;
+  int32 display_order = 5;
+  repeated NotificationTypeRegistration types = 6;
+}
+
+message ActivateNotificationServiceForUserRequest {
+  string user_id = 1;
+  string service_key = 2;
+}
+
+message SendNotificationToUserRequest {
+  string recipient_id = 1;
+  string service_key = 2;
+  string type_key = 3;
+  LocalizedText title = 4;
+  LocalizedText body = 5;
+  string actor_id = 6;
+  string entity_type = 7;
+  string entity_id = 8;
+  string metadata_json = 9;
+  string source_event_id = 10;
 }
 
 enum UserActivityType {

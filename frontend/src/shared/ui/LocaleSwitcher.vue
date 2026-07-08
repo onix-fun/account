@@ -2,8 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { setLocale, type SupportedLocale } from "@/shared/i18n";
+import { useAuthStore } from "@/infra/store";
 
 const { locale, t } = useI18n();
+const authStore = useAuthStore();
 withDefaults(defineProps<{ variant?: "segmented" | "dropdown" }>(), { variant: "segmented" });
 
 const localeLabels: Record<SupportedLocale, string> = {
@@ -15,8 +17,11 @@ const currentLocale = computed(() => locale.value as SupportedLocale);
 const isOpen = ref(false);
 const root = ref<HTMLElement | null>(null);
 
-const chooseLocale = (value: SupportedLocale) => {
+const chooseLocale = async (value: SupportedLocale) => {
   setLocale(value);
+  if (authStore.isAuthenticated) {
+    await authStore.updatePreferredLocale(value).catch(() => undefined);
+  }
   isOpen.value = false;
 };
 

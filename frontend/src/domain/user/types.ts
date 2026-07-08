@@ -10,6 +10,7 @@ export interface User {
   birthday?: BirthdayParts | null;
   socialLinks?: SocialLink[];
   emailVerified?: boolean;
+  preferredLocale?: "ru" | "en";
   role?: string;
 }
 

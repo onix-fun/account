@@ -20,11 +20,13 @@ fun Route.notificationRoutes(
     route("/api/notifications") {
         get {
             val uid = requireUserId(call)
+            val locale = userService.getProfile(uid.toString())?.preferredLocale
+                ?: call.request.headers["Accept-Language"].orEmpty()
             val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
             val (items, total) = notificationUseCases.getNotifications(uid, page, limit)
             call.respond(NotificationPageResponse(
-                items = items.map { it.toResponse(normalizedMetadata(it)) },
+                items = items.map { it.localized(locale).toResponse(normalizedMetadata(it)) },
                 totalCount = total
             ))
         }
@@ -75,6 +77,22 @@ fun Route.notificationRoutes(
 }
 
 private val notificationMetadataJson = Json { ignoreUnknownKeys = true }
+
+private fun Notification.localized(locale: String): Notification {
+    val normalized = if (locale.lowercase().startsWith("ru")) "ru" else "en"
+    return copy(
+        title = localizedText(titleI18nJson, normalized) ?: title,
+        body = localizedText(bodyI18nJson, normalized) ?: body
+    )
+}
+
+private fun localizedText(raw: String?, locale: String): String? {
+    if (raw.isNullOrBlank()) return null
+    val obj = runCatching { notificationMetadataJson.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return null
+    return obj[locale]?.jsonPrimitive?.contentOrNull
+        ?: obj["en"]?.jsonPrimitive?.contentOrNull
+        ?: obj["ru"]?.jsonPrimitive?.contentOrNull
+}
 
 private fun normalizedMetadata(n: Notification): NotificationMetadataResponse {
     val actions = mutableListOf<NotificationActionResponse>()

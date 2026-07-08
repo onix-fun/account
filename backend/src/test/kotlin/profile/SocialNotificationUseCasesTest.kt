@@ -6,8 +6,10 @@ import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import io.grpc.stub.StreamObserver
 import profile.domain.Notification
+import profile.domain.NotificationServiceCatalog
 import profile.domain.NotificationOutboxItem
 import profile.domain.NotificationPrefs
+import profile.domain.LocalizedNotificationServiceSettings
 import profile.domain.PublishActivityStatus
 import profile.domain.Subscription
 import profile.domain.SubscriptionStatus
@@ -112,7 +114,7 @@ class SocialNotificationUseCasesTest {
         val notification = useCases.createActivityNotification(event, recipientId)
 
         assertNotNull(notification)
-        assertEquals("post_published", notification.type)
+        assertEquals("content.post_published", notification.type)
         assertEquals("New publication", notification.title)
         repo.prefs[recipientId] = NotificationPrefs(userId = recipientId, inAppPublications = false)
         assertNull(useCases.createActivityNotification(event.copy(sourceEventId = "post-2"), recipientId))
@@ -170,7 +172,7 @@ class SocialNotificationUseCasesTest {
 
         assertNotNull(first)
         assertNull(duplicate)
-        assertEquals("birthday_today", repo.saved.single().type)
+        assertEquals("account.birthday_today", repo.saved.single().type)
 
         repo.prefs[recipientId] = NotificationPrefs(userId = recipientId, inAppBirthdays = false)
         assertNull(useCases.createBirthdayNotification(recipientId, UUID.randomUUID(), "2026-07-04"))
@@ -358,6 +360,29 @@ private class FakeNotificationRepository : NotificationRepository {
     override fun savePrefs(prefs: NotificationPrefs) {
         this.prefs[prefs.userId] = prefs
     }
+
+    override fun registerCatalog(catalog: NotificationServiceCatalog) = Unit
+
+    override fun activateServiceForUser(userId: UUID, serviceKey: String) = Unit
+
+    override fun notificationTypeExists(serviceKey: String, typeKey: String): Boolean = true
+
+    override fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String): Boolean {
+        val prefs = getPrefs(userId)
+        return when ("$serviceKey.$typeKey") {
+            "content.post_published" -> prefs.inAppPublications
+            "content.story_published" -> prefs.inAppNewStories
+            "content.author_mention" -> prefs.inAppAuthorMentions
+            "content.post_comment" -> prefs.inAppPostComments
+            "account.subscription_request", "account.subscription_accepted" -> prefs.inAppSubscriptions
+            "account.birthday_today" -> prefs.inAppBirthdays
+            else -> true
+        }
+    }
+
+    override fun getLocalizedSettings(userId: UUID, locale: String): List<LocalizedNotificationServiceSettings> = emptyList()
+
+    override fun savePreference(userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean) = Unit
 }
 
 private class FakeOutboxRepository : NotificationOutboxRepository {

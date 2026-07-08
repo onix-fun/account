@@ -79,6 +79,27 @@ export interface NotificationPrefs {
   inAppBirthdays: boolean;
 }
 
+export interface NotificationTypeSetting {
+  serviceKey: string;
+  typeKey: string;
+  name: string;
+  description: string;
+  icon: string;
+  enabled: boolean;
+}
+
+export interface NotificationServiceSetting {
+  serviceKey: string;
+  name: string;
+  description: string;
+  icon: string;
+  items: NotificationTypeSetting[];
+}
+
+export interface NotificationSettings {
+  services: NotificationServiceSetting[];
+}
+
 export type NotificationAction =
   | { kind: "accept_follow"; targetUserId: string }
   | { kind: "reject_follow"; targetUserId: string }
@@ -234,6 +255,15 @@ export class ProfileSocialService {
   static async getNotificationPrefs(): Promise<NotificationPrefs> {
     const response = await profileClient.get<NotificationPrefs>("/notifications/preferences");
     return response.data;
+  }
+
+  static async getNotificationSettings(): Promise<NotificationSettings> {
+    const response = await profileClient.get<NotificationSettings>("/notifications/settings");
+    return response.data;
+  }
+
+  static async updateNotificationSetting(serviceKey: string, typeKey: string, enabled: boolean): Promise<void> {
+    await profileClient.put("/notifications/settings", { serviceKey, typeKey, enabled });
   }
 
   static async updateNotificationPrefs(prefs: NotificationPrefs): Promise<void> {

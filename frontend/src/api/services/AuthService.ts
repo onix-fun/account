@@ -1,6 +1,7 @@
 import { profileClient } from "@/api/client";
 import { DeviceIdManager } from "@/shared/lib/deviceId";
 import type { AuthSession, User } from "@/domain";
+import { i18n } from "@/shared/i18n";
 
 interface BrowserAuthResponse {
   user: UserResponse;
@@ -18,6 +19,7 @@ interface UserResponse {
   birthday?: { day: number; month: number } | null;
   socialLinks?: Array<{ label: string; url: string }>;
   emailVerified?: boolean;
+  preferredLocale?: "ru" | "en";
   role?: string;
   status?: string;
 }
@@ -39,6 +41,7 @@ interface RegisterPayload {
   email: string;
   username: string;
   password: string;
+  preferredLocale?: "ru" | "en";
 }
 
 interface LoginPayload {
@@ -86,6 +89,7 @@ function normalizeUser(user: UserResponse): User {
     birthday: user.birthday,
     socialLinks: user.socialLinks || [],
     emailVerified: user.emailVerified,
+    preferredLocale: user.preferredLocale,
     role: user.role,
   };
 }
@@ -176,7 +180,10 @@ export class AuthService {
   }
 
   static async register(payload: RegisterPayload): Promise<RegistrationStartedResponse> {
-    const response = await profileClient.post<RegistrationStartedResponse>("/auth/register", payload);
+    const response = await profileClient.post<RegistrationStartedResponse>("/auth/register", {
+      ...payload,
+      preferredLocale: payload.preferredLocale || (i18n.global.locale.value as "ru" | "en"),
+    });
     return response.data;
   }
 
@@ -226,6 +233,11 @@ export class AuthService {
 
   static async getMe(): Promise<User> {
     const response = await profileClient.get<User>("/users/me");
+    return rememberUser(response.data);
+  }
+
+  static async updatePreferredLocale(locale: "ru" | "en"): Promise<User> {
+    const response = await profileClient.put<User>("/users/me/locale", { locale });
     return rememberUser(response.data);
   }
 

@@ -4,6 +4,7 @@ import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.patch
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.github.smiley4.ktorswaggerui.dsl.routing.delete
+import io.github.smiley4.ktorswaggerui.dsl.routing.put
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.routing.*
@@ -31,6 +32,8 @@ fun Route.userRouting(userController: UserController) {
                 request { body<UpdateProfileRequest> { description = "Fields to update" } }
                 response { code(HttpStatusCode.OK) { description = "Updated user"; body<UserProfileDto> { } } }
             }) { userController.updateMe(call) }
+
+            put("/me/locale") { userController.updatePreferredLocale(call) }
 
             post("/me/avatar", {
                 tags = setOf("Users")

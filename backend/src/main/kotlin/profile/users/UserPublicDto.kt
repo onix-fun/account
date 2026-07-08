@@ -75,6 +75,7 @@ data class UserProfileDto(
     val birthDate: String? = null,
     val birthday: BirthdayParts? = null,
     val socialLinks: List<SocialLink> = emptyList(),
+    val preferredLocale: String = "en",
     val role: String,
     val status: String
 )
@@ -94,6 +95,9 @@ fun User.toPublicDto() = UserPublicDto(
 data class RequestEmailChangeRequest(val currentPassword: String, val newEmail: String)
 
 @Serializable
+data class PreferredLocaleUpdateRequest(val locale: String)
+
+@Serializable
 data class ConfirmEmailChangeRequest(val code: String)
 
 fun User.toProfileDto() = UserProfileDto(
@@ -108,6 +112,7 @@ fun User.toProfileDto() = UserProfileDto(
     birthDate = birthDate,
     birthday = birthDate?.toBirthdayParts(),
     socialLinks = socialLinks,
+    preferredLocale = preferredLocale,
     role = role,
     status = status
 )

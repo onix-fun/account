@@ -29,6 +29,7 @@ data class User(
     val bio: String? = null,
     val birthDate: String? = null,
     val socialLinks: List<SocialLink> = emptyList(),
+    val preferredLocale: String = "en",
     val role: String = "USER",
     val status: String = "ACTIVE",
     @Serializable(with = InstantSerializer::class)
@@ -41,8 +42,8 @@ class UserRepository(private val dataSource: DataSource) {
     companion object {
         private val metadataJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
         private const val CREATE_SQL = """
-            INSERT INTO users (email, username, password_hash, email_verified, first_name, last_name, role, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (email, username, password_hash, email_verified, first_name, last_name, preferred_locale, role, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *
         """
         private const val UPDATE_PROFILE_SQL = """
@@ -58,6 +59,7 @@ class UserRepository(private val dataSource: DataSource) {
         """
         private const val UPDATE_EMAIL_SQL = "UPDATE users SET email = ?, email_verified = TRUE, updated_at = ? WHERE id = ?"
         private const val UPDATE_AVATAR_SQL = "UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?"
+        private const val UPDATE_LOCALE_SQL = "UPDATE users SET preferred_locale = ?, updated_at = ? WHERE id = ?"
         private const val FIND_BY_EMAIL_SQL = "SELECT * FROM users WHERE LOWER(email) = LOWER(?)"
         private const val FIND_BY_ID_SQL = "SELECT * FROM users WHERE id = ?"
         private const val FIND_BY_USERNAME_SQL = "SELECT * FROM users WHERE LOWER(username) = LOWER(?)"
@@ -88,10 +90,11 @@ class UserRepository(private val dataSource: DataSource) {
                     stmt.setBoolean(4, user.emailVerified)
                     stmt.setString(5, user.firstName)
                     stmt.setString(6, user.lastName)
-                    stmt.setString(7, user.role)
-                    stmt.setString(8, user.status)
-                    stmt.setTimestamp(9, java.sql.Timestamp.from(user.createdAt))
-                    stmt.setTimestamp(10, java.sql.Timestamp.from(user.updatedAt))
+                    stmt.setString(7, user.preferredLocale)
+                    stmt.setString(8, user.role)
+                    stmt.setString(9, user.status)
+                    stmt.setTimestamp(10, java.sql.Timestamp.from(user.createdAt))
+                    stmt.setTimestamp(11, java.sql.Timestamp.from(user.updatedAt))
                     val rs = stmt.executeQuery()
                     rs.next()
                     mapRow(rs)
@@ -164,6 +167,18 @@ class UserRepository(private val dataSource: DataSource) {
         dataSource.connection.use { conn ->
             conn.prepareStatement(UPDATE_AVATAR_SQL).use { stmt ->
                 stmt.setString(1, avatarUrl)
+                stmt.setTimestamp(2, java.sql.Timestamp.from(Instant.now()))
+                stmt.setObject(3, UUID.fromString(userId))
+                stmt.executeUpdate()
+            }
+            conn.commit()
+        }
+    }
+
+    fun updatePreferredLocale(userId: String, locale: String) {
+        dataSource.connection.use { conn ->
+            conn.prepareStatement(UPDATE_LOCALE_SQL).use { stmt ->
+                stmt.setString(1, normalizeLocale(locale))
                 stmt.setTimestamp(2, java.sql.Timestamp.from(Instant.now()))
                 stmt.setObject(3, UUID.fromString(userId))
                 stmt.executeUpdate()
@@ -307,6 +322,7 @@ class UserRepository(private val dataSource: DataSource) {
             bio = rs.getString("bio"),
             birthDate = rs.getDate("birth_date")?.toLocalDate()?.toString(),
             socialLinks = parseMetadata(rs.getString("profile_metadata")).socialLinks,
+            preferredLocale = rs.getString("preferred_locale") ?: "en",
             role = rs.getString("role"),
             status = rs.getString("status"),
             createdAt = rs.getTimestamp("created_at").toInstant(),
@@ -318,5 +334,10 @@ class UserRepository(private val dataSource: DataSource) {
         if (raw.isNullOrBlank()) return UserProfileMetadata()
         return runCatching { metadataJson.decodeFromString<UserProfileMetadata>(raw) }
             .getOrDefault(UserProfileMetadata())
+    }
+
+    private fun normalizeLocale(locale: String): String {
+        val normalized = locale.lowercase().trim()
+        return if (normalized.startsWith("ru")) "ru" else "en"
     }
 }

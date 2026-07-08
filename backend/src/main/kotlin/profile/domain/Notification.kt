@@ -8,8 +8,12 @@ data class Notification(
     val id: UUID = Generators.timeBasedEpochGenerator().generate(),
     val recipientId: UUID,
     val type: String,
+    val serviceKey: String = type.substringBefore('.', "account"),
+    val typeKey: String = type.substringAfter('.', type),
     val title: String,
     val body: String,
+    val titleI18nJson: String? = null,
+    val bodyI18nJson: String? = null,
     val metadataJson: String = "{}",
     val isRead: Boolean = false,
     val actorId: UUID? = null,
@@ -28,6 +32,47 @@ data class NotificationPrefs(
     val inAppNewStories: Boolean = true,
     val inAppBirthdays: Boolean = true,
     val updatedAt: Instant = Instant.now()
+)
+
+data class LocalizedText(
+    val ru: String,
+    val en: String
+)
+
+data class NotificationServiceCatalog(
+    val serviceKey: String,
+    val name: LocalizedText,
+    val description: LocalizedText,
+    val icon: String,
+    val displayOrder: Int,
+    val types: List<NotificationTypeCatalog>
+)
+
+data class NotificationTypeCatalog(
+    val serviceKey: String,
+    val typeKey: String,
+    val name: LocalizedText,
+    val description: LocalizedText,
+    val icon: String,
+    val defaultEnabled: Boolean,
+    val displayOrder: Int
+)
+
+data class LocalizedNotificationTypeSetting(
+    val serviceKey: String,
+    val typeKey: String,
+    val name: String,
+    val description: String,
+    val icon: String,
+    val enabled: Boolean
+)
+
+data class LocalizedNotificationServiceSettings(
+    val serviceKey: String,
+    val name: String,
+    val description: String,
+    val icon: String,
+    val items: List<LocalizedNotificationTypeSetting>
 )
 
 data class NotificationPage(

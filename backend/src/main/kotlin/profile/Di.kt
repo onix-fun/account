@@ -1,6 +1,7 @@
 package profile
 
 import org.koin.dsl.module
+import profile.api.grpc.GrpcPrincipalResolver
 import profile.api.grpc.SocialGrpcService
 import profile.infrastructure.*
 import profile.usecases.*
@@ -29,5 +30,6 @@ val socialModule = module {
     single { EventBus(get(), get()) }
     single { NotificationOutboxWorker(get(), get(), get(), get(), get()) }
 
-    single { SocialGrpcService(get(), get(), get(), get()) }
+    single { GrpcPrincipalResolver(get(), get()) }
+    single { SocialGrpcService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 }

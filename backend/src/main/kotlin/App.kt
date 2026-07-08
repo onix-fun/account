@@ -497,7 +497,7 @@ fun Application.module() {
                 profileRoutes(userService, socialRepo, privacyRepo, socialUseCases, notificationRepo, birthdayNotificationService)
                 socialRoutes(userService, socialUseCases, notificationUseCases, sseManager)
                 notificationRoutes(userService, notificationUseCases, sseManager)
-                settingsRoutes(socialUseCases, notificationUseCases)
+                settingsRoutes(socialUseCases, notificationUseCases, userService)
             }
         }
     }
