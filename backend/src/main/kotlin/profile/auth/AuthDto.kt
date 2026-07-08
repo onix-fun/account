@@ -10,7 +10,8 @@ data class RegisterRequest(
     val username: String,
     val password: String,
     val firstName: String? = null,
-    val lastName: String? = null
+    val lastName: String? = null,
+    val preferredLocale: String? = null
 )
 
 @Serializable

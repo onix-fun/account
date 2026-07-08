@@ -57,6 +57,12 @@ class UserService(
         return updated
     }
 
+    fun updatePreferredLocale(userId: String, locale: String): User {
+        val normalized = if (locale.lowercase().startsWith("ru")) "ru" else "en"
+        userRepository.updatePreferredLocale(userId, normalized)
+        return userRepository.findById(userId) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
+    }
+
     private fun nextBirthDate(current: String?, request: UpdateProfileRequest): String? {
         if (!request.birthDateProvided) return current
         val raw = request.birthDate?.trim()?.takeIf { it.isNotBlank() } ?: return null

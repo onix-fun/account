@@ -47,6 +47,13 @@ class UserController(
         call.respond(HttpStatusCode.OK, updatedUser.toProfileDto())
     }
 
+    suspend fun updatePreferredLocale(call: ApplicationCall) {
+        val userId = call.principal<JWTPrincipal>()!!.payload.subject
+        val request = call.receive<PreferredLocaleUpdateRequest>()
+        val updatedUser = userService.updatePreferredLocale(userId, request.locale)
+        call.respond(HttpStatusCode.OK, updatedUser.toProfileDto())
+    }
+
     suspend fun requestEmailChange(call: ApplicationCall) {
         val principal = call.principal<JWTPrincipal>()!!
         val request = call.receive<RequestEmailChangeRequest>()

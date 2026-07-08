@@ -60,6 +60,7 @@ class AuthService(
         password: String,
         firstName: String? = null,
         lastName: String? = null,
+        preferredLocale: String = "en",
         locale: EmailLocale = EmailLocale.EN
     ): RegistrationStartedResponse {
         val normalizedEmail = normalizeEmail(email)
@@ -74,6 +75,7 @@ class AuthService(
             passwordHash = PasswordHasher.hash(password),
             firstName = firstName?.trim()?.takeIf { it.isNotBlank() },
             lastName = lastName?.trim()?.takeIf { it.isNotBlank() },
+            preferredLocale = normalizeLocale(preferredLocale),
             codeHash = TokenHasher.challenge(securityConfig.otpHmacSecret, "REGISTRATION", normalizedEmail, code)
         )
 
@@ -109,7 +111,8 @@ class AuthService(
             passwordHash = pending.passwordHash,
             emailVerified = true,
             firstName = pending.firstName,
-            lastName = pending.lastName
+            lastName = pending.lastName,
+            preferredLocale = pending.preferredLocale
         )
 
         val createdUser = userRepository.create(user)
@@ -420,6 +423,9 @@ class AuthService(
     private fun normalizeEmail(email: String): String = EmailNormalizer.normalize(email)
 
     private fun normalizeUsername(username: String): String = username.trim()
+
+    private fun normalizeLocale(locale: String): String =
+        if (locale.lowercase().trim().startsWith("ru")) "ru" else "en"
 
     private fun generateVerificationCode(): String = random.nextInt(1_000_000).toString().padStart(6, '0')
 

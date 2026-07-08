@@ -4,6 +4,7 @@ import {
   ProfileSocialService,
   type NotificationItem,
   type NotificationPrefs,
+  type NotificationSettings,
   type Page,
   type PrivacySettings,
   type ProfileSummary,
@@ -38,10 +39,13 @@ const defaultPrivacy: PrivacySettings = {
   },
 };
 
+const defaultNotificationSettings: NotificationSettings = { services: [] };
+
 export const useProfileSocialStore = defineStore("profileSocial", () => {
   const summary = ref<ProfileSummary | null>(null);
   const privacy = ref<PrivacySettings>({ ...defaultPrivacy, fieldVisibility: { ...defaultPrivacy.fieldVisibility } });
   const notificationPrefs = ref<NotificationPrefs>({ ...defaultPrefs });
+  const notificationSettings = ref<NotificationSettings>({ ...defaultNotificationSettings });
   const followers = ref<PagedState<RelatedUser>>(emptyPage());
   const following = ref<PagedState<RelatedUser>>(emptyPage());
   const requests = ref<PagedState<SubscriptionRequest>>(emptyPage());
@@ -64,12 +68,14 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
   }
 
   async function loadSettings() {
-    const [nextPrivacy, nextPrefs] = await Promise.all([
+    const [nextPrivacy, nextPrefs, nextNotificationSettings] = await Promise.all([
       ProfileSocialService.getPrivacy(),
       ProfileSocialService.getNotificationPrefs(),
+      ProfileSocialService.getNotificationSettings(),
     ]);
     privacy.value = nextPrivacy;
     notificationPrefs.value = nextPrefs;
+    notificationSettings.value = nextNotificationSettings;
   }
 
   async function setPrivacy(isPrivate: boolean) {
@@ -106,6 +112,22 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
       await ProfileSocialService.updateNotificationPrefs(notificationPrefs.value);
     } catch (cause) {
       notificationPrefs.value = previous;
+      throw cause;
+    }
+  }
+
+  async function setNotificationSetting(serviceKey: string, typeKey: string, enabled: boolean) {
+    const previous = notificationSettings.value;
+    notificationSettings.value = {
+      services: notificationSettings.value.services.map((service) => ({
+        ...service,
+        items: service.items.map((item) => item.serviceKey === serviceKey && item.typeKey === typeKey ? { ...item, enabled } : item),
+      })),
+    };
+    try {
+      await ProfileSocialService.updateNotificationSetting(serviceKey, typeKey, enabled);
+    } catch (cause) {
+      notificationSettings.value = previous;
       throw cause;
     }
   }
@@ -235,6 +257,7 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
     summary,
     privacy,
     notificationPrefs,
+    notificationSettings,
     followers,
     following,
     requests,
@@ -249,6 +272,7 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
     setPrivacy,
     setFieldVisibility,
     setNotificationPref,
+    setNotificationSetting,
     loadFollowers,
     loadFollowing,
     loadRequests,

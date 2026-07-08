@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import type { AuthSession, User } from "@/domain";
 import { AuthService, type RegistrationStartedResponse } from "@/api/services/AuthService";
 import { apiErrorMessage } from "@/api/client";
+import { setLocale, type SupportedLocale } from "@/shared/i18n";
 
 export const useAuthStore = defineStore("auth", () => {
   const currentUser = ref<User | null>(AuthService.getStoredSession());
@@ -23,12 +24,18 @@ export const useAuthStore = defineStore("auth", () => {
     storedAccounts.value = AuthService.getStoredAccounts();
   };
 
+  const applyUserLocale = () => {
+    const locale = currentUser.value?.preferredLocale;
+    if (locale === "ru" || locale === "en") setLocale(locale);
+  };
+
   const initAuth = async () => {
     error.value = null;
 
     isLoading.value = true;
     try {
       currentUser.value = await AuthService.refresh();
+      applyUserLocale();
       syncAccounts();
     } finally {
       isLoading.value = false;
@@ -38,6 +45,7 @@ export const useAuthStore = defineStore("auth", () => {
   const switchAccount = async (userId: string) => {
     sessions.value = [];
     currentUser.value = await AuthService.switchAccount(userId);
+    applyUserLocale();
     syncAccounts();
     if (currentUser.value) await fetchSessions();
   };
@@ -47,6 +55,7 @@ export const useAuthStore = defineStore("auth", () => {
     error.value = null;
     try {
       currentUser.value = await AuthService.login({ identifier, password });
+      applyUserLocale();
       syncAccounts();
       await fetchSessions();
     } catch (cause) {
@@ -62,6 +71,7 @@ export const useAuthStore = defineStore("auth", () => {
     error.value = null;
     try {
       currentUser.value = await AuthService.consumeQrLogin(payload);
+      applyUserLocale();
       syncAccounts();
       await fetchSessions();
     } catch (cause) {
@@ -94,6 +104,7 @@ export const useAuthStore = defineStore("auth", () => {
     error.value = null;
     try {
       currentUser.value = await AuthService.confirmRegistration(email, code);
+      applyUserLocale();
       isCompletingRegistrationProfile.value = true;
       syncAccounts();
       return currentUser.value;
@@ -137,6 +148,12 @@ export const useAuthStore = defineStore("auth", () => {
     } finally {
       isLoading.value = false;
     }
+  };
+
+  const updatePreferredLocale = async (locale: SupportedLocale) => {
+    currentUser.value = await AuthService.updatePreferredLocale(locale);
+    applyUserLocale();
+    syncAccounts();
   };
 
   const requestEmailChange = (currentPassword: string, newEmail: string) => AuthService.requestEmailChange(currentPassword, newEmail);
@@ -279,6 +296,7 @@ export const useAuthStore = defineStore("auth", () => {
   const refreshMe = async () => {
     try {
       currentUser.value = await AuthService.getMe();
+      applyUserLocale();
       syncAccounts();
     } catch (cause) {
       error.value = apiErrorMessage(cause);
@@ -311,6 +329,7 @@ export const useAuthStore = defineStore("auth", () => {
     confirmRegistration,
     resendRegistrationCode,
     updateProfile,
+    updatePreferredLocale,
     requestEmailChange,
     confirmEmailChange,
     cancelEmailChange,

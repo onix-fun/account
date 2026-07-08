@@ -3,6 +3,8 @@ package profile.api.rest
 import kotlinx.serialization.Serializable
 import profile.domain.Notification
 import profile.domain.NotificationPrefs
+import profile.domain.LocalizedNotificationServiceSettings
+import profile.domain.LocalizedNotificationTypeSetting
 import profile.domain.PrivacySettings
 import profile.domain.Relationship
 import profile.domain.BirthdayParts
@@ -133,6 +135,37 @@ data class NotificationPrefsResponse(
 )
 
 @Serializable
+data class NotificationSettingsResponse(
+    val services: List<NotificationServiceSettingsResponse>
+)
+
+@Serializable
+data class NotificationServiceSettingsResponse(
+    val serviceKey: String,
+    val name: String,
+    val description: String,
+    val icon: String,
+    val items: List<NotificationTypeSettingsResponse>
+)
+
+@Serializable
+data class NotificationTypeSettingsResponse(
+    val serviceKey: String,
+    val typeKey: String,
+    val name: String,
+    val description: String,
+    val icon: String,
+    val enabled: Boolean
+)
+
+@Serializable
+data class NotificationPreferenceUpdateRequest(
+    val serviceKey: String,
+    val typeKey: String,
+    val enabled: Boolean
+)
+
+@Serializable
 data class NotificationPageResponse(
     val items: List<NotificationResponse>,
     val totalCount: Int
@@ -142,6 +175,8 @@ data class NotificationPageResponse(
 data class NotificationResponse(
     val id: String,
     val type: String,
+    val serviceKey: String,
+    val typeKey: String,
     val title: String,
     val body: String,
     val isRead: Boolean,
@@ -209,9 +244,28 @@ fun NotificationPrefs.toResponse() = NotificationPrefsResponse(
     inAppBirthdays = inAppBirthdays
 )
 
+fun LocalizedNotificationServiceSettings.toResponse() = NotificationServiceSettingsResponse(
+    serviceKey = serviceKey,
+    name = name,
+    description = description,
+    icon = icon,
+    items = items.map { it.toResponse() }
+)
+
+fun LocalizedNotificationTypeSetting.toResponse() = NotificationTypeSettingsResponse(
+    serviceKey = serviceKey,
+    typeKey = typeKey,
+    name = name,
+    description = description,
+    icon = icon,
+    enabled = enabled
+)
+
 fun Notification.toResponse(metadata: NotificationMetadataResponse) = NotificationResponse(
     id = id.toString(),
     type = type,
+    serviceKey = serviceKey,
+    typeKey = typeKey,
     title = title,
     body = body,
     isRead = isRead,

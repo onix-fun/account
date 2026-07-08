@@ -34,6 +34,7 @@ class AuthController(
             request.password,
             request.firstName,
             request.lastName,
+            request.preferredLocale ?: call.request.headers[HttpHeaders.AcceptLanguage].orEmpty(),
             call.emailLocale()
         )
         call.respond(HttpStatusCode.Accepted, response)

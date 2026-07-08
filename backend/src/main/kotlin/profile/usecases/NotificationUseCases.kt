@@ -13,6 +13,12 @@ interface NotificationRepository {
     fun markAllRead(recipientId: UUID)
     fun getPrefs(userId: UUID): NotificationPrefs
     fun savePrefs(prefs: NotificationPrefs)
+    fun registerCatalog(catalog: NotificationServiceCatalog)
+    fun activateServiceForUser(userId: UUID, serviceKey: String)
+    fun notificationTypeExists(serviceKey: String, typeKey: String): Boolean
+    fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String): Boolean
+    fun getLocalizedSettings(userId: UUID, locale: String): List<LocalizedNotificationServiceSettings>
+    fun savePreference(userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean)
 }
 
 interface NotificationOutboxRepository {
@@ -40,20 +46,18 @@ class NotificationUseCases(
         metadataJson: String = "{}"
     ): Notification? {
         if (eventId.isNotBlank() && repo.existsBySourceEventId(eventId)) return null
-        val prefs = repo.getPrefs(recipientId)
-        val allowed = when (type) {
-            "post_comment" -> prefs.inAppPostComments
-            "post_published" -> prefs.inAppPublications
-            "story_published" -> prefs.inAppNewStories
-            "author_mention" -> prefs.inAppAuthorMentions
-            "subscription_request", "subscription_accepted" -> prefs.inAppSubscriptions
-            "birthday_today" -> prefs.inAppBirthdays
-            else -> true
+        val serviceKey = scopedService(type)
+        val typeKey = scopedType(type)
+        if (repo.notificationTypeExists(serviceKey, typeKey)) {
+            repo.activateServiceForUser(recipientId, serviceKey)
+            if (!repo.notificationTypeEnabled(recipientId, serviceKey, typeKey)) return null
         }
-        if (!allowed) return null
 
         val notif = Notification(
-            recipientId = recipientId, type = type, title = title, body = body,
+            recipientId = recipientId, type = scopedTypeName(serviceKey, typeKey),
+            serviceKey = serviceKey,
+            typeKey = typeKey,
+            title = title, body = body,
             metadataJson = metadataJson, actorId = actorId, entityType = entityType,
             entityId = entityId, sourceEventId = eventId.ifBlank { null }, createdAt = Instant.now()
         )
@@ -74,6 +78,57 @@ class NotificationUseCases(
     fun getPrefs(userId: UUID): NotificationPrefs = repo.getPrefs(userId)
 
     fun savePrefs(prefs: NotificationPrefs) = repo.savePrefs(prefs)
+
+    fun registerCatalog(catalog: NotificationServiceCatalog) = repo.registerCatalog(catalog)
+
+    fun activateServiceForUser(userId: UUID, serviceKey: String) = repo.activateServiceForUser(userId, serviceKey)
+
+    fun getLocalizedSettings(userId: UUID, locale: String): List<LocalizedNotificationServiceSettings> {
+        repo.activateServiceForUser(userId, "account")
+        return repo.getLocalizedSettings(userId, locale)
+    }
+
+    fun savePreference(userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean) =
+        repo.savePreference(userId, serviceKey, typeKey, enabled)
+
+    fun sendToUser(
+        sourceEventId: String,
+        recipientId: UUID,
+        serviceKey: String,
+        typeKey: String,
+        title: LocalizedText,
+        body: LocalizedText,
+        actorId: UUID? = null,
+        entityType: String? = null,
+        entityId: String? = null,
+        metadataJson: String = "{}"
+    ): Notification? {
+        require(sourceEventId.isNotBlank()) { "source_event_id is required" }
+        require(serviceKey.isNotBlank()) { "service_key is required" }
+        require(typeKey.isNotBlank()) { "type_key is required" }
+        require(repo.notificationTypeExists(serviceKey, typeKey)) { "notification type is not registered" }
+        if (repo.existsBySourceEventId(sourceEventId)) return null
+        repo.activateServiceForUser(recipientId, serviceKey)
+        if (!repo.notificationTypeEnabled(recipientId, serviceKey, typeKey)) return null
+        val notif = Notification(
+            recipientId = recipientId,
+            type = scopedTypeName(serviceKey, typeKey),
+            serviceKey = serviceKey,
+            typeKey = typeKey,
+            title = title.en.ifBlank { title.ru },
+            body = body.en.ifBlank { body.ru },
+            titleI18nJson = localizedJson(title),
+            bodyI18nJson = localizedJson(body),
+            metadataJson = metadataJson.ifBlank { "{}" },
+            actorId = actorId,
+            entityType = entityType,
+            entityId = entityId,
+            sourceEventId = sourceEventId,
+            createdAt = Instant.now()
+        )
+        repo.save(notif)
+        return notif
+    }
 
     fun publishUserActivity(
         sourceEventId: String,
@@ -125,7 +180,7 @@ class NotificationUseCases(
         return createFromEvent(
             eventId = "subscription.created:${sub.subscriberId}:${sub.subscribedToId}:${sub.status}",
             recipientId = sub.subscribedToId,
-            type = if (pending) "subscription_request" else "subscription_accepted",
+            type = if (pending) "account.subscription_request" else "account.subscription_accepted",
             title = if (pending) "New subscription request" else "New subscriber",
             body = if (pending) "Someone wants to subscribe to you" else "Someone subscribed to you",
             actorId = sub.subscriberId,
@@ -139,7 +194,7 @@ class NotificationUseCases(
         return createFromEvent(
             eventId = "subscription.accepted:${sub.subscriberId}:${sub.subscribedToId}",
             recipientId = sub.subscriberId,
-            type = "subscription_accepted",
+            type = "account.subscription_accepted",
             title = "Request accepted",
             body = "Your subscription request was accepted",
             actorId = sub.subscribedToId,
@@ -152,7 +207,7 @@ class NotificationUseCases(
         return createFromEvent(
             eventId = "birthday:$recipientId:$birthdayUserId:$dateKey",
             recipientId = recipientId,
-            type = "birthday_today",
+            type = "account.birthday_today",
             title = "Birthday today",
             body = "Someone you follow has a birthday today",
             actorId = birthdayUserId,
@@ -172,24 +227,39 @@ data class NotificationTemplate(
 object NotificationTemplates {
     fun forActivity(type: UserActivityType): NotificationTemplate = when (type) {
         UserActivityType.POST_PUBLISHED -> NotificationTemplate(
-            type = "post_published",
+            type = "content.post_published",
             title = "New publication",
             body = "Someone you follow published a new post"
         )
         UserActivityType.STORY_PUBLISHED -> NotificationTemplate(
-            type = "story_published",
+            type = "content.story_published",
             title = "New story",
             body = "Someone you follow added a new story"
         )
         UserActivityType.AUTHOR_MENTION -> NotificationTemplate(
-            type = "author_mention",
+            type = "content.author_mention",
             title = "New mention",
             body = "You were mentioned as an author"
         )
         UserActivityType.POST_COMMENT -> NotificationTemplate(
-            type = "post_comment",
+            type = "content.post_comment",
             title = "New comment",
             body = "Someone commented on your post"
         )
     }
 }
+
+private fun scopedService(type: String): String =
+    type.substringBefore('.', if (type in accountTypeKeys) "account" else "content")
+
+private fun scopedType(type: String): String = type.substringAfter('.', type)
+
+private fun scopedTypeName(serviceKey: String, typeKey: String): String = "$serviceKey.$typeKey"
+
+private val accountTypeKeys = setOf("subscription_request", "subscription_accepted", "birthday_today")
+
+private fun localizedJson(text: LocalizedText): String =
+    """{"ru":${jsonString(text.ru)},"en":${jsonString(text.en)}}"""
+
+private fun jsonString(value: String): String =
+    kotlinx.serialization.json.JsonPrimitive(value).toString()

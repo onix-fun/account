@@ -146,44 +146,4 @@ fun Route.socialRoutes(
         }
     }
 
-    route("/api/internal") {
-        get("/visibility") {
-            val uid = requireUserId(call)
-            val ownerId = UUID.fromString(call.request.queryParameters["ownerId"] ?: error("ownerId is required"))
-            val viewerId = call.request.queryParameters["viewerId"]
-                ?.takeIf(String::isNotBlank)
-                ?.let(UUID::fromString)
-                ?: uid
-            require(viewerId == uid) { "viewerId must match authenticated user" }
-            val relationship = socialUseCases.getRelationship(viewerId, ownerId)
-            val privacy = socialUseCases.getPrivacySettings(ownerId)
-            val isCloseFriend = socialUseCases.getCloseFriends(ownerId).any { it.subscribedToId == viewerId }
-            call.respond(InternalVisibilityResponse(
-                ownerId = ownerId.toString(),
-                viewerId = viewerId.toString(),
-                isPrivate = privacy.isPrivate,
-                relationship = relationship.toResponse(),
-                isBlocked = relationship.isBlocked,
-                isCloseFriend = isCloseFriend
-            ))
-        }
-
-        get("/social-graph") {
-            val uid = requireUserId(call)
-            val viewerId = call.request.queryParameters["viewerId"]
-                ?.takeIf(String::isNotBlank)
-                ?.let(UUID::fromString)
-                ?: uid
-            require(viewerId == uid) { "viewerId must match authenticated user" }
-            val (following, _) = socialUseCases.getFollowing(viewerId, page = 1, limit = 1000)
-            val (followers, _) = socialUseCases.getFollowers(viewerId, page = 1, limit = 1000)
-            val followingIds = following.map { it.subscribedToId.toString() }
-            val followerIds = followers.map { it.subscriberId.toString() }.toSet()
-            call.respond(InternalSocialGraphResponse(
-                followingIds = followingIds,
-                friendIds = followingIds.filter { it in followerIds },
-                blockedIds = socialUseCases.getBlockedUsers(viewerId).map { it.blockedId.toString() }
-            ))
-        }
-    }
 }
