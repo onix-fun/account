@@ -167,7 +167,7 @@ fun koinModule(config: ApplicationConfig) = module {
     single { SearchService(get<UserRepository>(), get<RedisManager>()) }
 
     // 3. Services
-    single { OrganizationService(get(), get()) }
+    single { OrganizationService(get(), get(), get()) }
     single { AuthService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { QrLoginService(get(), get(), get(), get()) }
     single { UserService(get(), get(), get(), get()) }

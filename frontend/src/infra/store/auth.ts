@@ -73,8 +73,13 @@ export const useAuthStore = defineStore("auth", () => {
     await loadOrganizationContext();
   };
 
-  const updateOrganization = async (orgId: string, payload: { displayName?: string; bio?: string | null; socialLinks?: Array<{ label: string; url: string }> }) => {
+  const updateOrganization = async (orgId: string, payload: { orgName?: string; displayName?: string; bio?: string | null; socialLinks?: Array<{ label: string; url: string }> }) => {
     await AuthService.updateOrganization(orgId, payload);
+    await loadOrganizationContext();
+  };
+
+  const uploadOrganizationAvatar = async (orgId: string, file: File) => {
+    await AuthService.uploadOrganizationAvatar(orgId, file);
     await loadOrganizationContext();
   };
 
@@ -400,6 +405,7 @@ export const useAuthStore = defineStore("auth", () => {
     loadOrganizationContext,
     createOrganization,
     updateOrganization,
+    uploadOrganizationAvatar,
     inviteOrganizationMember,
     respondOrganizationInvitation,
     switchOwner,

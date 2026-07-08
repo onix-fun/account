@@ -46,6 +46,17 @@ export interface OrganizationInvitation {
   createdAt: string;
 }
 
+export interface OrganizationMember {
+  organizationId: string;
+  userId: string;
+  username: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  role: "OWNER" | "CONTRIBUTOR";
+  createdAt: string;
+}
+
 export interface OrganizationContext {
   activeOwner: OwnerIdentity;
   organizations: Organization[];

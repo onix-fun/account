@@ -43,6 +43,7 @@ const isSavingProfile = ref(false);
 const isUploadingAvatar = ref(false);
 const isAccountModalOpen = ref(false);
 const isOrganizationSelectorOpen = ref(false);
+const organizationCreateToken = ref(0);
 const isSearchOpen = ref(false);
 const selectedOrganizationId = ref<string | null>(null);
 const cropFile = ref<File | null>(null);
@@ -223,6 +224,7 @@ function isProfileView(value: unknown): value is ProfileView {
 async function showUserProfile() {
   if (authStore.currentUser && authStore.activeOwner?.ownerType === "ORGANIZATION") {
     await authStore.switchOwner("USER", authStore.currentUser.id);
+    await Promise.allSettled([socialStore.loadSettings(), socialStore.loadBlockedUsers(), socialStore.refreshSummary()]);
   }
   accountMode.value = "user";
 }
@@ -232,9 +234,16 @@ function openOrganizationMode() {
   isOrganizationSelectorOpen.value = true;
 }
 
+function openOrganizationCreate() {
+  accountMode.value = "organization";
+  isOrganizationSelectorOpen.value = false;
+  organizationCreateToken.value += 1;
+}
+
 async function selectOrganization(organization: Organization) {
   selectedOrganizationId.value = organization.id;
   await authStore.switchOwner("ORGANIZATION", organization.id);
+  await Promise.allSettled([socialStore.loadSettings(), socialStore.loadBlockedUsers(), socialStore.refreshSummary()]);
   accountMode.value = "organization";
   isOrganizationSelectorOpen.value = false;
 }
@@ -417,7 +426,11 @@ function revokeAvatarPreview() {
 
       <div class="min-w-0" :class="{ 'hidden lg:block': !queryView && accountMode === 'user' }">
         <section v-if="!queryView && accountMode === 'organization'" class="grid gap-4">
-          <OrganizationsTab :selected-organization-id="selectedOrganization?.id || null" @message="setMessage" />
+          <OrganizationsTab :selected-organization-id="selectedOrganization?.id || null" :open-create-token="organizationCreateToken" @message="setMessage" />
+          <template v-if="selectedOrganization?.role === 'OWNER'">
+            <SocialSettingsTab @message="setMessage" />
+            <BlockedUsersTab @message="setMessage" />
+          </template>
         </section>
 
         <ProfileSearchOverlay
@@ -646,7 +659,7 @@ function revokeAvatarPreview() {
         <button
           type="button"
           class="w-full min-h-[64px] flex items-center gap-3 p-3 rounded-2xl border-0 bg-[var(--surface-raised)] hover:bg-[var(--surface-active)] text-[var(--text)] cursor-pointer text-left"
-          @click="isOrganizationSelectorOpen = false"
+          @click="openOrganizationCreate"
         >
           <span class="w-12 h-12 rounded-2xl bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)]">
             <i class="pi pi-plus"></i>

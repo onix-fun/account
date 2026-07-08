@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
 import type { PrivacySettings, VisibilityAudience } from "@/api/services/ProfileSocialService";
-import { useProfileSocialStore } from "@/infra/store";
+import { useAuthStore, useProfileSocialStore } from "@/infra/store";
 
 const emit = defineEmits<{
   message: [message: string, tone?: "success" | "error" | "warning"];
@@ -11,13 +11,18 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const socialStore = useProfileSocialStore();
+const authStore = useAuthStore();
 const savingKey = ref<string | null>(null);
 
-const visibilityRows: Array<{ key: keyof PrivacySettings["fieldVisibility"]; icon: string }> = [
+const allVisibilityRows: Array<{ key: keyof PrivacySettings["fieldVisibility"]; icon: string }> = [
   { key: "bio", icon: "pi pi-align-left" },
   { key: "birthday", icon: "pi pi-gift" },
   { key: "socialLinks", icon: "pi pi-link" },
 ];
+const visibilityRows = computed(() => authStore.activeOwner?.ownerType === "ORGANIZATION"
+  ? allVisibilityRows.filter((row) => row.key !== "birthday")
+  : allVisibilityRows
+);
 
 const visibilityOptions: VisibilityAudience[] = ["public", "followers", "friends", "private"];
 

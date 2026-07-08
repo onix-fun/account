@@ -97,26 +97,27 @@ fun Route.socialRoutes(
         }
 
         post("/{id}/block") {
-            val uid = requireUserId(call)
+            val owner = activeOwnerRef(call)
             val targetId = UUID.fromString(call.parameters["id"]!!)
-            socialUseCases.blockUser(uid, targetId)
+            socialUseCases.blockOwner(owner, OwnerRef.user(targetId))
             call.respond(SuccessResponse())
         }
 
         delete("/{id}/block") {
-            val uid = requireUserId(call)
+            val owner = activeOwnerRef(call)
             val targetId = UUID.fromString(call.parameters["id"]!!)
-            socialUseCases.unblockUser(uid, targetId)
+            socialUseCases.unblockOwner(owner, OwnerRef.user(targetId))
             call.respond(SuccessResponse())
         }
 
         get("/me/blocked") {
+            val owner = activeOwnerRef(call)
             val uid = requireUserId(call)
-            val blocks = socialUseCases.getBlockedUsers(uid)
+            val blocks = socialUseCases.getBlockedUsers(owner).filter { it.blockedType == OwnerType.USER }
             call.respond(blocks.mapNotNull {
                 userService.getProfile(it.blockedId.toString())
                     ?.toPublicDto()
-                    ?.withRelationship(socialUseCases.getRelationship(uid, it.blockedId).toResponse())
+                    ?.withRelationship(socialUseCases.getRelationship(OwnerRef.user(uid), OwnerRef.user(it.blockedId)).toResponse())
             })
         }
 

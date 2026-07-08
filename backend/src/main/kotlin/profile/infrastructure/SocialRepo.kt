@@ -252,8 +252,16 @@ class BlockRepo(private val ds: DataSource) : BlockRepository {
     override fun save(block: UserBlock) {
         ds.connection.use { conn ->
             try {
-                conn.prepareStatement("INSERT INTO social.user_blocks (blocker_id, blocked_id) VALUES (?, ?) ON CONFLICT DO NOTHING").use { ps ->
-                    ps.setObject(1, block.blockerId); ps.setObject(2, block.blockedId); ps.executeUpdate()
+                conn.prepareStatement("""
+                    INSERT INTO social.user_blocks (blocker_type, blocker_id, blocked_type, blocked_id)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT DO NOTHING
+                """.trimIndent()).use { ps ->
+                    ps.setString(1, block.blockerType.name)
+                    ps.setObject(2, block.blockerId)
+                    ps.setString(3, block.blockedType.name)
+                    ps.setObject(4, block.blockedId)
+                    ps.executeUpdate()
                 }
                 conn.commit()
             } catch (error: Throwable) {
@@ -264,10 +272,21 @@ class BlockRepo(private val ds: DataSource) : BlockRepository {
     }
 
     override fun delete(blockerId: UUID, blockedId: UUID) {
+        delete(OwnerRef.user(blockerId), OwnerRef.user(blockedId))
+    }
+
+    override fun delete(blocker: OwnerRef, blocked: OwnerRef) {
         ds.connection.use { conn ->
             try {
-                conn.prepareStatement("DELETE FROM social.user_blocks WHERE blocker_id = ? AND blocked_id = ?").use { ps ->
-                    ps.setObject(1, blockerId); ps.setObject(2, blockedId); ps.executeUpdate()
+                conn.prepareStatement("""
+                    DELETE FROM social.user_blocks
+                    WHERE blocker_type = ? AND blocker_id = ? AND blocked_type = ? AND blocked_id = ?
+                """.trimIndent()).use { ps ->
+                    ps.setString(1, blocker.type.name)
+                    ps.setObject(2, blocker.id)
+                    ps.setString(3, blocked.type.name)
+                    ps.setObject(4, blocked.id)
+                    ps.executeUpdate()
                 }
                 conn.commit()
             } catch (error: Throwable) {
@@ -278,22 +297,50 @@ class BlockRepo(private val ds: DataSource) : BlockRepository {
     }
 
     override fun isBlockedEither(a: UUID, b: UUID): Boolean {
+        return isBlockedEither(OwnerRef.user(a), OwnerRef.user(b))
+    }
+
+    override fun isBlockedEither(a: OwnerRef, b: OwnerRef): Boolean {
         return ds.connection.use { conn ->
-            conn.prepareStatement("SELECT 1 FROM social.user_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1").use { ps ->
-                ps.setObject(1, a); ps.setObject(2, b); ps.setObject(3, b); ps.setObject(4, a)
+            conn.prepareStatement("""
+                SELECT 1 FROM social.user_blocks
+                WHERE (blocker_type = ? AND blocker_id = ? AND blocked_type = ? AND blocked_id = ?)
+                   OR (blocker_type = ? AND blocker_id = ? AND blocked_type = ? AND blocked_id = ?)
+                LIMIT 1
+            """.trimIndent()).use { ps ->
+                ps.setString(1, a.type.name)
+                ps.setObject(2, a.id)
+                ps.setString(3, b.type.name)
+                ps.setObject(4, b.id)
+                ps.setString(5, b.type.name)
+                ps.setObject(6, b.id)
+                ps.setString(7, a.type.name)
+                ps.setObject(8, a.id)
                 ps.executeQuery().use { rs -> rs.next() }
             }
         }
     }
 
     override fun findByBlocker(blockerId: UUID): List<UserBlock> {
+        return findByBlocker(OwnerRef.user(blockerId))
+    }
+
+    override fun findByBlocker(blocker: OwnerRef): List<UserBlock> {
         return ds.connection.use { conn ->
-            conn.prepareStatement("SELECT blocker_id, blocked_id, created_at FROM social.user_blocks WHERE blocker_id = ? ORDER BY created_at DESC").use { ps ->
-                ps.setObject(1, blockerId)
+            conn.prepareStatement("""
+                SELECT blocker_type, blocker_id, blocked_type, blocked_id, created_at
+                FROM social.user_blocks
+                WHERE blocker_type = ? AND blocker_id = ?
+                ORDER BY created_at DESC
+            """.trimIndent()).use { ps ->
+                ps.setString(1, blocker.type.name)
+                ps.setObject(2, blocker.id)
                 ps.executeQuery().use { rs ->
                     val list = mutableListOf<UserBlock>()
                     while (rs.next()) list.add(UserBlock(
+                        blockerType = runCatching { OwnerType.valueOf(rs.getString("blocker_type")) }.getOrDefault(OwnerType.USER),
                         blockerId = rs.getObject("blocker_id") as UUID,
+                        blockedType = runCatching { OwnerType.valueOf(rs.getString("blocked_type")) }.getOrDefault(OwnerType.USER),
                         blockedId = rs.getObject("blocked_id") as UUID,
                         createdAt = rs.getTimestamp("created_at").toInstant()
                     ))
@@ -308,15 +355,25 @@ class PrivacyRepo(private val ds: DataSource) : PrivacyRepository {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     override fun get(userId: UUID): PrivacySettings {
+        return get(OwnerRef.user(userId))
+    }
+
+    override fun get(owner: OwnerRef): PrivacySettings {
         return ds.connection.use { conn ->
-            conn.prepareStatement("SELECT user_id, is_private, field_visibility FROM social.privacy_settings WHERE user_id = ?").use { ps ->
-                ps.setObject(1, userId)
+            conn.prepareStatement("""
+                SELECT owner_type, user_id, is_private, field_visibility
+                FROM social.privacy_settings
+                WHERE owner_type = ? AND user_id = ?
+            """.trimIndent()).use { ps ->
+                ps.setString(1, owner.type.name)
+                ps.setObject(2, owner.id)
                 ps.executeQuery().use { rs ->
                     if (rs.next()) PrivacySettings(
+                        ownerType = runCatching { OwnerType.valueOf(rs.getString("owner_type")) }.getOrDefault(OwnerType.USER),
                         userId = rs.getObject("user_id") as UUID,
                         isPrivate = rs.getBoolean("is_private"),
                         fieldVisibility = decodeVisibility(rs.getString("field_visibility"))
-                    ) else PrivacySettings(userId = userId)
+                    ) else PrivacySettings(ownerType = owner.type, userId = owner.id)
                 }
             }
         }
@@ -326,16 +383,19 @@ class PrivacyRepo(private val ds: DataSource) : PrivacyRepository {
         ds.connection.use { conn ->
             try {
                 conn.prepareStatement("""
-                    INSERT INTO social.privacy_settings (user_id, is_private, field_visibility, updated_at)
-                    VALUES (?, ?, ?::jsonb, ?)
-                    ON CONFLICT (user_id) DO UPDATE SET
+                    INSERT INTO social.privacy_settings (owner_type, user_id, is_private, field_visibility, updated_at)
+                    VALUES (?, ?, ?, ?::jsonb, ?)
+                    ON CONFLICT (owner_type, user_id) DO UPDATE SET
                         is_private = EXCLUDED.is_private,
                         field_visibility = EXCLUDED.field_visibility,
                         updated_at = EXCLUDED.updated_at
                 """.trimIndent()).use { ps ->
-                    ps.setObject(1, settings.userId); ps.setBoolean(2, settings.isPrivate)
-                    ps.setString(3, json.encodeToString(settings.fieldVisibility.toResponse()))
-                    ps.setTimestamp(4, Timestamp.from(settings.updatedAt)); ps.executeUpdate()
+                    ps.setString(1, settings.ownerType.name)
+                    ps.setObject(2, settings.userId)
+                    ps.setBoolean(3, settings.isPrivate)
+                    ps.setString(4, json.encodeToString(settings.fieldVisibility.toResponse()))
+                    ps.setTimestamp(5, Timestamp.from(settings.updatedAt))
+                    ps.executeUpdate()
                 }
                 conn.commit()
             } catch (error: Throwable) {

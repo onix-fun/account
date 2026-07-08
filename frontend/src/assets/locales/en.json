@@ -311,6 +311,7 @@
     "updated": "Organization updated.",
     "management": "Organization management",
     "managementHint": "Manage profile, members, and invitations for the selected organization.",
+    "members": "Members",
     "mine": "My organizations",
     "empty": "No organizations yet.",
     "emptyTitle": "No organizations yet",

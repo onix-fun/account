@@ -16,16 +16,15 @@ fun Route.settingsRoutes(
 ) {
     route("/api/profile/me") {
         get("/privacy") {
-            val uid = requireUserId(call)
-            val settings = socialUseCases.getPrivacySettings(uid)
+            val settings = socialUseCases.getPrivacySettings(activeOwnerRef(call))
             call.respond(settings.toResponse())
         }
 
         put("/privacy") {
-            val uid = requireUserId(call)
+            val owner = activeOwnerRef(call)
             val body = call.receive<PrivacySettingsUpdateRequest>()
             socialUseCases.updatePrivacySettings(
-                uid,
+                owner,
                 body.isPrivate,
                 body.fieldVisibility?.let { FieldVisibility.fromResponse(it) }
             )

@@ -3,12 +3,16 @@ package profile.organizations
 import profile.domain.*
 import profile.infrastructure.db.OrganizationRepository
 import profile.infrastructure.db.UserRepository
+import profile.infrastructure.storage.AvatarProcessor
+import profile.infrastructure.storage.S3Client
 import profile.users.toPublicDto
+import java.net.URI
 import java.util.UUID
 
 class OrganizationService(
     private val organizationRepository: OrganizationRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val s3Client: S3Client
 ) {
     fun create(userId: String, request: CreateOrganizationRequest): OrganizationDto {
         val orgName = normalizeOrgName(request.orgName)
@@ -20,6 +24,7 @@ class OrganizationService(
                 orgName = orgName,
                 displayName = displayName.take(120),
                 bio = request.bio?.trim()?.take(500)?.takeIf(String::isNotBlank),
+                socialLinks = request.socialLinks?.let(::normalizeSocialLinks).orEmpty(),
                 createdByUserId = userId
             )
         )
@@ -29,13 +34,40 @@ class OrganizationService(
     fun update(userId: String, orgId: String, request: UpdateOrganizationRequest): OrganizationDto {
         requireRole(userId, orgId, OrganizationRole.OWNER)
         val current = organizationRepository.findById(orgId) ?: throw IllegalArgumentException("Organization not found")
+        val orgName = request.orgName?.let(::normalizeOrgName) ?: current.orgName
+        if (!orgName.equals(current.orgName, ignoreCase = true)) {
+            require(organizationRepository.findByName(orgName) == null) { "Organization name is already used" }
+        }
         val updated = organizationRepository.update(
             orgId = orgId,
+            orgName = orgName,
             displayName = request.displayName?.trim()?.takeIf(String::isNotBlank)?.take(120) ?: current.displayName,
             bio = if (request.bioProvided) request.bio?.trim()?.take(500)?.takeIf(String::isNotBlank) else current.bio,
             socialLinks = request.socialLinks?.let(::normalizeSocialLinks) ?: current.socialLinks,
             avatarUrl = current.avatarUrl
         )
+        return updated.toDto(OrganizationRole.OWNER)
+    }
+
+    fun updateAvatar(userId: String, orgId: String, bytes: ByteArray, contentType: String): OrganizationDto {
+        requireRole(userId, orgId, OrganizationRole.OWNER)
+        val current = organizationRepository.findById(orgId) ?: throw IllegalArgumentException("Organization not found")
+        val processed = AvatarProcessor.process(bytes)
+        val avatarUrl = s3Client.uploadAvatar("organizations/$orgId", processed.bytes, processed.contentType)
+        val updated = try {
+            organizationRepository.update(
+                orgId = orgId,
+                orgName = current.orgName,
+                displayName = current.displayName,
+                bio = current.bio,
+                socialLinks = current.socialLinks,
+                avatarUrl = avatarUrl
+            )
+        } catch (error: Throwable) {
+            runCatching { s3Client.deleteByPublicUrl(avatarUrl) }
+            throw error
+        }
+        runCatching { s3Client.deleteByPublicUrl(current.avatarUrl) }
         return updated.toDto(OrganizationRole.OWNER)
     }
 
@@ -212,9 +244,14 @@ class OrganizationService(
 
     private fun normalizeSocialLinks(links: List<SocialLink>): List<SocialLink> =
         links.mapNotNull { link ->
-            val label = link.label.trim().take(60)
-            val url = link.url.trim().take(500)
+            val label = link.label.trim()
+            val url = link.url.trim()
             if (label.isBlank() && url.isBlank()) null else SocialLink(label = label, url = url)
+                .also {
+                    require(label.isNotBlank() && url.isNotBlank() && label.length <= 60 && url.length <= 2048) { "Invalid social link" }
+                    val parsed = runCatching { URI(url) }.getOrNull() ?: throw IllegalArgumentException("Invalid social link")
+                    require(parsed.scheme in setOf("http", "https") && !parsed.host.isNullOrBlank()) { "Invalid social link" }
+                }
         }.take(10)
 }
 
@@ -224,11 +261,13 @@ enum class OwnerAction { CREATE_CONTENT, MANAGE_ORGANIZATION, MANAGE_MEMBERS, AC
 data class CreateOrganizationRequest(
     val orgName: String,
     val displayName: String,
-    val bio: String? = null
+    val bio: String? = null,
+    val socialLinks: List<SocialLink>? = null
 )
 
 @kotlinx.serialization.Serializable
 data class UpdateOrganizationRequest(
+    val orgName: String? = null,
     val displayName: String? = null,
     val bio: String? = null,
     val socialLinks: List<SocialLink>? = null,

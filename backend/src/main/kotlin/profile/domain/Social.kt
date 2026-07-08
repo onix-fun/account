@@ -20,12 +20,15 @@ enum class SubscriptionStatus { PENDING, ACCEPTED }
 
 data class UserBlock(
     val id: UUID = Generators.timeBasedEpochGenerator().generate(),
+    val blockerType: OwnerType = OwnerType.USER,
     val blockerId: UUID,
+    val blockedType: OwnerType = OwnerType.USER,
     val blockedId: UUID,
     val createdAt: Instant = Instant.now()
 )
 
 data class PrivacySettings(
+    val ownerType: OwnerType = OwnerType.USER,
     val userId: UUID,
     val isPrivate: Boolean = false,
     val fieldVisibility: FieldVisibility = FieldVisibility(),

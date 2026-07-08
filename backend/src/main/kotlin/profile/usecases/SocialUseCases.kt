@@ -29,12 +29,19 @@ interface SocialRepository {
 interface BlockRepository {
     fun save(block: UserBlock)
     fun delete(blockerId: UUID, blockedId: UUID)
+    fun delete(blocker: OwnerRef, blocked: OwnerRef) = delete(blocker.id, blocked.id)
     fun isBlockedEither(a: UUID, b: UUID): Boolean
+    fun isBlockedEither(a: OwnerRef, b: OwnerRef): Boolean =
+        if (a.type == OwnerType.USER && b.type == OwnerType.USER) isBlockedEither(a.id, b.id) else false
     fun findByBlocker(blockerId: UUID): List<UserBlock>
+    fun findByBlocker(blocker: OwnerRef): List<UserBlock> =
+        if (blocker.type == OwnerType.USER) findByBlocker(blocker.id) else emptyList()
 }
 
 interface PrivacyRepository {
     fun get(userId: UUID): PrivacySettings
+    fun get(owner: OwnerRef): PrivacySettings =
+        if (owner.type == OwnerType.USER) get(owner.id) else PrivacySettings(ownerType = owner.type, userId = owner.id)
     fun save(settings: PrivacySettings)
 }
 
@@ -49,14 +56,12 @@ class SocialUseCases(
 
     fun subscribe(subscriber: OwnerRef, target: OwnerRef): Subscription {
         require(subscriber != target) { "Cannot subscribe to yourself" }
-        if (subscriber.type == OwnerType.USER && target.type == OwnerType.USER) {
-            require(!blockRepo.isBlockedEither(subscriber.id, target.id)) { "Blocked" }
-        }
+        require(!blockRepo.isBlockedEither(subscriber, target)) { "Blocked" }
 
         val existing = socialRepo.findSubscription(subscriber, target)
         if (existing != null) return existing
 
-        val status = if (target.type == OwnerType.USER && privacyRepo.get(target.id).isPrivate) {
+        val status = if (privacyRepo.get(target).isPrivate) {
             SubscriptionStatus.PENDING
         } else {
             SubscriptionStatus.ACCEPTED
@@ -116,15 +121,29 @@ class SocialUseCases(
     }
 
     fun blockUser(blockerId: UUID, blockedId: UUID): Boolean {
-        require(blockerId != blockedId) { "Cannot block yourself" }
-        blockRepo.save(UserBlock(blockerId = blockerId, blockedId = blockedId))
-        socialRepo.findSubscription(blockerId, blockedId)?.let { socialRepo.deleteSubscription(it.id) }
-        socialRepo.findSubscription(blockedId, blockerId)?.let { socialRepo.deleteSubscription(it.id) }
-        return true
+        return blockOwner(OwnerRef.user(blockerId), OwnerRef.user(blockedId))
     }
 
     fun unblockUser(blockerId: UUID, blockedId: UUID): Boolean {
-        blockRepo.delete(blockerId, blockedId)
+        unblockOwner(OwnerRef.user(blockerId), OwnerRef.user(blockedId))
+        return true
+    }
+
+    fun blockOwner(blocker: OwnerRef, blocked: OwnerRef): Boolean {
+        require(blocker != blocked) { "Cannot block yourself" }
+        blockRepo.save(UserBlock(
+            blockerType = blocker.type,
+            blockerId = blocker.id,
+            blockedType = blocked.type,
+            blockedId = blocked.id
+        ))
+        socialRepo.findSubscription(blocker, blocked)?.let { socialRepo.deleteSubscription(it.id) }
+        socialRepo.findSubscription(blocked, blocker)?.let { socialRepo.deleteSubscription(it.id) }
+        return true
+    }
+
+    fun unblockOwner(blocker: OwnerRef, blocked: OwnerRef): Boolean {
+        blockRepo.delete(blocker, blocked)
         return true
     }
 
@@ -144,11 +163,7 @@ class SocialUseCases(
 
     fun getRelationship(current: OwnerRef?, target: OwnerRef): Relationship {
         if (current == null) return Relationship(false, false, false, false, false)
-        val isBlocked = if (current.type == OwnerType.USER && target.type == OwnerType.USER) {
-            blockRepo.isBlockedEither(current.id, target.id)
-        } else {
-            false
-        }
+        val isBlocked = blockRepo.isBlockedEither(current, target)
         val forward = socialRepo.findSubscription(current, target)
         val reverse = socialRepo.findSubscription(target, current)
         return Relationship(
@@ -178,12 +193,21 @@ class SocialUseCases(
 
     fun getBlockedUsers(blockerId: UUID): List<UserBlock> = blockRepo.findByBlocker(blockerId)
 
+    fun getBlockedUsers(owner: OwnerRef): List<UserBlock> = blockRepo.findByBlocker(owner)
+
     fun getPrivacySettings(userId: UUID): PrivacySettings = privacyRepo.get(userId)
 
+    fun getPrivacySettings(owner: OwnerRef): PrivacySettings = privacyRepo.get(owner)
+
     fun updatePrivacySettings(userId: UUID, isPrivate: Boolean, fieldVisibility: FieldVisibility? = null): PrivacySettings {
-        val current = privacyRepo.get(userId)
+        return updatePrivacySettings(OwnerRef.user(userId), isPrivate, fieldVisibility)
+    }
+
+    fun updatePrivacySettings(owner: OwnerRef, isPrivate: Boolean, fieldVisibility: FieldVisibility? = null): PrivacySettings {
+        val current = privacyRepo.get(owner)
         val settings = PrivacySettings(
-            userId = userId,
+            ownerType = owner.type,
+            userId = owner.id,
             isPrivate = isPrivate,
             fieldVisibility = fieldVisibility ?: current.fieldVisibility,
             updatedAt = Instant.now()

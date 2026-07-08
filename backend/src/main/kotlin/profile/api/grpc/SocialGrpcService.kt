@@ -277,11 +277,7 @@ class SocialGrpcService(
             }
             val owner = request.owner.toDomain()
             val relationship = socialUseCases.getRelationship(viewer, owner)
-            val isPrivate = if (owner.type == profile.domain.OwnerType.USER) {
-                socialUseCases.getPrivacySettings(owner.id).isPrivate
-            } else {
-                false
-            }
+            val isPrivate = socialUseCases.getPrivacySettings(owner).isPrivate
             VisibilityResponse.newBuilder()
                 .setOwnerId(owner.id.toString())
                 .setViewerId(viewer.id.toString())
@@ -507,11 +503,7 @@ class SocialGrpcService(
         val identity = organizationService().findOwner(owner)
             ?: throw Status.NOT_FOUND.withDescription("owner not found").asRuntimeException()
         val relationship = socialUseCases.getRelationship(viewer, owner)
-        val isPrivate = if (owner.type == profile.domain.OwnerType.USER) {
-            socialUseCases.getPrivacySettings(owner.id).isPrivate
-        } else {
-            false
-        }
+        val isPrivate = socialUseCases.getPrivacySettings(owner).isPrivate
         val user = if (owner.type == profile.domain.OwnerType.USER) userService().getProfile(owner.id.toString()) else null
         val organization = if (owner.type == profile.domain.OwnerType.ORGANIZATION) organizationService().findByName(identity.username) else null
         val bio = when (owner.type) {

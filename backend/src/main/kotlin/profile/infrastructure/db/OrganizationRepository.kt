@@ -58,20 +58,21 @@ class OrganizationRepository(private val dataSource: DataSource) {
         }
     }
 
-    fun update(orgId: String, displayName: String, bio: String?, socialLinks: List<SocialLink>, avatarUrl: String?): Organization {
+    fun update(orgId: String, orgName: String, displayName: String, bio: String?, socialLinks: List<SocialLink>, avatarUrl: String?): Organization {
         dataSource.connection.use { conn ->
             val updated = conn.prepareStatement("""
                 UPDATE organizations
-                SET display_name = ?, bio = ?, social_links = ?::jsonb, avatar_url = ?, updated_at = ?
+                SET org_name = ?, display_name = ?, bio = ?, social_links = ?::jsonb, avatar_url = ?, updated_at = ?
                 WHERE id = ? AND status = 'ACTIVE'
                 RETURNING *
             """.trimIndent()).use { stmt ->
-                stmt.setString(1, displayName)
-                stmt.setString(2, bio)
-                stmt.setString(3, json.encodeToString(socialLinks))
-                stmt.setString(4, avatarUrl)
-                stmt.setTimestamp(5, Timestamp.from(Instant.now()))
-                stmt.setObject(6, UUID.fromString(orgId))
+                stmt.setString(1, orgName)
+                stmt.setString(2, displayName)
+                stmt.setString(3, bio)
+                stmt.setString(4, json.encodeToString(socialLinks))
+                stmt.setString(5, avatarUrl)
+                stmt.setTimestamp(6, Timestamp.from(Instant.now()))
+                stmt.setObject(7, UUID.fromString(orgId))
                 val rs = stmt.executeQuery()
                 if (!rs.next()) null else mapOrganization(rs)
             }

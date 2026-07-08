@@ -1,6 +1,6 @@
 import { profileClient } from "@/api/client";
 import { DeviceIdManager } from "@/shared/lib/deviceId";
-import type { AuthSession, Organization, OrganizationContext, OrganizationInvitation, OwnerIdentity, OwnerType, User } from "@/domain";
+import type { AuthSession, Organization, OrganizationContext, OrganizationInvitation, OrganizationMember, OwnerIdentity, OwnerType, User } from "@/domain";
 import { i18n } from "@/shared/i18n";
 
 interface BrowserAuthResponse {
@@ -155,14 +155,34 @@ export class AuthService {
     return response.data;
   }
 
-  static async updateOrganization(orgId: string, payload: { displayName?: string; bio?: string | null; socialLinks?: Array<{ label: string; url: string }> }): Promise<Organization> {
+  static async updateOrganization(orgId: string, payload: { orgName?: string; displayName?: string; bio?: string | null; socialLinks?: Array<{ label: string; url: string }> }): Promise<Organization> {
     const response = await profileClient.patch<Organization>(`/organizations/${orgId}`, payload);
+    return response.data;
+  }
+
+  static async uploadOrganizationAvatar(orgId: string, file: File): Promise<Organization> {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await profileClient.post<Organization>(`/organizations/${orgId}/avatar`, form);
     return response.data;
   }
 
   static async inviteOrganizationMember(orgId: string, payload: { username?: string; userId?: string; role?: "OWNER" | "CONTRIBUTOR" }): Promise<OrganizationInvitation> {
     const response = await profileClient.post<OrganizationInvitation>(`/organizations/${orgId}/invitations`, payload);
     return response.data;
+  }
+
+  static async organizationMembers(orgId: string): Promise<OrganizationMember[]> {
+    const response = await profileClient.get<OrganizationMember[]>(`/organizations/${orgId}/members`);
+    return response.data;
+  }
+
+  static async updateOrganizationMember(orgId: string, userId: string, role: "OWNER" | "CONTRIBUTOR"): Promise<void> {
+    await profileClient.put(`/organizations/${orgId}/members/${userId}`, { role });
+  }
+
+  static async removeOrganizationMember(orgId: string, userId: string): Promise<void> {
+    await profileClient.delete(`/organizations/${orgId}/members/${userId}`);
   }
 
   static async acceptOrganizationInvitation(invitationId: string): Promise<OrganizationInvitation> {

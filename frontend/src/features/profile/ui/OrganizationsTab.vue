@@ -2,11 +2,13 @@
 import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
+import { AuthService } from "@/api/services/AuthService";
 import { useAuthStore } from "@/infra/store";
-import type { SocialLink } from "@/domain";
+import type { OrganizationMember, SocialLink } from "@/domain";
 
 const props = defineProps<{
   selectedOrganizationId?: string | null;
+  openCreateToken?: number;
 }>();
 
 const emit = defineEmits<{
@@ -16,9 +18,14 @@ const emit = defineEmits<{
 const authStore = useAuthStore();
 const { t } = useI18n();
 const isSaving = ref(false);
+const uploadingOrgId = ref<string | null>(null);
 const isCreateOpen = ref(false);
+const avatarInput = ref<HTMLInputElement | null>(null);
+const avatarTargetOrgId = ref<string | null>(null);
 const inviteByOrg = reactive<Record<string, string>>({});
-const edits = reactive<Record<string, { displayName: string; bio: string; socialLinks: SocialLink[] }>>({});
+const edits = reactive<Record<string, { orgName: string; displayName: string; bio: string; socialLinks: SocialLink[] }>>({});
+const membersByOrg = reactive<Record<string, OrganizationMember[]>>({});
+const busyMemberKey = ref<string | null>(null);
 
 const form = reactive({
   orgName: "",
@@ -36,14 +43,19 @@ watch(
   (organizations) => {
     organizations.forEach((organization) => {
       edits[organization.id] = {
+        orgName: organization.orgName,
         displayName: organization.displayName,
         bio: organization.bio || "",
         socialLinks: (organization.socialLinks || []).map((link) => ({ ...link })),
       };
+      loadMembers(organization.id).catch(() => undefined);
     });
   },
   { immediate: true, deep: true },
 );
+watch(() => props.openCreateToken, () => {
+  if (props.openCreateToken) isCreateOpen.value = true;
+});
 
 async function createOrganization() {
   if (!form.orgName.trim() || !form.displayName.trim()) return;
@@ -72,6 +84,7 @@ async function saveOrganization(orgId: string) {
   isSaving.value = true;
   try {
     await authStore.updateOrganization(orgId, {
+      orgName: edit.orgName.trim(),
       displayName: edit.displayName.trim(),
       bio: edit.bio.trim() || null,
       socialLinks: edit.socialLinks.map((link) => ({ label: link.label.trim(), url: link.url.trim() })).filter((link) => link.label || link.url),
@@ -81,6 +94,29 @@ async function saveOrganization(orgId: string) {
     emit("message", apiErrorMessage(cause), "error");
   } finally {
     isSaving.value = false;
+  }
+}
+
+function openAvatarUpload(orgId: string) {
+  avatarTargetOrgId.value = orgId;
+  avatarInput.value?.click();
+}
+
+async function uploadAvatar(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] || null;
+  input.value = "";
+  const orgId = avatarTargetOrgId.value;
+  avatarTargetOrgId.value = null;
+  if (!file || !orgId) return;
+  uploadingOrgId.value = orgId;
+  try {
+    await authStore.uploadOrganizationAvatar(orgId, file);
+    emit("message", t("profile.avatarUploaded"));
+  } catch (cause) {
+    emit("message", apiErrorMessage(cause), "error");
+  } finally {
+    uploadingOrgId.value = null;
   }
 }
 
@@ -101,10 +137,43 @@ async function invite(orgId: string) {
   if (!username) return;
   try {
     await authStore.inviteOrganizationMember(orgId, { username, role: "CONTRIBUTOR" });
+    await loadMembers(orgId);
     inviteByOrg[orgId] = "";
     emit("message", t("organizations.invited"));
   } catch (cause) {
     emit("message", apiErrorMessage(cause), "error");
+  }
+}
+
+async function loadMembers(orgId: string) {
+  membersByOrg[orgId] = await AuthService.organizationMembers(orgId);
+}
+
+async function setMemberRole(orgId: string, userId: string, role: "OWNER" | "CONTRIBUTOR") {
+  busyMemberKey.value = `${orgId}:${userId}:role`;
+  try {
+    await AuthService.updateOrganizationMember(orgId, userId, role);
+    await loadMembers(orgId);
+    await authStore.loadOrganizationContext();
+    emit("message", t("organizations.updated"));
+  } catch (cause) {
+    emit("message", apiErrorMessage(cause), "error");
+  } finally {
+    busyMemberKey.value = null;
+  }
+}
+
+async function removeMember(orgId: string, userId: string) {
+  busyMemberKey.value = `${orgId}:${userId}:remove`;
+  try {
+    await AuthService.removeOrganizationMember(orgId, userId);
+    await loadMembers(orgId);
+    await authStore.loadOrganizationContext();
+    emit("message", t("organizations.updated"));
+  } catch (cause) {
+    emit("message", apiErrorMessage(cause), "error");
+  } finally {
+    busyMemberKey.value = null;
   }
 }
 
@@ -120,6 +189,8 @@ async function respond(invitationId: string, accept: boolean) {
 
 <template>
   <section class="grid gap-5">
+    <input ref="avatarInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" @change="uploadAvatar" />
+
     <div class="flex items-center justify-between gap-3">
       <div>
         <h2 class="m-0 text-base font-bold text-[var(--text)]">{{ t("organizations.management") }}</h2>
@@ -157,26 +228,41 @@ async function respond(invitationId: string, accept: boolean) {
       <h2 class="m-0 text-base font-bold text-[var(--text)]">{{ t("organizations.mine") }}</h2>
       <article v-for="organization in visibleOrganizations" :key="organization.id" class="grid gap-4 rounded-xl bg-[var(--surface)] p-4">
         <div class="flex items-start justify-between gap-3">
-          <div>
-            <strong>{{ organization.displayName }}</strong>
+          <div class="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              class="w-14 h-14 rounded-2xl border-0 bg-[var(--surface-muted)] flex items-center justify-center font-bold overflow-hidden shrink-0"
+              :disabled="organization.role !== 'OWNER' || uploadingOrgId === organization.id"
+              @click="openAvatarUpload(organization.id)"
+            >
+              <img v-if="organization.avatarUrl" :src="organization.avatarUrl" alt="" class="w-full h-full object-cover" />
+              <i v-else-if="uploadingOrgId === organization.id" class="pi pi-spinner pi-spin"></i>
+              <span v-else>{{ organization.displayName.slice(0, 1).toUpperCase() }}</span>
+            </button>
+            <div class="min-w-0">
+              <strong class="block truncate">{{ organization.displayName }}</strong>
             <p class="m-0 text-sm text-[var(--muted)]">/o/{{ organization.orgName }} · {{ organization.role }}</p>
+            </div>
           </div>
           <span class="px-2 py-1 rounded-full bg-[var(--surface-muted)] text-xs font-bold text-[var(--muted)]">{{ organization.role }}</span>
         </div>
 
         <div v-if="edits[organization.id]" class="grid gap-3">
-          <PInputText v-model="edits[organization.id].displayName" :placeholder="t('organizations.displayName')" />
-          <PTextarea v-model="edits[organization.id].bio" auto-resize rows="3" :placeholder="t('organizations.bio')" />
+          <div class="grid gap-3 sm:grid-cols-2">
+            <PInputText v-model="edits[organization.id].orgName" :disabled="organization.role !== 'OWNER'" :placeholder="t('organizations.orgName')" />
+            <PInputText v-model="edits[organization.id].displayName" :disabled="organization.role !== 'OWNER'" :placeholder="t('organizations.displayName')" />
+          </div>
+          <PTextarea v-model="edits[organization.id].bio" :disabled="organization.role !== 'OWNER'" auto-resize rows="3" :placeholder="t('organizations.bio')" />
 
           <section class="grid gap-2">
             <div class="flex items-center justify-between gap-2">
               <strong class="text-sm">{{ t("profile.socialLinks") }}</strong>
-              <PButton icon="pi pi-plus" rounded variant="text" severity="secondary" :disabled="edits[organization.id].socialLinks.length >= 10" @click="addSocialLink(organization.id)" />
+              <PButton icon="pi pi-plus" rounded variant="text" severity="secondary" :disabled="organization.role !== 'OWNER' || edits[organization.id].socialLinks.length >= 10" @click="addSocialLink(organization.id)" />
             </div>
             <article v-for="(link, index) in edits[organization.id].socialLinks" :key="index" class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-2">
-              <PInputText v-model="link.label" :placeholder="t('profile.socialLinkLabel')" />
-              <PInputText v-model="link.url" :placeholder="t('profile.socialLinkUrl')" />
-              <PButton icon="pi pi-trash" rounded variant="text" severity="secondary" @click="removeSocialLink(organization.id, index)" />
+              <PInputText v-model="link.label" :disabled="organization.role !== 'OWNER'" :placeholder="t('profile.socialLinkLabel')" />
+              <PInputText v-model="link.url" :disabled="organization.role !== 'OWNER'" :placeholder="t('profile.socialLinkUrl')" />
+              <PButton icon="pi pi-trash" rounded variant="text" severity="secondary" :disabled="organization.role !== 'OWNER'" @click="removeSocialLink(organization.id, index)" />
             </article>
           </section>
 
@@ -194,6 +280,47 @@ async function respond(invitationId: string, accept: boolean) {
           <PInputText v-model="inviteByOrg[organization.id]" class="flex-1" :placeholder="t('organizations.inviteUsername')" />
           <PButton icon="pi pi-send" :label="t('organizations.invite')" @click="invite(organization.id)" />
         </div>
+
+        <section class="grid gap-2">
+          <div class="flex items-center justify-between gap-2">
+            <strong class="text-sm">{{ t("organizations.members") }}</strong>
+            <PButton icon="pi pi-refresh" rounded variant="text" severity="secondary" @click="loadMembers(organization.id)" />
+          </div>
+          <article
+            v-for="member in membersByOrg[organization.id] || []"
+            :key="member.userId"
+            class="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl bg-[var(--surface-muted)] p-3"
+          >
+            <span class="w-10 h-10 rounded-xl bg-[var(--surface)] flex items-center justify-center overflow-hidden font-bold">
+              <img v-if="member.avatarUrl" :src="member.avatarUrl" alt="" class="w-full h-full object-cover" />
+              <span v-else>{{ member.username.slice(0, 1).toUpperCase() }}</span>
+            </span>
+            <span class="min-w-0">
+              <strong class="block truncate">{{ member.firstName || member.lastName ? [member.firstName, member.lastName].filter(Boolean).join(" ") : member.username }}</strong>
+              <small class="block truncate text-[var(--muted)]">@{{ member.username }} · {{ member.role }}</small>
+            </span>
+            <span class="flex items-center gap-1">
+              <PButton
+                v-if="organization.role === 'OWNER'"
+                :label="member.role === 'OWNER' ? 'Contributor' : 'Owner'"
+                size="small"
+                variant="text"
+                severity="secondary"
+                :loading="busyMemberKey === `${organization.id}:${member.userId}:role`"
+                @click="setMemberRole(organization.id, member.userId, member.role === 'OWNER' ? 'CONTRIBUTOR' : 'OWNER')"
+              />
+              <PButton
+                v-if="organization.role === 'OWNER'"
+                icon="pi pi-trash"
+                rounded
+                variant="text"
+                severity="secondary"
+                :loading="busyMemberKey === `${organization.id}:${member.userId}:remove`"
+                @click="removeMember(organization.id, member.userId)"
+              />
+            </span>
+          </article>
+        </section>
       </article>
     </div>
 

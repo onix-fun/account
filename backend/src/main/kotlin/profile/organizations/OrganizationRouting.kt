@@ -52,6 +52,11 @@ fun Route.organizationRouting(controller: OrganizationController) {
             response { code(HttpStatusCode.OK) { body<profile.domain.OrganizationDto> { } } }
         }) { controller.update(call) }
 
+        post("/{orgId}/avatar", {
+            tags = setOf("Organizations")
+            response { code(HttpStatusCode.OK) { body<profile.domain.OrganizationDto> { } } }
+        }) { controller.uploadAvatar(call) }
+
         get("/{orgId}/members", {
             tags = setOf("Organizations")
             response { code(HttpStatusCode.OK) { body<List<profile.domain.OrganizationMemberDto>> { } } }
