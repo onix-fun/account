@@ -14,6 +14,13 @@ import profile.infrastructure.db.SessionRepository
 import profile.infrastructure.jwt.RsaKeyLoader
 import java.time.Instant
 
+data class GrpcPrincipal(
+    val userId: String,
+    val sessionId: String,
+    val activeOwnerType: String,
+    val activeOwnerId: String
+)
+
 object GrpcAuthContext {
     val ACCESS_TOKEN: Context.Key<String> = Context.key("account-access-token")
 }
@@ -51,6 +58,10 @@ class GrpcPrincipalResolver(
         .build()
 
     fun requireUserId(): String {
+        return requirePrincipal().userId
+    }
+
+    fun requirePrincipal(): GrpcPrincipal {
         val token = GrpcAuthContext.ACCESS_TOKEN.get()
             ?: throw Status.UNAUTHENTICATED.withDescription("access token is required").asRuntimeException()
         val payload = runCatching { verifier.verify(token) }.getOrElse {
@@ -62,6 +73,11 @@ class GrpcPrincipalResolver(
         if (session == null || session.revokedAt != null || session.expiresAt.isBefore(Instant.now())) {
             throw Status.UNAUTHENTICATED.withDescription("session is not active").asRuntimeException()
         }
-        return payload.subject
+        return GrpcPrincipal(
+            userId = payload.subject,
+            sessionId = sessionId,
+            activeOwnerType = session.activeOwnerType,
+            activeOwnerId = session.activeOwnerId
+        )
     }
 }

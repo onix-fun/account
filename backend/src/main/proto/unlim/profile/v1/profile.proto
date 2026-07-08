@@ -7,16 +7,27 @@ option java_multiple_files = true;
 
 service ProfileService {
   rpc GetCurrentUser(CurrentUserRequest) returns (AccountUser);
+  rpc GetCurrentActor(CurrentUserRequest) returns (CurrentActor);
   rpc GetUserById(GetUserByIdRequest) returns (AccountUser);
   rpc GetProfileByUsername(GetProfileByUsernameRequest) returns (AccountProfile);
+  rpc GetOrganizationByName(GetOrganizationByNameRequest) returns (OwnerProfile);
+  rpc GetOwnerByRef(GetOwnerByRefRequest) returns (OwnerProfile);
+  rpc SearchOwners(SearchUsersRequest) returns (OwnerListResponse);
+  rpc AuthorizeOwnerAction(AuthorizeOwnerActionRequest) returns (AuthorizeOwnerActionResponse);
   rpc SearchUsers(SearchUsersRequest) returns (UserListResponse);
   rpc GetRelationship(RelRequest) returns (RelResponse);
   rpc Follow(FollowRequest) returns (RelResponse);
+  rpc FollowOwner(OwnerFollowRequest) returns (RelResponse);
   rpc Unfollow(FollowRequest) returns (Empty);
+  rpc UnfollowOwner(OwnerFollowRequest) returns (Empty);
   rpc ListFollowers(UserPageRequest) returns (UserPageResponse);
+  rpc ListOwnerFollowers(OwnerPageRequest) returns (OwnerPageResponse);
   rpc ListFollowing(UserPageRequest) returns (UserPageResponse);
+  rpc ListOwnerFollowing(OwnerPageRequest) returns (OwnerPageResponse);
   rpc GetVisibility(VisibilityRequest) returns (VisibilityResponse);
+  rpc GetOwnerVisibility(OwnerVisibilityRequest) returns (VisibilityResponse);
   rpc GetSocialGraph(UserIdRequest) returns (SocialGraphResponse);
+  rpc GetOwnerSocialGraph(OwnerRef) returns (SocialGraphResponse);
   rpc IsBlocked(BlockRequest) returns (BlockResponse);
   rpc GetFollowingIds(FollowingRequest) returns (FollowingResponse);
   rpc CreateNotification(CreateNotifRequest) returns (CreateNotifResponse);
@@ -60,6 +71,30 @@ message BirthdayParts {
   int32 month = 2;
 }
 
+enum OwnerType {
+  OWNER_TYPE_UNSPECIFIED = 0;
+  USER = 1;
+  ORGANIZATION = 2;
+}
+
+message OwnerRef {
+  OwnerType owner_type = 1;
+  string owner_id = 2;
+}
+
+message OwnerIdentity {
+  OwnerRef ref = 1;
+  string username = 2;
+  string display_name = 3;
+  string avatar_url = 4;
+  string role = 5;
+}
+
+message CurrentActor {
+  AccountUser user = 1;
+  OwnerIdentity active_owner = 2;
+}
+
 message AccountUser {
   string id = 1;
   string username = 2;
@@ -79,6 +114,45 @@ message AccountProfile {
   RelResponse relationship = 5;
 }
 
+message OwnerProfile {
+  OwnerIdentity owner = 1;
+  string bio = 2;
+  int64 followers_count = 3;
+  int64 following_count = 4;
+  bool is_private = 5;
+  RelResponse relationship = 6;
+  repeated SocialLink social_links = 7;
+}
+
+message GetOrganizationByNameRequest {
+  string org_name = 1;
+}
+
+message GetOwnerByRefRequest {
+  OwnerRef owner = 1;
+}
+
+message OwnerListResponse {
+  repeated OwnerProfile owners = 1;
+}
+
+enum OwnerAction {
+  OWNER_ACTION_UNSPECIFIED = 0;
+  CREATE_CONTENT = 1;
+  MANAGE_ORGANIZATION = 2;
+  MANAGE_MEMBERS = 3;
+  ACT_AS_OWNER = 4;
+}
+
+message AuthorizeOwnerActionRequest {
+  OwnerRef owner = 1;
+  OwnerAction action = 2;
+}
+
+message AuthorizeOwnerActionResponse {
+  bool allowed = 1;
+}
+
 message UserListResponse {
   repeated AccountUser users = 1;
 }
@@ -89,13 +163,29 @@ message UserPageRequest {
   int32 limit = 3;
 }
 
+message OwnerPageRequest {
+  OwnerRef owner = 1;
+  int32 page = 2;
+  int32 limit = 3;
+}
+
 message RelatedUser {
   AccountUser user = 1;
   RelResponse relationship = 2;
 }
 
+message RelatedOwner {
+  OwnerProfile owner = 1;
+  RelResponse relationship = 2;
+}
+
 message UserPageResponse {
   repeated RelatedUser items = 1;
+  int32 total_count = 2;
+}
+
+message OwnerPageResponse {
+  repeated RelatedOwner items = 1;
   int32 total_count = 2;
 }
 
@@ -116,9 +206,18 @@ message FollowRequest {
   string target_id = 1;
 }
 
+message OwnerFollowRequest {
+  OwnerRef target = 1;
+}
+
 message VisibilityRequest {
   string owner_id = 1;
   string viewer_id = 2;
+}
+
+message OwnerVisibilityRequest {
+  OwnerRef owner = 1;
+  OwnerRef viewer = 2;
 }
 
 message VisibilityResponse {

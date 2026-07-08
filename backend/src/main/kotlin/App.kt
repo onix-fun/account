@@ -45,6 +45,7 @@ import profile.infrastructure.events.SmtpEmailSender
 import profile.infrastructure.jwt.JwksProvider
 import profile.search.*
 import profile.sessions.*
+import profile.organizations.*
 import profile.socialModule
 import profile.api.grpc.SocialGrpcService
 import profile.api.rest.*
@@ -370,6 +371,7 @@ fun Application.module() {
             tag("Search") { description = "User search and lookup" }
             tag("Social") { description = "Social features (follow, block, friends)" }
             tag("Notifications") { description = "In-app notifications" }
+            tag("Organizations") { description = "Organization profiles, members, and acting context" }
             tag("System") { description = "System health" }
         }
         swagger {
@@ -383,6 +385,7 @@ fun Application.module() {
     val userController by inject<UserController>()
     val searchController by inject<SearchController>()
     val sessionController by inject<SessionController>()
+    val organizationController by inject<OrganizationController>()
     val dataSource by inject<DataSource>()
     val readinessRedis by inject<RedisManager>()
     val readinessS3 by inject<S3Client>()
@@ -493,6 +496,7 @@ fun Application.module() {
             sessionRouting(sessionController)
 
             authenticate {
+                organizationRouting(organizationController)
                 searchRoutes(searchService, socialUseCases)
                 profileRoutes(userService, socialRepo, privacyRepo, socialUseCases, notificationRepo, birthdayNotificationService)
                 socialRoutes(userService, socialUseCases, notificationUseCases, sseManager)

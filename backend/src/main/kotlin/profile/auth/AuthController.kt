@@ -12,6 +12,7 @@ import profile.infrastructure.events.EmailLocale
 import profile.infrastructure.security.TrustedProxy
 import profile.shared.ApiErrorCode
 import profile.shared.apiError
+import profile.organizations.SwitchOwnerRequest
 import profile.users.toProfileDto
 import java.security.SecureRandom
 import java.util.Base64
@@ -136,6 +137,16 @@ class AuthController(
         val result = refreshBrowserAccount(refreshToken, userId)
         appendBrowserRefresh(call, result)
         call.respond(HttpStatusCode.OK, BrowserAuthResponse(result.user.toProfileDto()))
+    }
+
+    suspend fun switchActiveOwner(call: ApplicationCall) {
+        val principal = call.principal<JWTPrincipal>()!!
+        val request = call.receive<SwitchOwnerRequest>()
+        val sessionId = principal.payload.getClaim("sid").asString()
+            ?: apiError(ApiErrorCode.AUTH_SESSION_NOT_FOUND)
+        val result = authService.switchActiveOwner(principal.payload.subject, sessionId, request.ownerType, request.ownerId)
+        call.response.cookies.append(accessCookie(result.accessToken))
+        call.respond(HttpStatusCode.OK, BrowserAuthResponse(result.user.toProfileDto(), result.activeOwner))
     }
 
     suspend fun createQrChallenge(call: ApplicationCall) {

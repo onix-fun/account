@@ -16,6 +16,7 @@ import profile.infrastructure.db.AccountLoginFailureRepository
 import profile.infrastructure.db.AuditRepository
 import profile.infrastructure.db.PendingRegistrationStore
 import profile.infrastructure.db.RateLimitRepository
+import profile.infrastructure.db.OrganizationRepository
 import profile.infrastructure.events.EmailEventConsumer
 import profile.infrastructure.events.EventPublisher
 import profile.infrastructure.events.SmtpEmailSender
@@ -26,6 +27,8 @@ import profile.search.SearchController
 import profile.search.SearchService
 import profile.sessions.SessionController
 import profile.sessions.SessionService
+import profile.organizations.OrganizationController
+import profile.organizations.OrganizationService
 import profile.users.UserController
 import profile.users.UserService
 
@@ -160,10 +163,12 @@ fun koinModule(config: ApplicationConfig) = module {
     single { AccountLoginFailureRepository(get()) }
     single { RateLimitRepository(get()) }
     single { AuditRepository(get()) }
+    single { OrganizationRepository(get()) }
     single { SearchService(get<UserRepository>(), get<RedisManager>()) }
 
     // 3. Services
-    single { AuthService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { OrganizationService(get(), get()) }
+    single { AuthService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { QrLoginService(get(), get(), get(), get()) }
     single { UserService(get(), get(), get(), get()) }
     single { SessionService(get(), get()) }
@@ -173,4 +178,5 @@ fun koinModule(config: ApplicationConfig) = module {
     single { UserController(get(), get()) }
     single { SearchController(get()) }
     single { SessionController(get()) }
+    single { OrganizationController(get()) }
 }

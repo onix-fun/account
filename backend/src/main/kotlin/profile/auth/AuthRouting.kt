@@ -103,7 +103,16 @@ fun Route.authRouting(authController: AuthController, sessionController: Session
             summary = "Switch browser account"
             request { body<SwitchAccountRequest> { description = "Account to activate" } }
             response { code(HttpStatusCode.OK) { description = "Account activated"; body<BrowserAuthResponse> { } } }
-        }) { authController.switchAccount(call) }
+            }) { authController.switchAccount(call) }
+
+            authenticate {
+                post("/owner/switch", {
+                    tags = setOf("Auth")
+                    securitySchemeNames("BearerToken")
+                    summary = "Switch active owner"
+                    response { code(HttpStatusCode.OK) { description = "Active owner switched"; body<BrowserAuthResponse> { } } }
+                }) { authController.switchActiveOwner(call) }
+            }
 
         post("/refresh", {
             tags = setOf("Auth")

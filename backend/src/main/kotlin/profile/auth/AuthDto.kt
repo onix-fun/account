@@ -1,6 +1,7 @@
 package profile.auth
 
 import kotlinx.serialization.Serializable
+import profile.domain.OwnerIdentityDto
 import profile.infrastructure.db.User
 import profile.users.UserProfileDto
 
@@ -24,7 +25,8 @@ data class LoginRequest(
 
 @Serializable
 data class BrowserAuthResponse(
-    val user: UserProfileDto
+    val user: UserProfileDto,
+    val activeOwner: OwnerIdentityDto? = null
 )
 
 @Serializable

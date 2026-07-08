@@ -6,7 +6,9 @@ import com.fasterxml.uuid.Generators
 
 data class Subscription(
     val id: UUID = Generators.timeBasedEpochGenerator().generate(),
+    val subscriberType: OwnerType = OwnerType.USER,
     val subscriberId: UUID,
+    val subscribedToType: OwnerType = OwnerType.USER,
     val subscribedToId: UUID,
     val status: SubscriptionStatus = SubscriptionStatus.PENDING,
     val isCloseFriend: Boolean = false,

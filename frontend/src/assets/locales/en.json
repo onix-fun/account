@@ -13,7 +13,9 @@
     "verified": "Verified",
     "notVerified": "Not verified",
     "success": "Success",
-    "error": "Error"
+    "error": "Error",
+    "accept": "Accept",
+    "decline": "Decline"
   },
   "auth": {
     "steps": {
@@ -84,6 +86,7 @@
   },
   "profile": {
     "profile": "Profile",
+    "organizations": "Organizations",
     "requests": "Requests",
     "close": "Close friends",
     "blocked": "Blocked",
@@ -136,6 +139,7 @@
     "menu": {
       "search": "Find people and manage relationships.",
       "profile": "Name, username, avatar, and profile bio.",
+      "organizations": "Organizations, roles, and invitations.",
       "requests": "Incoming follow requests.",
       "close": "Close friends and adding from following.",
       "blocked": "People you have blocked.",
@@ -291,6 +295,34 @@
     "deleteConfirmationError": "Delete confirmation does not match.",
     "deleteAccountAction": "Delete account",
     "accountDeleted": "Account deleted."
+  },
+  "organizations": {
+    "users": "Users",
+    "organizations": "Organizations",
+    "userMode": "User",
+    "organizationMode": "Organization",
+    "choose": "Choose organization",
+    "actAsSelf": "Act as user",
+    "create": "Create organization",
+    "orgName": "Organization name",
+    "displayName": "Display name",
+    "bio": "Description",
+    "created": "Organization created.",
+    "updated": "Organization updated.",
+    "management": "Organization management",
+    "managementHint": "Manage profile, members, and invitations for the selected organization.",
+    "mine": "My organizations",
+    "empty": "No organizations yet.",
+    "emptyTitle": "No organizations yet",
+    "emptyHint": "Create an organization to publish and work as a shared account.",
+    "invitations": "Invitations",
+    "invite": "Invite",
+    "inviteUsername": "Username",
+    "invited": "Invitation sent.",
+    "accepted": "Invitation accepted.",
+    "declined": "Invitation declined.",
+    "active": "Active",
+    "actAs": "Select"
   },
   "errors": {
     "VALIDATION_INVALID_REQUEST": "Check the entered data.",

@@ -1,10 +1,11 @@
 import { profileClient } from "@/api/client";
 import { DeviceIdManager } from "@/shared/lib/deviceId";
-import type { AuthSession, User } from "@/domain";
+import type { AuthSession, Organization, OrganizationContext, OrganizationInvitation, OwnerIdentity, OwnerType, User } from "@/domain";
 import { i18n } from "@/shared/i18n";
 
 interface BrowserAuthResponse {
   user: UserResponse;
+  activeOwner?: OwnerIdentity | null;
 }
 
 interface UserResponse {
@@ -142,6 +143,42 @@ export class AuthService {
     const user = rememberUser(normalizeUser(response.data.user));
     await this.loadAccounts();
     return user;
+  }
+
+  static async organizationContext(): Promise<OrganizationContext> {
+    const response = await profileClient.get<OrganizationContext>("/organizations/context");
+    return response.data;
+  }
+
+  static async createOrganization(payload: { orgName: string; displayName: string; bio?: string; socialLinks?: Array<{ label: string; url: string }> }): Promise<Organization> {
+    const response = await profileClient.post<Organization>("/organizations", payload);
+    return response.data;
+  }
+
+  static async updateOrganization(orgId: string, payload: { displayName?: string; bio?: string | null; socialLinks?: Array<{ label: string; url: string }> }): Promise<Organization> {
+    const response = await profileClient.patch<Organization>(`/organizations/${orgId}`, payload);
+    return response.data;
+  }
+
+  static async inviteOrganizationMember(orgId: string, payload: { username?: string; userId?: string; role?: "OWNER" | "CONTRIBUTOR" }): Promise<OrganizationInvitation> {
+    const response = await profileClient.post<OrganizationInvitation>(`/organizations/${orgId}/invitations`, payload);
+    return response.data;
+  }
+
+  static async acceptOrganizationInvitation(invitationId: string): Promise<OrganizationInvitation> {
+    const response = await profileClient.post<OrganizationInvitation>(`/organizations/invitations/${invitationId}/accept`);
+    return response.data;
+  }
+
+  static async declineOrganizationInvitation(invitationId: string): Promise<OrganizationInvitation> {
+    const response = await profileClient.post<OrganizationInvitation>(`/organizations/invitations/${invitationId}/decline`);
+    return response.data;
+  }
+
+  static async switchOwner(ownerType: OwnerType, ownerId: string): Promise<OwnerIdentity | null> {
+    const response = await profileClient.post<BrowserAuthResponse>("/auth/owner/switch", { ownerType, ownerId });
+    if (response.data.user) rememberUser(normalizeUser(response.data.user));
+    return response.data.activeOwner || null;
   }
 
   static async login(payload: LoginPayload): Promise<User> {

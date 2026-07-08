@@ -14,6 +14,44 @@ export interface User {
   role?: string;
 }
 
+export type OwnerType = "USER" | "ORGANIZATION";
+
+export interface OwnerIdentity {
+  ownerType: OwnerType;
+  ownerId: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  role?: "OWNER" | "CONTRIBUTOR" | null;
+}
+
+export interface Organization {
+  id: string;
+  orgName: string;
+  displayName: string;
+  bio?: string | null;
+  socialLinks?: SocialLink[];
+  avatarUrl?: string | null;
+  status: string;
+  role?: "OWNER" | "CONTRIBUTOR" | null;
+}
+
+export interface OrganizationInvitation {
+  id: string;
+  organization: Organization;
+  invitedUserId: string;
+  invitedByUserId: string;
+  role: "OWNER" | "CONTRIBUTOR";
+  status: "PENDING" | "ACCEPTED" | "DECLINED" | "EXPIRED";
+  createdAt: string;
+}
+
+export interface OrganizationContext {
+  activeOwner: OwnerIdentity;
+  organizations: Organization[];
+  pendingInvitations: OrganizationInvitation[];
+}
+
 export interface BirthdayParts {
   day: number;
   month: number;

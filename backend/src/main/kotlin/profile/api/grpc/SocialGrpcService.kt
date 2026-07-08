@@ -5,6 +5,7 @@ import io.grpc.Status
 import io.grpc.stub.StreamObserver
 import profile.domain.NotificationServiceCatalog
 import profile.domain.NotificationTypeCatalog
+import profile.domain.OwnerRef as DomainOwnerRef
 import profile.domain.ProfileVisibility
 import profile.domain.PublishActivityStatus
 import profile.domain.SocialLink as DomainSocialLink
@@ -12,6 +13,8 @@ import profile.domain.UserActivityType as DomainUserActivityType
 import profile.infrastructure.PrivacyRepo
 import profile.infrastructure.SseManager
 import profile.infrastructure.db.User
+import profile.organizations.OrganizationService
+import profile.organizations.OwnerAction as DomainOwnerAction
 import profile.search.SearchService
 import profile.usecases.*
 import profile.users.UserService
@@ -28,6 +31,7 @@ class SocialGrpcService(
     private val notificationUseCases: NotificationUseCases,
     private val sseManager: SseManager,
     private val auth: GrpcPrincipalResolver?,
+    private val organizationService: OrganizationService?,
     private val requireUserToken: Boolean = true,
 ) : ProfileServiceGrpc.ProfileServiceImplBase() {
 
@@ -36,13 +40,25 @@ class SocialGrpcService(
         blockRepo: BlockRepository,
         socialRepo: SocialRepository,
         notificationUseCases: NotificationUseCases
-    ) : this(null, null, socialUseCases, blockRepo, socialRepo, null, notificationUseCases, SseManager(), null, false)
+    ) : this(null, null, socialUseCases, blockRepo, socialRepo, null, notificationUseCases, SseManager(), null, null, false)
 
     override fun getCurrentUser(request: CurrentUserRequest, responseObserver: StreamObserver<AccountUser>) =
         unary(responseObserver) {
             val userId = requireUserId()
             val user = userService().getProfile(userId) ?: throw Status.NOT_FOUND.asRuntimeException()
             user.toGrpcUser()
+        }
+
+    override fun getCurrentActor(request: CurrentUserRequest, responseObserver: StreamObserver<CurrentActor>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val user = userService().getProfile(principal.userId) ?: throw Status.NOT_FOUND.asRuntimeException()
+            val owner = organizationService().findOwner(principal.activeOwnerRef())
+                ?: throw Status.NOT_FOUND.withDescription("active owner not found").asRuntimeException()
+            CurrentActor.newBuilder()
+                .setUser(user.toGrpcUser())
+                .setActiveOwner(owner.toGrpc())
+                .build()
         }
 
     override fun getUserById(request: GetUserByIdRequest, responseObserver: StreamObserver<AccountUser>) =
@@ -70,6 +86,48 @@ class SocialGrpcService(
                 .setFollowingCount(socialRepo.countFollowing(ownerId).toLong())
                 .setIsPrivate(privacy.isPrivate)
                 .setRelationship(relationship.toGrpc())
+                .build()
+        }
+
+    override fun getOrganizationByName(request: GetOrganizationByNameRequest, responseObserver: StreamObserver<OwnerProfile>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val org = organizationService().findByName(request.orgName)
+                ?: throw Status.NOT_FOUND.withDescription("organization not found").asRuntimeException()
+            ownerProfile(
+                owner = DomainOwnerRef(profile.domain.OwnerType.ORGANIZATION, UUID.fromString(org.id)),
+                viewer = principal.activeOwnerRef()
+            )
+        }
+
+    override fun getOwnerByRef(request: GetOwnerByRefRequest, responseObserver: StreamObserver<OwnerProfile>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            ownerProfile(request.owner.toDomain(), principal.activeOwnerRef())
+        }
+
+    override fun searchOwners(request: SearchUsersRequest, responseObserver: StreamObserver<OwnerListResponse>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val users = searchService().searchByUsernamePrefix(request.query, request.limit.coerceIn(1, 25))
+                .map { ownerProfile(DomainOwnerRef(profile.domain.OwnerType.USER, UUID.fromString(it.id)), principal.activeOwnerRef()) }
+            val orgs = organizationService().search(request.query, request.limit.coerceIn(1, 25))
+                .map { ownerProfile(DomainOwnerRef(profile.domain.OwnerType.ORGANIZATION, UUID.fromString(it.id)), principal.activeOwnerRef()) }
+            OwnerListResponse.newBuilder().addAllOwners(users + orgs).build()
+        }
+
+    override fun authorizeOwnerAction(request: AuthorizeOwnerActionRequest, responseObserver: StreamObserver<AuthorizeOwnerActionResponse>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val action = when (request.action) {
+                OwnerAction.CREATE_CONTENT -> DomainOwnerAction.CREATE_CONTENT
+                OwnerAction.MANAGE_ORGANIZATION -> DomainOwnerAction.MANAGE_ORGANIZATION
+                OwnerAction.MANAGE_MEMBERS -> DomainOwnerAction.MANAGE_MEMBERS
+                OwnerAction.ACT_AS_OWNER -> DomainOwnerAction.ACT_AS_OWNER
+                else -> throw Status.INVALID_ARGUMENT.withDescription("owner action is required").asRuntimeException()
+            }
+            AuthorizeOwnerActionResponse.newBuilder()
+                .setAllowed(organizationService().authorize(principal.userId, request.owner.toDomain(), action))
                 .build()
         }
 
@@ -110,10 +168,26 @@ class SocialGrpcService(
             socialUseCases.getRelationship(userId, targetId).toGrpc()
         }
 
+    override fun followOwner(request: OwnerFollowRequest, responseObserver: StreamObserver<RelResponse>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val subscriber = principal.activeOwnerRef()
+            val target = request.target.toDomain()
+            socialUseCases.subscribe(subscriber, target)
+            socialUseCases.getRelationship(subscriber, target).toGrpc()
+        }
+
     override fun unfollow(request: FollowRequest, responseObserver: StreamObserver<Empty>) =
         unary(responseObserver) {
             val userId = UUID.fromString(requireUserId())
             socialUseCases.removeSubscription(userId, UUID.fromString(request.targetId))
+            Empty.getDefaultInstance()
+        }
+
+    override fun unfollowOwner(request: OwnerFollowRequest, responseObserver: StreamObserver<Empty>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            socialUseCases.removeSubscription(principal.activeOwnerRef(), request.target.toDomain())
             Empty.getDefaultInstance()
         }
 
@@ -130,6 +204,22 @@ class SocialGrpcService(
                 .build()
         }
 
+    override fun listOwnerFollowers(request: OwnerPageRequest, responseObserver: StreamObserver<OwnerPageResponse>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val target = request.owner.toDomain()
+            val (items, total) = socialUseCases.getFollowers(target, request.page.coerceAtLeast(1), request.limit.coerceIn(1, 100))
+            OwnerPageResponse.newBuilder()
+                .setTotalCount(total)
+                .addAllItems(items.map { sub ->
+                    RelatedOwner.newBuilder()
+                        .setOwner(ownerProfile(DomainOwnerRef(sub.subscriberType, sub.subscriberId), principal.activeOwnerRef()))
+                        .setRelationship(socialUseCases.getRelationship(principal.activeOwnerRef(), DomainOwnerRef(sub.subscriberType, sub.subscriberId)).toGrpc())
+                        .build()
+                })
+                .build()
+        }
+
     override fun listFollowing(request: UserPageRequest, responseObserver: StreamObserver<UserPageResponse>) =
         unary(responseObserver) {
             val viewerId = UUID.fromString(requireUserId())
@@ -139,6 +229,22 @@ class SocialGrpcService(
                 .setTotalCount(total)
                 .addAllItems(items.mapNotNull { sub ->
                     userService().getProfile(sub.subscribedToId.toString())?.toRelatedGrpc(socialUseCases.getRelationship(viewerId, sub.subscribedToId))
+                })
+                .build()
+        }
+
+    override fun listOwnerFollowing(request: OwnerPageRequest, responseObserver: StreamObserver<OwnerPageResponse>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val target = request.owner.toDomain()
+            val (items, total) = socialUseCases.getFollowing(target, request.page.coerceAtLeast(1), request.limit.coerceIn(1, 100))
+            OwnerPageResponse.newBuilder()
+                .setTotalCount(total)
+                .addAllItems(items.map { sub ->
+                    RelatedOwner.newBuilder()
+                        .setOwner(ownerProfile(DomainOwnerRef(sub.subscribedToType, sub.subscribedToId), principal.activeOwnerRef()))
+                        .setRelationship(socialUseCases.getRelationship(principal.activeOwnerRef(), DomainOwnerRef(sub.subscribedToType, sub.subscribedToId)).toGrpc())
+                        .build()
                 })
                 .build()
         }
@@ -162,6 +268,30 @@ class SocialGrpcService(
                 .build()
         }
 
+    override fun getOwnerVisibility(request: OwnerVisibilityRequest, responseObserver: StreamObserver<VisibilityResponse>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val viewer = request.viewer.takeIf { it.ownerId.isNotBlank() }?.toDomain() ?: principal.activeOwnerRef()
+            if (viewer != principal.activeOwnerRef()) {
+                throw Status.PERMISSION_DENIED.withDescription("viewer must match active owner").asRuntimeException()
+            }
+            val owner = request.owner.toDomain()
+            val relationship = socialUseCases.getRelationship(viewer, owner)
+            val isPrivate = if (owner.type == profile.domain.OwnerType.USER) {
+                socialUseCases.getPrivacySettings(owner.id).isPrivate
+            } else {
+                false
+            }
+            VisibilityResponse.newBuilder()
+                .setOwnerId(owner.id.toString())
+                .setViewerId(viewer.id.toString())
+                .setIsPrivate(isPrivate)
+                .setRelationship(relationship.toGrpc())
+                .setIsBlocked(relationship.isBlocked)
+                .setIsCloseFriend(false)
+                .build()
+        }
+
     override fun getSocialGraph(request: UserIdRequest, responseObserver: StreamObserver<SocialGraphResponse>) =
         unary(responseObserver) {
             val tokenUserId = UUID.fromString(requireUserId())
@@ -175,6 +305,23 @@ class SocialGrpcService(
                 .addAllFollowingIds(followingIds)
                 .addAllFriendIds(followingIds.filter { it in followerIds })
                 .addAllBlockedIds(socialUseCases.getBlockedUsers(viewerId).map { it.blockedId.toString() })
+                .build()
+        }
+
+    override fun getOwnerSocialGraph(request: OwnerRef, responseObserver: StreamObserver<SocialGraphResponse>) =
+        unary(responseObserver) {
+            val principal = requirePrincipal()
+            val owner = request.toDomain()
+            if (owner != principal.activeOwnerRef()) {
+                throw Status.PERMISSION_DENIED.withDescription("owner must match active owner").asRuntimeException()
+            }
+            val (following, _) = socialUseCases.getFollowing(owner, page = 1, limit = 1000)
+            val (followers, _) = socialUseCases.getFollowers(owner, page = 1, limit = 1000)
+            val followingKeys = following.map { "${it.subscribedToType}:${it.subscribedToId}" }
+            val followerKeys = followers.map { "${it.subscriberType}:${it.subscriberId}" }.toSet()
+            SocialGraphResponse.newBuilder()
+                .addAllFollowingIds(followingKeys)
+                .addAllFriendIds(followingKeys.filter { it in followerKeys })
                 .build()
         }
 
@@ -319,6 +466,15 @@ class SocialGrpcService(
             ?: throw Status.UNAUTHENTICATED.withDescription("access token is required").asRuntimeException()
     }
 
+    private fun requirePrincipal(fallbackWhenAuthDisabled: String? = null): GrpcPrincipal {
+        if (!requireUserToken) {
+            val id = fallbackWhenAuthDisabled ?: UUID.randomUUID().toString()
+            return GrpcPrincipal(id, "", profile.domain.OwnerType.USER.name, id)
+        }
+        return auth?.requirePrincipal()
+            ?: throw Status.UNAUTHENTICATED.withDescription("access token is required").asRuntimeException()
+    }
+
     private fun userService(): UserService = userService
         ?: throw Status.FAILED_PRECONDITION.withDescription("user service is not configured").asRuntimeException()
 
@@ -327,6 +483,9 @@ class SocialGrpcService(
 
     private fun privacyRepo(): PrivacyRepo = privacyRepo
         ?: throw Status.FAILED_PRECONDITION.withDescription("privacy repository is not configured").asRuntimeException()
+
+    private fun organizationService(): OrganizationService = organizationService
+        ?: throw Status.FAILED_PRECONDITION.withDescription("organization service is not configured").asRuntimeException()
 
     private fun User.toRelatedGrpc(relationship: profile.domain.Relationship): RelatedUser =
         RelatedUser.newBuilder().setUser(toGrpcUser()).setRelationship(relationship.toGrpc()).build()
@@ -343,6 +502,65 @@ class SocialGrpcService(
         birthDate?.toBirthdayParts()?.let { builder.setBirthday(BirthdayParts.newBuilder().setDay(it.day).setMonth(it.month).build()) }
         return builder.build()
     }
+
+    private fun ownerProfile(owner: DomainOwnerRef, viewer: DomainOwnerRef?): OwnerProfile {
+        val identity = organizationService().findOwner(owner)
+            ?: throw Status.NOT_FOUND.withDescription("owner not found").asRuntimeException()
+        val relationship = socialUseCases.getRelationship(viewer, owner)
+        val isPrivate = if (owner.type == profile.domain.OwnerType.USER) {
+            socialUseCases.getPrivacySettings(owner.id).isPrivate
+        } else {
+            false
+        }
+        val user = if (owner.type == profile.domain.OwnerType.USER) userService().getProfile(owner.id.toString()) else null
+        val organization = if (owner.type == profile.domain.OwnerType.ORGANIZATION) organizationService().findByName(identity.username) else null
+        val bio = when (owner.type) {
+            profile.domain.OwnerType.USER -> user?.bio
+            profile.domain.OwnerType.ORGANIZATION -> organization?.bio
+        }.orEmpty()
+        val socialLinks = when (owner.type) {
+            profile.domain.OwnerType.USER -> user?.socialLinks
+            profile.domain.OwnerType.ORGANIZATION -> organization?.socialLinks
+        }.orEmpty()
+        return OwnerProfile.newBuilder()
+            .setOwner(identity.toGrpc())
+            .setBio(bio)
+            .addAllSocialLinks(socialLinks.map { it.toGrpc() })
+            .setFollowersCount(socialRepo.countFollowers(owner))
+            .setFollowingCount(socialRepo.countFollowing(owner))
+            .setIsPrivate(isPrivate)
+            .setRelationship(relationship.toGrpc())
+            .build()
+    }
+
+    private fun profile.domain.OwnerIdentityDto.toGrpc(): OwnerIdentity =
+        OwnerIdentity.newBuilder()
+            .setRef(OwnerRef.newBuilder().setOwnerType(ownerType.toGrpc()).setOwnerId(ownerId).build())
+            .setUsername(username)
+            .setDisplayName(displayName)
+            .setAvatarUrl(avatarUrl.orEmpty())
+            .setRole(role?.name.orEmpty())
+            .build()
+
+    private fun profile.domain.OwnerType.toGrpc(): OwnerType =
+        when (this) {
+            profile.domain.OwnerType.USER -> OwnerType.USER
+            profile.domain.OwnerType.ORGANIZATION -> OwnerType.ORGANIZATION
+        }
+
+    private fun OwnerRef.toDomain(): profile.domain.OwnerRef {
+        val type = when (ownerType) {
+            OwnerType.ORGANIZATION -> profile.domain.OwnerType.ORGANIZATION
+            else -> profile.domain.OwnerType.USER
+        }
+        return profile.domain.OwnerRef(type, UUID.fromString(ownerId))
+    }
+
+    private fun GrpcPrincipal.activeOwnerRef(): DomainOwnerRef =
+        DomainOwnerRef(
+            type = runCatching { profile.domain.OwnerType.valueOf(activeOwnerType) }.getOrDefault(profile.domain.OwnerType.USER),
+            id = UUID.fromString(activeOwnerId)
+        )
 
     private fun DomainSocialLink.toGrpc(): SocialLink =
         SocialLink.newBuilder().setLabel(label).setUrl(url).build()

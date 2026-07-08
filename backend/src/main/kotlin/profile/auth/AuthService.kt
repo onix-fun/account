@@ -24,6 +24,9 @@ import profile.infrastructure.events.SecurityNotificationPayload
 import profile.infrastructure.events.EmailLocale
 import profile.infrastructure.events.SecurityNoticeType
 import profile.infrastructure.jwt.JwtIssuer
+import profile.domain.OwnerRef
+import profile.domain.OwnerType
+import profile.organizations.OrganizationService
 import profile.infrastructure.security.PasswordHasher
 import profile.infrastructure.security.TokenHasher
 import profile.infrastructure.security.EmailNormalizer
@@ -50,7 +53,8 @@ class AuthService(
     private val accountLoginFailureRepository: AccountLoginFailureRepository,
     private val rateLimitRepository: RateLimitRepository,
     private val birthdayNotificationService: BirthdayNotificationService,
-    private val auditRepository: AuditRepository
+    private val auditRepository: AuditRepository,
+    private val organizationService: OrganizationService
 ) {
     private val random = SecureRandom()
 
@@ -255,7 +259,7 @@ class AuthService(
         val sessionId = sessionRepository.create(session)
         runCatching { birthdayNotificationService.generateFor(user.id) }
 
-        val accessToken = jwtIssuer.createToken(user.id, sessionId)
+        val accessToken = jwtIssuer.createToken(user.id, sessionId, session.activeOwnerType, session.activeOwnerId)
 
         return LoginResult(accessToken, refreshToken, sessionId, user)
     }
@@ -280,9 +284,24 @@ class AuthService(
             apiError(ApiErrorCode.AUTH_INVALID_REFRESH_TOKEN)
         }
 
-        val accessToken = jwtIssuer.createToken(user.id, session.id)
+        val accessToken = jwtIssuer.createToken(user.id, session.id, session.activeOwnerType, session.activeOwnerId)
 
         return RefreshResult(accessToken, newRefreshToken, session.id, user)
+    }
+
+    fun switchActiveOwner(userId: String, sessionId: String, ownerType: OwnerType, ownerId: String): ActiveOwnerResult {
+        val user = userRepository.findById(userId) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
+        val ownerUuid = runCatching { java.util.UUID.fromString(ownerId) }.getOrNull()
+            ?: apiError(ApiErrorCode.VALIDATION_INVALID_UUID, "ownerId")
+        val owner = OwnerRef(ownerType, ownerUuid)
+        organizationService.requireSwitchAllowed(userId, owner)
+        if (!sessionRepository.updateActiveOwner(sessionId, userId, ownerType.name, ownerId)) {
+            apiError(ApiErrorCode.AUTH_SESSION_NOT_FOUND)
+        }
+        val accessToken = jwtIssuer.createToken(user.id, sessionId, ownerType.name, ownerId)
+        val identity = organizationService.findOwner(owner) ?: apiError(ApiErrorCode.USER_NOT_FOUND)
+        auditRepository.record(userId, "ACTIVE_OWNER_SWITCHED", "SUCCESS")
+        return ActiveOwnerResult(accessToken, user, identity)
     }
 
     fun accountForRefreshToken(refreshToken: String, allowPreviousToken: Boolean = false): User? {
@@ -448,4 +467,10 @@ data class RefreshResult(
     val refreshToken: String,
     val sessionId: String,
     val user: User
+)
+
+data class ActiveOwnerResult(
+    val accessToken: String,
+    val user: User,
+    val activeOwner: profile.domain.OwnerIdentityDto
 )

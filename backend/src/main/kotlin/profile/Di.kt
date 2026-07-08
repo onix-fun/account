@@ -31,5 +31,5 @@ val socialModule = module {
     single { NotificationOutboxWorker(get(), get(), get(), get(), get()) }
 
     single { GrpcPrincipalResolver(get(), get()) }
-    single { SocialGrpcService(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { SocialGrpcService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 }

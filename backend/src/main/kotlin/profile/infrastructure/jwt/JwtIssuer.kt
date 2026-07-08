@@ -15,7 +15,12 @@ class JwtIssuer(config: JwtConfig) {
         RsaKeyLoader.loadPrivateKey(config.privateKey)
     )
 
-    fun createToken(userId: String, sessionId: String): String {
+    fun createToken(
+        userId: String,
+        sessionId: String,
+        activeOwnerType: String = "USER",
+        activeOwnerId: String = userId
+    ): String {
         val now = Date()
         return JWT.create()
             .withKeyId(activeKid)
@@ -26,6 +31,8 @@ class JwtIssuer(config: JwtConfig) {
             .withIssuedAt(now)
             .withNotBefore(now)
             .withClaim("sid", sessionId)
+            .withClaim("owner_type", activeOwnerType)
+            .withClaim("owner_id", activeOwnerId)
             .withExpiresAt(Date(System.currentTimeMillis() + validityInMinutes * 60 * 1000))
             .sign(algorithm)
     }

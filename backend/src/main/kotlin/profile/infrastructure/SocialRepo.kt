@@ -17,12 +17,18 @@ class SocialRepo(private val ds: DataSource) : SocialRepository {
         ds.connection.use { conn ->
             try {
                 conn.prepareStatement("""
-                    INSERT INTO social.subscriptions (id, subscriber_id, subscribed_to_id, status, is_close_friend, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO social.subscriptions (id, subscriber_type, subscriber_id, subscribed_to_type, subscribed_to_id, status, is_close_friend, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent()).use { ps ->
-                    ps.setObject(1, sub.id); ps.setObject(2, sub.subscriberId); ps.setObject(3, sub.subscribedToId)
-                    ps.setString(4, sub.status.name); ps.setBoolean(5, sub.isCloseFriend)
-                    ps.setTimestamp(6, Timestamp.from(sub.createdAt)); ps.setTimestamp(7, Timestamp.from(sub.updatedAt))
+                    ps.setObject(1, sub.id)
+                    ps.setString(2, sub.subscriberType.name)
+                    ps.setObject(3, sub.subscriberId)
+                    ps.setString(4, sub.subscribedToType.name)
+                    ps.setObject(5, sub.subscribedToId)
+                    ps.setString(6, sub.status.name)
+                    ps.setBoolean(7, sub.isCloseFriend)
+                    ps.setTimestamp(8, Timestamp.from(sub.createdAt))
+                    ps.setTimestamp(9, Timestamp.from(sub.updatedAt))
                     ps.executeUpdate()
                 }
                 conn.commit()
@@ -67,34 +73,43 @@ class SocialRepo(private val ds: DataSource) : SocialRepository {
 
     override fun findSubscription(subscriberId: UUID, subscribedToId: UUID): Subscription? {
         return ds.connection.use { conn ->
-            conn.prepareStatement("""
-                SELECT id, subscriber_id, subscribed_to_id, status, is_close_friend, created_at, updated_at
-                FROM social.subscriptions WHERE subscriber_id = ? AND subscribed_to_id = ?
+                conn.prepareStatement("""
+                    SELECT id, subscriber_type, subscriber_id, subscribed_to_type, subscribed_to_id, status, is_close_friend, created_at, updated_at
+                    FROM social.subscriptions WHERE subscriber_type = 'USER' AND subscriber_id = ? AND subscribed_to_type = 'USER' AND subscribed_to_id = ?
             """.trimIndent()).use { ps ->
                 ps.setObject(1, subscriberId); ps.setObject(2, subscribedToId)
                 ps.executeQuery().use { rs ->
-                    if (rs.next()) Subscription(
-                        id = rs.getObject("id") as UUID, subscriberId = rs.getObject("subscriber_id") as UUID,
-                        subscribedToId = rs.getObject("subscribed_to_id") as UUID,
-                        status = SubscriptionStatus.valueOf(rs.getString("status")),
-                        isCloseFriend = rs.getBoolean("is_close_friend"),
-                        createdAt = rs.getTimestamp("created_at").toInstant(),
-                        updatedAt = rs.getTimestamp("updated_at").toInstant()
-                    ) else null
+                    if (rs.next()) mapSubscription(rs) else null
                 }
+            }
+        }
+    }
+
+    override fun findSubscription(subscriber: OwnerRef, subscribedTo: OwnerRef): Subscription? {
+        return ds.connection.use { conn ->
+            conn.prepareStatement("""
+                SELECT id, subscriber_type, subscriber_id, subscribed_to_type, subscribed_to_id, status, is_close_friend, created_at, updated_at
+                FROM social.subscriptions
+                WHERE subscriber_type = ? AND subscriber_id = ? AND subscribed_to_type = ? AND subscribed_to_id = ?
+            """.trimIndent()).use { ps ->
+                ps.setString(1, subscriber.type.name)
+                ps.setObject(2, subscriber.id)
+                ps.setString(3, subscribedTo.type.name)
+                ps.setObject(4, subscribedTo.id)
+                ps.executeQuery().use { rs -> if (rs.next()) mapSubscription(rs) else null }
             }
         }
     }
 
     override fun findBySubscriber(subscriberId: UUID, offset: Int, limit: Int): Pair<List<Subscription>, Int> {
         return ds.connection.use { conn ->
-            val count = conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscriber_id = ? AND status = 'ACCEPTED'").use { ps ->
+            val count = conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscriber_type = 'USER' AND subscriber_id = ? AND status = 'ACCEPTED'").use { ps ->
                 ps.setObject(1, subscriberId)
                 ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
             }
             val items = conn.prepareStatement("""
-                SELECT id, subscriber_id, subscribed_to_id, status, is_close_friend, created_at, updated_at
-                FROM social.subscriptions WHERE subscriber_id = ? AND status = 'ACCEPTED'
+                SELECT id, subscriber_type, subscriber_id, subscribed_to_type, subscribed_to_id, status, is_close_friend, created_at, updated_at
+                FROM social.subscriptions WHERE subscriber_type = 'USER' AND subscriber_id = ? AND status = 'ACCEPTED'
                 ORDER BY created_at DESC LIMIT ? OFFSET ?
             """.trimIndent()).use { ps ->
                 ps.setObject(1, subscriberId); ps.setInt(2, limit); ps.setInt(3, offset)
@@ -108,15 +123,37 @@ class SocialRepo(private val ds: DataSource) : SocialRepository {
         }
     }
 
+    override fun findBySubscriber(subscriber: OwnerRef, offset: Int, limit: Int): Pair<List<Subscription>, Int> {
+        return ds.connection.use { conn ->
+            val count = conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscriber_type = ? AND subscriber_id = ? AND status = 'ACCEPTED'").use { ps ->
+                ps.setString(1, subscriber.type.name); ps.setObject(2, subscriber.id)
+                ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+            }
+            val items = conn.prepareStatement("""
+                SELECT id, subscriber_type, subscriber_id, subscribed_to_type, subscribed_to_id, status, is_close_friend, created_at, updated_at
+                FROM social.subscriptions WHERE subscriber_type = ? AND subscriber_id = ? AND status = 'ACCEPTED'
+                ORDER BY created_at DESC LIMIT ? OFFSET ?
+            """.trimIndent()).use { ps ->
+                ps.setString(1, subscriber.type.name); ps.setObject(2, subscriber.id); ps.setInt(3, limit); ps.setInt(4, offset)
+                ps.executeQuery().use { rs ->
+                    val list = mutableListOf<Subscription>()
+                    while (rs.next()) list.add(mapSubscription(rs))
+                    list
+                }
+            }
+            Pair(items, count)
+        }
+    }
+
     override fun findBySubscribedTo(subscribedToId: UUID, offset: Int, limit: Int): Pair<List<Subscription>, Int> {
         return ds.connection.use { conn ->
-            val count = conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscribed_to_id = ? AND status = 'ACCEPTED'").use { ps ->
+            val count = conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscribed_to_type = 'USER' AND subscribed_to_id = ? AND status = 'ACCEPTED'").use { ps ->
                 ps.setObject(1, subscribedToId)
                 ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
             }
             val items = conn.prepareStatement("""
-                SELECT id, subscriber_id, subscribed_to_id, status, is_close_friend, created_at, updated_at
-                FROM social.subscriptions WHERE subscribed_to_id = ? AND status = 'ACCEPTED'
+                SELECT id, subscriber_type, subscriber_id, subscribed_to_type, subscribed_to_id, status, is_close_friend, created_at, updated_at
+                FROM social.subscriptions WHERE subscribed_to_type = 'USER' AND subscribed_to_id = ? AND status = 'ACCEPTED'
                 ORDER BY created_at DESC LIMIT ? OFFSET ?
             """.trimIndent()).use { ps ->
                 ps.setObject(1, subscribedToId); ps.setInt(2, limit); ps.setInt(3, offset)
@@ -130,15 +167,37 @@ class SocialRepo(private val ds: DataSource) : SocialRepository {
         }
     }
 
+    override fun findBySubscribedTo(subscribedTo: OwnerRef, offset: Int, limit: Int): Pair<List<Subscription>, Int> {
+        return ds.connection.use { conn ->
+            val count = conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscribed_to_type = ? AND subscribed_to_id = ? AND status = 'ACCEPTED'").use { ps ->
+                ps.setString(1, subscribedTo.type.name); ps.setObject(2, subscribedTo.id)
+                ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+            }
+            val items = conn.prepareStatement("""
+                SELECT id, subscriber_type, subscriber_id, subscribed_to_type, subscribed_to_id, status, is_close_friend, created_at, updated_at
+                FROM social.subscriptions WHERE subscribed_to_type = ? AND subscribed_to_id = ? AND status = 'ACCEPTED'
+                ORDER BY created_at DESC LIMIT ? OFFSET ?
+            """.trimIndent()).use { ps ->
+                ps.setString(1, subscribedTo.type.name); ps.setObject(2, subscribedTo.id); ps.setInt(3, limit); ps.setInt(4, offset)
+                ps.executeQuery().use { rs ->
+                    val list = mutableListOf<Subscription>()
+                    while (rs.next()) list.add(mapSubscription(rs))
+                    list
+                }
+            }
+            Pair(items, count)
+        }
+    }
+
     override fun findPendingBySubscribedTo(subscribedToId: UUID, offset: Int, limit: Int): Pair<List<Subscription>, Int> {
         return ds.connection.use { conn ->
-            val count = conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscribed_to_id = ? AND status = 'PENDING'").use { ps ->
+            val count = conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscribed_to_type = 'USER' AND subscribed_to_id = ? AND status = 'PENDING'").use { ps ->
                 ps.setObject(1, subscribedToId)
                 ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
             }
             val items = conn.prepareStatement("""
-                SELECT id, subscriber_id, subscribed_to_id, status, is_close_friend, created_at, updated_at
-                FROM social.subscriptions WHERE subscribed_to_id = ? AND status = 'PENDING'
+                SELECT id, subscriber_type, subscriber_id, subscribed_to_type, subscribed_to_id, status, is_close_friend, created_at, updated_at
+                FROM social.subscriptions WHERE subscribed_to_type = 'USER' AND subscribed_to_id = ? AND status = 'PENDING'
                 ORDER BY created_at DESC LIMIT ? OFFSET ?
             """.trimIndent()).use { ps ->
                 ps.setObject(1, subscribedToId); ps.setInt(2, limit); ps.setInt(3, offset)
@@ -153,7 +212,10 @@ class SocialRepo(private val ds: DataSource) : SocialRepository {
     }
 
     private fun mapSubscription(rs: java.sql.ResultSet) = Subscription(
-        id = rs.getObject("id") as UUID, subscriberId = rs.getObject("subscriber_id") as UUID,
+        id = rs.getObject("id") as UUID,
+        subscriberType = runCatching { OwnerType.valueOf(rs.getString("subscriber_type")) }.getOrDefault(OwnerType.USER),
+        subscriberId = rs.getObject("subscriber_id") as UUID,
+        subscribedToType = runCatching { OwnerType.valueOf(rs.getString("subscribed_to_type")) }.getOrDefault(OwnerType.USER),
         subscribedToId = rs.getObject("subscribed_to_id") as UUID,
         status = SubscriptionStatus.valueOf(rs.getString("status")),
         isCloseFriend = rs.getBoolean("is_close_friend"),
@@ -162,17 +224,25 @@ class SocialRepo(private val ds: DataSource) : SocialRepository {
     )
 
     override fun countFollowers(userId: UUID): Long {
+        return countFollowers(OwnerRef.user(userId))
+    }
+
+    override fun countFollowers(owner: OwnerRef): Long {
         return ds.connection.use { conn ->
-            conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscribed_to_id = ? AND status = 'ACCEPTED'").use { ps ->
-                ps.setObject(1, userId); ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
+            conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscribed_to_type = ? AND subscribed_to_id = ? AND status = 'ACCEPTED'").use { ps ->
+                ps.setString(1, owner.type.name); ps.setObject(2, owner.id); ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
             }
         }
     }
 
     override fun countFollowing(userId: UUID): Long {
+        return countFollowing(OwnerRef.user(userId))
+    }
+
+    override fun countFollowing(owner: OwnerRef): Long {
         return ds.connection.use { conn ->
-            conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscriber_id = ? AND status = 'ACCEPTED'").use { ps ->
-                ps.setObject(1, userId); ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
+            conn.prepareStatement("SELECT COUNT(*) FROM social.subscriptions WHERE subscriber_type = ? AND subscriber_id = ? AND status = 'ACCEPTED'").use { ps ->
+                ps.setString(1, owner.type.name); ps.setObject(2, owner.id); ps.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else 0 }
             }
         }
     }
