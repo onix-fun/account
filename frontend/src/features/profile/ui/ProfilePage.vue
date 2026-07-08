@@ -180,17 +180,7 @@ function openView(view: ProfileView) {
 function closeView() {
   const nextQuery = { ...route.query };
   delete nextQuery.view;
-  router.push({ query: nextQuery });
-}
-
-function goExternalBack() {
-  const target = backUrl.value;
-  if (!target) return;
-  if (window.history.length > 1) {
-    window.history.back();
-    return;
-  }
-  window.location.assign(target);
+  router.replace({ query: nextQuery });
 }
 
 function isProfileView(value: unknown): value is ProfileView {
@@ -313,7 +303,7 @@ function revokeAvatarPreview() {
 <template>
   <main class="w-full max-w-[940px] mx-auto px-4 py-10 sm:py-16 grid gap-6">
     <nav v-if="showExternalBack" class="w-full max-w-[800px] mx-auto flex items-center min-h-[38px]" aria-label="External navigation">
-      <PButton variant="text" icon="pi pi-arrow-left" :label="t('common.back')" severity="secondary" class="-ml-2" @click="goExternalBack" />
+      <PButton :as="'a'" :href="backUrl" variant="text" icon="pi pi-arrow-left" :label="t('common.back')" severity="secondary" class="-ml-2" />
     </nav>
 
     <ProfileTopCard

@@ -20,16 +20,6 @@ const qrError = ref("");
 const externalBackUrl = computed(() => trustedRedirectUrl(route.query.redirect));
 const hasFlowBack = computed(() => flow.mode.value !== "identifier" && flow.mode.value !== "name" && flow.mode.value !== "register");
 
-function goExternalBack() {
-  const target = externalBackUrl.value;
-  if (!target) return;
-  if (window.history.length > 1) {
-    window.history.back();
-    return;
-  }
-  window.location.assign(target);
-}
-
 async function submitQrLogin(payload: { scanToken?: string; manualCode?: string }) {
   qrError.value = "";
   try {
@@ -50,16 +40,15 @@ const steps = [
 
 <template>
   <section class="min-h-screen bg-[var(--bg)] grid place-items-center p-4 sm:p-8 relative">
-    <button
+    <a
       v-if="externalBackUrl && !hasFlowBack"
-      type="button"
+      :href="externalBackUrl"
       class="absolute left-4 top-4 sm:left-8 sm:top-8 inline-flex items-center gap-2 min-h-10 rounded-lg px-3 text-sm font-bold text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors"
       :aria-label="t('common.back')"
-      @click="goExternalBack"
     >
       <i class="pi pi-arrow-left" aria-hidden="true"></i>
       <span>{{ t("common.back") }}</span>
-    </button>
+    </a>
 
     <main class="w-full max-w-[420px] grid gap-6" aria-live="polite">
       <nav v-if="flow.showRegistrationSteps.value" class="flex items-center justify-between gap-3 relative" aria-label="Authentication steps">
