@@ -3,7 +3,6 @@ CREATE TABLE organizations (
     org_name TEXT NOT NULL,
     display_name TEXT NOT NULL,
     bio TEXT,
-    social_links JSONB NOT NULL DEFAULT '[]'::jsonb,
     avatar_url TEXT,
     status TEXT NOT NULL DEFAULT 'ACTIVE',
     created_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
