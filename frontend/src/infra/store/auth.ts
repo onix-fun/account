@@ -4,6 +4,11 @@ import type { AuthSession, Organization, OrganizationInvitation, OwnerIdentity, 
 import { AuthService, type RegistrationStartedResponse } from "@/api/services/AuthService";
 import { apiErrorMessage } from "@/api/client";
 import { setLocale, type SupportedLocale } from "@/shared/i18n";
+import {
+  clearActiveOwnerPreference,
+  rememberActiveOwnerPreference,
+  rememberUserOwnerPreference,
+} from "@/shared/lib/activeOwnerPreference";
 
 export const useAuthStore = defineStore("auth", () => {
   const currentUser = ref<User | null>(AuthService.getStoredSession());
@@ -32,6 +37,22 @@ export const useAuthStore = defineStore("auth", () => {
     if (locale === "ru" || locale === "en") setLocale(locale);
   };
 
+  const rememberCurrentOwner = (owner: OwnerIdentity | null) => {
+    if (!currentUser.value || !owner) return;
+    rememberActiveOwnerPreference(currentUser.value.id, owner);
+  };
+
+  const resetActiveOwnerToCurrentUser = async () => {
+    if (!currentUser.value) {
+      clearActiveOwnerPreference();
+      return;
+    }
+    const owner = await AuthService.switchOwner("USER", currentUser.value.id);
+    activeOwner.value = owner;
+    if (owner) rememberCurrentOwner(owner);
+    else rememberUserOwnerPreference(currentUser.value.id);
+  };
+
   const initAuth = async () => {
     error.value = null;
 
@@ -51,6 +72,7 @@ export const useAuthStore = defineStore("auth", () => {
     currentUser.value = await AuthService.switchAccount(userId);
     applyUserLocale();
     syncAccounts();
+    await resetActiveOwnerToCurrentUser();
     await loadOrganizationContext();
     if (currentUser.value) await fetchSessions();
   };
@@ -60,12 +82,14 @@ export const useAuthStore = defineStore("auth", () => {
       activeOwner.value = null;
       organizations.value = [];
       organizationInvitations.value = [];
+      clearActiveOwnerPreference();
       return;
     }
     const context = await AuthService.organizationContext();
     activeOwner.value = context.activeOwner;
     organizations.value = context.organizations;
     organizationInvitations.value = context.pendingInvitations;
+    rememberCurrentOwner(context.activeOwner);
   };
 
   const createOrganization = async (payload: { orgName: string; displayName: string; bio?: string; socialLinks?: Array<{ label: string; url: string }> }) => {
@@ -96,6 +120,7 @@ export const useAuthStore = defineStore("auth", () => {
 
   const switchOwner = async (ownerType: OwnerType, ownerId: string) => {
     activeOwner.value = await AuthService.switchOwner(ownerType, ownerId);
+    rememberCurrentOwner(activeOwner.value);
     await loadOrganizationContext();
   };
 
@@ -312,6 +337,7 @@ export const useAuthStore = defineStore("auth", () => {
       currentUser.value = await AuthService.deleteAccount(password);
       sessions.value = [];
       syncAccounts();
+      if (currentUser.value) await resetActiveOwnerToCurrentUser();
       if (currentUser.value) await fetchSessions();
     } catch (cause) {
       error.value = apiErrorMessage(cause);
@@ -335,6 +361,7 @@ export const useAuthStore = defineStore("auth", () => {
     currentUser.value = await AuthService.logout();
     sessions.value = [];
     syncAccounts();
+    if (currentUser.value) await resetActiveOwnerToCurrentUser();
     await loadOrganizationContext();
     if (currentUser.value) await fetchSessions();
   };
@@ -344,6 +371,7 @@ export const useAuthStore = defineStore("auth", () => {
     currentUser.value = await AuthService.logoutAll();
     sessions.value = [];
     syncAccounts();
+    if (currentUser.value) await resetActiveOwnerToCurrentUser();
     await loadOrganizationContext();
     if (currentUser.value) await fetchSessions();
   };
@@ -365,6 +393,7 @@ export const useAuthStore = defineStore("auth", () => {
     AuthService.promptAddAccount();
     isCompletingRegistrationProfile.value = false;
     currentUser.value = null;
+    clearActiveOwnerPreference();
   };
 
   return {
