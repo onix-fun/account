@@ -91,19 +91,18 @@ class SocialGrpcService(
 
     override fun getOrganizationByName(request: GetOrganizationByNameRequest, responseObserver: StreamObserver<OwnerProfile>) =
         unary(responseObserver) {
-            val principal = requirePrincipal()
+            val viewer = optionalPrincipal()?.activeOwnerRef()
             val org = organizationService().findByName(request.orgName)
                 ?: throw Status.NOT_FOUND.withDescription("organization not found").asRuntimeException()
             ownerProfile(
                 owner = DomainOwnerRef(profile.domain.OwnerType.ORGANIZATION, UUID.fromString(org.id)),
-                viewer = principal.activeOwnerRef()
+                viewer = viewer
             )
         }
 
     override fun getOwnerByRef(request: GetOwnerByRefRequest, responseObserver: StreamObserver<OwnerProfile>) =
         unary(responseObserver) {
-            val principal = requirePrincipal()
-            ownerProfile(request.owner.toDomain(), principal.activeOwnerRef())
+            ownerProfile(request.owner.toDomain(), optionalPrincipal()?.activeOwnerRef())
         }
 
     override fun searchOwners(request: SearchUsersRequest, responseObserver: StreamObserver<OwnerListResponse>) =
@@ -206,15 +205,16 @@ class SocialGrpcService(
 
     override fun listOwnerFollowers(request: OwnerPageRequest, responseObserver: StreamObserver<OwnerPageResponse>) =
         unary(responseObserver) {
-            val principal = requirePrincipal()
+            val viewer = optionalPrincipal()?.activeOwnerRef()
             val target = request.owner.toDomain()
             val (items, total) = socialUseCases.getFollowers(target, request.page.coerceAtLeast(1), request.limit.coerceIn(1, 100))
             OwnerPageResponse.newBuilder()
                 .setTotalCount(total)
                 .addAllItems(items.map { sub ->
+                    val owner = DomainOwnerRef(sub.subscriberType, sub.subscriberId)
                     RelatedOwner.newBuilder()
-                        .setOwner(ownerProfile(DomainOwnerRef(sub.subscriberType, sub.subscriberId), principal.activeOwnerRef()))
-                        .setRelationship(socialUseCases.getRelationship(principal.activeOwnerRef(), DomainOwnerRef(sub.subscriberType, sub.subscriberId)).toGrpc())
+                        .setOwner(ownerProfile(owner, viewer))
+                        .setRelationship(socialUseCases.getRelationship(viewer, owner).toGrpc())
                         .build()
                 })
                 .build()
@@ -235,15 +235,16 @@ class SocialGrpcService(
 
     override fun listOwnerFollowing(request: OwnerPageRequest, responseObserver: StreamObserver<OwnerPageResponse>) =
         unary(responseObserver) {
-            val principal = requirePrincipal()
+            val viewer = optionalPrincipal()?.activeOwnerRef()
             val target = request.owner.toDomain()
             val (items, total) = socialUseCases.getFollowing(target, request.page.coerceAtLeast(1), request.limit.coerceIn(1, 100))
             OwnerPageResponse.newBuilder()
                 .setTotalCount(total)
                 .addAllItems(items.map { sub ->
+                    val owner = DomainOwnerRef(sub.subscribedToType, sub.subscribedToId)
                     RelatedOwner.newBuilder()
-                        .setOwner(ownerProfile(DomainOwnerRef(sub.subscribedToType, sub.subscribedToId), principal.activeOwnerRef()))
-                        .setRelationship(socialUseCases.getRelationship(principal.activeOwnerRef(), DomainOwnerRef(sub.subscribedToType, sub.subscribedToId)).toGrpc())
+                        .setOwner(ownerProfile(owner, viewer))
+                        .setRelationship(socialUseCases.getRelationship(viewer, owner).toGrpc())
                         .build()
                 })
                 .build()
@@ -469,6 +470,11 @@ class SocialGrpcService(
         }
         return auth?.requirePrincipal()
             ?: throw Status.UNAUTHENTICATED.withDescription("access token is required").asRuntimeException()
+    }
+
+    private fun optionalPrincipal(): GrpcPrincipal? {
+        if (!requireUserToken) return null
+        return auth?.principalOrNull()
     }
 
     private fun userService(): UserService = userService

@@ -61,6 +61,11 @@ class GrpcPrincipalResolver(
         return requirePrincipal().userId
     }
 
+    fun principalOrNull(): GrpcPrincipal? {
+        GrpcAuthContext.ACCESS_TOKEN.get() ?: return null
+        return requirePrincipal()
+    }
+
     fun requirePrincipal(): GrpcPrincipal {
         val token = GrpcAuthContext.ACCESS_TOKEN.get()
             ?: throw Status.UNAUTHENTICATED.withDescription("access token is required").asRuntimeException()
