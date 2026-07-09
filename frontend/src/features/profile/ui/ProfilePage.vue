@@ -10,11 +10,16 @@ import { trustedRedirectUrl } from "@/infra/navigation/trustedRedirect";
 import { useAuthStore, useProfileSocialStore } from "@/infra/store";
 import { isUsername } from "@/shared/lib/validation";
 import AvatarCropper from "@/features/avatar/ui/AvatarCropper.vue";
+import AccountHeader from "@/features/profile/ui/AccountHeader.vue";
 import AccountSwitchModal from "@/features/profile/ui/AccountSwitchModal.vue";
 import BlockedUsersTab from "@/features/profile/ui/BlockedUsersTab.vue";
 import CloseFriendsTab from "@/features/profile/ui/CloseFriendsTab.vue";
 import NotificationsPage from "@/features/profile/ui/NotificationsPage.vue";
-import OrganizationsTab from "@/features/profile/ui/OrganizationsTab.vue";
+import OrganizationAdminLayout, { type OrganizationAdminTab } from "@/features/profile/ui/OrganizationAdminLayout.vue";
+import OrganizationInvites from "@/features/profile/ui/OrganizationInvites.vue";
+import OrganizationMembers from "@/features/profile/ui/OrganizationMembers.vue";
+import OrganizationProfileSettings from "@/features/profile/ui/OrganizationProfileSettings.vue";
+import OrganizationSelectorScreen from "@/features/profile/ui/OrganizationSelectorScreen.vue";
 import ProfileListPage from "@/features/profile/ui/ProfileListPage.vue";
 import ProfileMobileMenu from "@/features/profile/ui/ProfileMobileMenu.vue";
 import ProfileNav, { type ProfileTab } from "@/features/profile/ui/ProfileNav.vue";
@@ -38,12 +43,12 @@ const { t } = useI18n();
 const toast = useToast();
 
 const activeTab = ref<ProfileTab>("profile");
+const activeOrganizationTab = ref<OrganizationAdminTab>("profile");
 const accountMode = ref<AccountMode>("user");
 const isSavingProfile = ref(false);
 const isUploadingAvatar = ref(false);
 const isAccountModalOpen = ref(false);
 const isOrganizationSelectorOpen = ref(false);
-const organizationCreateToken = ref(0);
 const isSearchOpen = ref(false);
 const selectedOrganizationId = ref<string | null>(null);
 const cropFile = ref<File | null>(null);
@@ -84,6 +89,7 @@ const queryView = computed<ProfileView | null>(() => {
 });
 const contentView = computed<ProfileView>(() => queryView.value ?? activeTab.value);
 const showExternalBack = computed(() => Boolean(backUrl.value) && !queryView.value);
+const showOrganizationSelector = computed(() => !queryView.value && accountMode.value === "organization" && (isOrganizationSelectorOpen.value || !selectedOrganization.value));
 const isProfileDirty = computed(() => {
   const user = authStore.currentUser;
   return (
@@ -227,6 +233,7 @@ async function showUserProfile() {
     await Promise.allSettled([socialStore.loadSettings(), socialStore.loadBlockedUsers(), socialStore.refreshSummary()]);
   }
   accountMode.value = "user";
+  isOrganizationSelectorOpen.value = false;
 }
 
 function openOrganizationMode() {
@@ -234,22 +241,13 @@ function openOrganizationMode() {
   isOrganizationSelectorOpen.value = true;
 }
 
-function openOrganizationCreate() {
-  accountMode.value = "organization";
-  isOrganizationSelectorOpen.value = false;
-  organizationCreateToken.value += 1;
-}
-
 async function selectOrganization(organization: Organization) {
   selectedOrganizationId.value = organization.id;
   await authStore.switchOwner("ORGANIZATION", organization.id);
   await Promise.allSettled([socialStore.loadSettings(), socialStore.loadBlockedUsers(), socialStore.refreshSummary()]);
   accountMode.value = "organization";
+  activeOrganizationTab.value = "profile";
   isOrganizationSelectorOpen.value = false;
-}
-
-function organizationInitials(organization: Organization): string {
-  return organization.displayName.slice(0, 1).toUpperCase();
 }
 
 function openFieldEdit(field: EditableProfileField) {
@@ -355,30 +353,17 @@ function revokeAvatarPreview() {
 
 <template>
   <main class="w-full max-w-[940px] mx-auto px-4 py-10 sm:py-16 grid gap-6">
-    <nav v-if="showExternalBack" class="w-full max-w-[800px] mx-auto flex items-center min-h-[38px]" aria-label="External navigation">
-      <PButton :as="'a'" :href="backUrl" variant="text" icon="pi pi-arrow-left" :label="t('common.back')" severity="secondary" class="-ml-2" />
-    </nav>
-
-    <section v-if="!queryView" class="w-full max-w-[800px] mx-auto grid gap-3">
-      <div class="grid grid-cols-2 gap-2 rounded-2xl bg-[var(--surface)] p-1 shadow-sm">
-        <button
-          type="button"
-          class="min-h-[44px] rounded-xl border-0 font-bold cursor-pointer transition-colors"
-          :class="accountMode === 'user' ? 'bg-[var(--text)] text-[var(--surface)]' : 'bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]'"
-          @click="showUserProfile"
-        >
-          {{ t("organizations.userMode") }}
-        </button>
-        <button
-          type="button"
-          class="min-h-[44px] rounded-xl border-0 font-bold cursor-pointer transition-colors"
-          :class="accountMode === 'organization' ? 'bg-[var(--text)] text-[var(--surface)]' : 'bg-transparent text-[var(--muted)] hover:bg-[var(--surface-muted)]'"
-          @click="openOrganizationMode"
-        >
-          {{ t("organizations.organizationMode") }}
-        </button>
-      </div>
-    </section>
+    <AccountHeader
+      :mode="accountMode"
+      :user="authStore.currentUser"
+      :summary="socialStore.summary"
+      :back-url="showExternalBack ? backUrl : null"
+      @user-mode="showUserProfile"
+      @organization-mode="openOrganizationMode"
+      @account="isAccountModalOpen = true"
+      @notifications="openView('notifications')"
+      @search="isSearchOpen = true"
+    />
 
     <ProfileTopCard
       v-if="!queryView && accountMode === 'user'"
@@ -387,25 +372,8 @@ function revokeAvatarPreview() {
       :avatar-preview="avatarPreview"
       :is-uploading-avatar="isUploadingAvatar"
       @avatar="openAvatarPicker"
-      @switch-account="isAccountModalOpen = true"
       @open-view="openView"
     />
-
-    <header v-if="!queryView && accountMode === 'organization' && selectedOrganization" class="w-full max-w-[800px] mx-auto grid gap-3 bg-[var(--surface)] rounded-2xl p-5 shadow-sm">
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex items-center gap-3 min-w-0">
-          <span class="w-14 h-14 rounded-2xl bg-[var(--surface-muted)] flex items-center justify-center text-lg font-bold overflow-hidden shrink-0">
-            <img v-if="selectedOrganization.avatarUrl" :src="selectedOrganization.avatarUrl" alt="" class="w-full h-full object-cover" />
-            <span v-else>{{ organizationInitials(selectedOrganization) }}</span>
-          </span>
-          <div class="min-w-0">
-            <h1 class="m-0 text-2xl font-bold text-[var(--text)] truncate">{{ selectedOrganization.displayName }}</h1>
-            <p class="m-0 mt-1 text-sm text-[var(--muted)] truncate">/o/{{ selectedOrganization.orgName }} · {{ selectedOrganization.role }}</p>
-          </div>
-        </div>
-        <PButton icon="pi pi-building" variant="text" severity="secondary" class="w-10 h-10 border-0" :aria-label="t('organizations.choose')" @click="isOrganizationSelectorOpen = true" />
-      </div>
-    </header>
 
     <input
       ref="fileInput"
@@ -415,7 +383,15 @@ function revokeAvatarPreview() {
       @change="onAvatarChange"
     />
 
+    <OrganizationSelectorScreen
+      v-if="showOrganizationSelector"
+      :selected-organization-id="selectedOrganization?.id || null"
+      @select="selectOrganization"
+      @message="setMessage"
+    />
+
     <div
+      v-else
       class="grid grid-cols-1 justify-center items-start gap-7"
       :class="queryView || accountMode === 'organization' ? 'max-w-[720px] w-full mx-auto' : 'lg:grid-cols-[52px_minmax(0,720px)]'"
     >
@@ -426,11 +402,31 @@ function revokeAvatarPreview() {
 
       <div class="min-w-0" :class="{ 'hidden lg:block': !queryView && accountMode === 'user' }">
         <section v-if="!queryView && accountMode === 'organization'" class="grid gap-4">
-          <OrganizationsTab :selected-organization-id="selectedOrganization?.id || null" :open-create-token="organizationCreateToken" @message="setMessage" />
-          <template v-if="selectedOrganization?.role === 'OWNER'">
-            <SocialSettingsTab @message="setMessage" />
-            <BlockedUsersTab @message="setMessage" />
-          </template>
+          <OrganizationAdminLayout
+            v-if="selectedOrganization"
+            v-model:active-tab="activeOrganizationTab"
+            :organization="selectedOrganization"
+            @choose="isOrganizationSelectorOpen = true"
+          >
+            <OrganizationProfileSettings
+              v-if="activeOrganizationTab === 'profile'"
+              :organization="selectedOrganization"
+              @message="setMessage"
+            />
+            <section v-else-if="activeOrganizationTab === 'social'" class="grid gap-4">
+              <article class="grid gap-3 bg-[var(--surface)] rounded-[18px] p-4">
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <PButton :label="t('social.followers')" icon="pi pi-users" severity="secondary" variant="outlined" @click="openView('followers')" />
+                  <PButton :label="t('social.following')" icon="pi pi-user-plus" severity="secondary" variant="outlined" @click="openView('following')" />
+                </div>
+              </article>
+              <SocialSettingsTab @message="setMessage" />
+            </section>
+            <BlockedUsersTab v-else-if="activeOrganizationTab === 'blocked'" @message="setMessage" />
+            <NotificationsPage v-else-if="activeOrganizationTab === 'notifications'" @back="activeOrganizationTab = 'profile'" @message="setMessage" />
+            <OrganizationMembers v-else-if="activeOrganizationTab === 'members'" :organization="selectedOrganization" @message="setMessage" />
+            <OrganizationInvites v-else @message="setMessage" />
+          </OrganizationAdminLayout>
         </section>
 
         <ProfileSearchOverlay
@@ -618,56 +614,6 @@ function revokeAvatarPreview() {
       @message="setMessage"
     />
     <AccountSwitchModal :visible="isAccountModalOpen" @close="isAccountModalOpen = false" />
-    <PDialog
-      :visible="isOrganizationSelectorOpen"
-      modal
-      dismissable-mask
-      class="mobile-fullscreen-dialog w-full max-w-[520px]"
-      :header="t('organizations.choose')"
-      @update:visible="isOrganizationSelectorOpen = false"
-    >
-      <section class="grid gap-3 p-1">
-        <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="mobile-dialog-back justify-self-start" @click="isOrganizationSelectorOpen = false" />
-        <div v-if="!authStore.organizations.length" class="min-h-[280px] grid place-items-center text-center p-6 rounded-2xl bg-[var(--surface-muted)]">
-          <div class="grid gap-3 justify-items-center">
-            <span class="w-16 h-16 rounded-2xl bg-[var(--surface)] flex items-center justify-center text-2xl text-[var(--muted)]">
-              <i class="pi pi-building"></i>
-            </span>
-            <h2 class="m-0 text-xl font-bold text-[var(--text)]">{{ t("organizations.emptyTitle") }}</h2>
-            <p class="m-0 text-sm text-[var(--muted)] max-w-[320px]">{{ t("organizations.emptyHint") }}</p>
-          </div>
-        </div>
-
-        <button
-          v-for="organization in authStore.organizations"
-          :key="organization.id"
-          type="button"
-          class="w-full min-h-[68px] grid grid-cols-[48px_minmax(0,1fr)_20px] items-center gap-3 p-3 rounded-2xl border-0 text-left bg-[var(--surface-raised)] hover:bg-[var(--surface-active)] text-[var(--text)] cursor-pointer"
-          @click="selectOrganization(organization)"
-        >
-          <span class="w-12 h-12 rounded-2xl bg-[var(--surface-muted)] flex items-center justify-center font-bold overflow-hidden">
-            <img v-if="organization.avatarUrl" :src="organization.avatarUrl" alt="" class="w-full h-full object-cover" />
-            <span v-else>{{ organizationInitials(organization) }}</span>
-          </span>
-          <span class="min-w-0">
-            <strong class="block truncate">{{ organization.displayName }}</strong>
-            <small class="block truncate text-[var(--muted)]">/o/{{ organization.orgName }} · {{ organization.role }}</small>
-          </span>
-          <i v-if="selectedOrganization?.id === organization.id" class="pi pi-check text-[var(--success)]"></i>
-        </button>
-
-        <button
-          type="button"
-          class="w-full min-h-[64px] flex items-center gap-3 p-3 rounded-2xl border-0 bg-[var(--surface-raised)] hover:bg-[var(--surface-active)] text-[var(--text)] cursor-pointer text-left"
-          @click="openOrganizationCreate"
-        >
-          <span class="w-12 h-12 rounded-2xl bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)]">
-            <i class="pi pi-plus"></i>
-          </span>
-          <strong>{{ t("organizations.create") }}</strong>
-        </button>
-      </section>
-    </PDialog>
     <AvatarCropper
       v-if="cropFile"
       :file="cropFile"

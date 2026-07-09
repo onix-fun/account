@@ -299,9 +299,11 @@
   "organizations": {
     "users": "Users",
     "organizations": "Organizations",
+    "ownerMode": "Owner mode",
     "userMode": "User",
     "organizationMode": "Organization",
     "choose": "Choose organization",
+    "selectorHint": "Choose which organization should act in the current session.",
     "actAsSelf": "Act as user",
     "create": "Create organization",
     "orgName": "Organization name",
@@ -318,12 +320,26 @@
     "emptyHint": "Create an organization to publish and work as a shared account.",
     "invitations": "Invitations",
     "invite": "Invite",
+    "inviteHint": "The user will receive an invitation inside Account.",
     "inviteUsername": "Username",
     "invited": "Invitation sent.",
     "accepted": "Invitation accepted.",
     "declined": "Invitation declined.",
     "active": "Active",
-    "actAs": "Select"
+    "actAs": "Select",
+    "social": "Social",
+    "membersHint": "Manage member roles and access.",
+    "membersReadonlyHint": "You can use this organization, but member management is available only to owners.",
+    "noInvitations": "No invitations",
+    "noInvitationsHint": "New organization invitations will appear here.",
+    "menu": {
+      "profile": "Avatar, name, description, and links.",
+      "social": "Followers, following, and privacy.",
+      "blocked": "Accounts blocked by the organization.",
+      "notifications": "Notifications for the selected owner.",
+      "members": "Member roles and access.",
+      "invites": "Incoming organization invitations."
+    }
   },
   "errors": {
     "VALIDATION_INVALID_REQUEST": "Check the entered data.",

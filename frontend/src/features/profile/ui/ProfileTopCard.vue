@@ -14,15 +14,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   avatar: [];
-  switchAccount: [];
-  openView: [view: "followers" | "following" | "notifications"];
+  openView: [view: "followers" | "following"];
 }>();
 
 const { t } = useI18n();
 const displayName = computed(() => userDisplayName(props.user));
 const displayInitials = computed(() => userInitials(props.user));
-const unreadCount = computed(() => props.summary?.unreadNotificationCount ?? 0);
-const unreadBadge = computed(() => unreadCount.value > 99 ? "99+" : String(unreadCount.value));
 </script>
 
 <template>
@@ -49,22 +46,9 @@ const unreadBadge = computed(() => unreadCount.value > 99 ? "99+" : String(unrea
           <p class="m-0 mt-1 text-sm text-[var(--muted)] truncate">{{ user?.email }}</p>
         </div>
       </div>
-      <PButton
-        icon="pi pi-users"
-        variant="text"
-        severity="secondary"
-        class="w-10 h-10 border-0"
-        :aria-label="t('profile.switchAccount')"
-        :title="t('profile.switchAccount')"
-        @click="emit('switchAccount')"
-      />
     </div>
 
     <div class="profile-actions">
-      <button class="profile-notification-button" type="button" :aria-label="t('social.notifications')" @click="emit('openView', 'notifications')">
-        <i class="pi pi-bell text-lg"></i>
-        <span v-if="unreadCount > 0" class="notification-badge">{{ unreadBadge }}</span>
-      </button>
       <button class="profile-stat-button" type="button" @click="emit('openView', 'followers')">
         <span>{{ summary?.followersCount ?? 0 }}</span>
         <small>{{ t("social.followers") }}</small>
@@ -80,39 +64,9 @@ const unreadBadge = computed(() => unreadCount.value > 99 ? "99+" : String(unrea
 <style scoped>
 .profile-actions {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
   align-items: stretch;
-}
-
-.profile-notification-button {
-  width: 52px;
-  min-height: 52px;
-  position: relative;
-  border: 0;
-  border-radius: 12px;
-  background: var(--surface-muted);
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.notification-badge {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--danger);
-  color: #fff;
-  font-size: 10px;
-  line-height: 18px;
-  font-weight: 800;
-  text-align: center;
 }
 
 .profile-stat-button {

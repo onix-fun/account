@@ -204,7 +204,7 @@ async function respond(invitationId: string, accept: boolean) {
       <article v-for="invitation in authStore.organizationInvitations" :key="invitation.id" class="grid gap-3 rounded-xl bg-[var(--surface)] p-4">
         <div>
           <strong>{{ invitation.organization.displayName }}</strong>
-          <p class="m-0 text-sm text-[var(--muted)]">/o/{{ invitation.organization.orgName }} · {{ invitation.role }}</p>
+          <p class="m-0 text-sm text-[var(--muted)]">{{ invitation.organization.orgName }} · {{ invitation.role }}</p>
         </div>
         <div class="flex flex-wrap gap-2">
           <PButton :label="t('common.accept')" size="small" @click="respond(invitation.id, true)" />
@@ -241,7 +241,7 @@ async function respond(invitationId: string, accept: boolean) {
             </button>
             <div class="min-w-0">
               <strong class="block truncate">{{ organization.displayName }}</strong>
-            <p class="m-0 text-sm text-[var(--muted)]">/o/{{ organization.orgName }} · {{ organization.role }}</p>
+            <p class="m-0 text-sm text-[var(--muted)]">{{ organization.orgName }} · {{ organization.role }}</p>
             </div>
           </div>
           <span class="px-2 py-1 rounded-full bg-[var(--surface-muted)] text-xs font-bold text-[var(--muted)]">{{ organization.role }}</span>
