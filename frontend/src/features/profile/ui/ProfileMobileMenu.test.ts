@@ -35,31 +35,27 @@ const i18n = createI18n({
 });
 
 describe("ProfileMobileMenu", () => {
-  it("renders search first and opens sections as query-backed views", async () => {
+  it("renders profile sections as query-backed views", async () => {
     const wrapper = mount(ProfileMobileMenu, {
       global: { plugins: [i18n] },
     });
 
     const rows = wrapper.findAll(".profile-menu-row");
-    expect(rows).toHaveLength(8);
-    expect(rows[0].text()).toContain("Search");
-    expect(rows[1].text()).toContain("Profile");
+    expect(rows).toHaveLength(6);
+    expect(rows[0].text()).toContain("Profile");
 
     await rows[0].trigger("click");
-    await rows[1].trigger("click");
-    await rows[4].trigger("click");
+    await rows[2].trigger("click");
 
-    expect(wrapper.emitted("search")).toHaveLength(1);
     expect(wrapper.emitted("openView")).toEqual([["profile"], ["blocked"]]);
   });
 
-  it("hides follow requests for public profiles", () => {
+  it("does not render follow requests as a separate section", () => {
     const wrapper = mount(ProfileMobileMenu, {
-      props: { showRequests: false },
       global: { plugins: [i18n] },
     });
 
     expect(wrapper.text()).not.toContain("Requests");
-    expect(wrapper.findAll(".profile-menu-row")).toHaveLength(7);
+    expect(wrapper.findAll(".profile-menu-row")).toHaveLength(6);
   });
 });

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { Organization } from "@/domain";
 
-export type OrganizationAdminTab = "profile" | "social" | "blocked" | "notifications" | "members" | "invites";
+export type OrganizationAdminTab = "profile" | "social" | "blocked" | "members";
 
 const props = defineProps<{
   organization: Organization;
@@ -16,22 +16,37 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const mobileContentOpen = ref(false);
 const tabs = computed<Array<{ key: OrganizationAdminTab; icon: string; label: string; description: string }>>(() => [
   { key: "profile", icon: "pi pi-id-card", label: t("profile.profile"), description: t("organizations.menu.profile") },
   { key: "social", icon: "pi pi-users", label: t("organizations.social"), description: t("organizations.menu.social") },
   { key: "blocked", icon: "pi pi-ban", label: t("profile.blocked"), description: t("organizations.menu.blocked") },
-  { key: "notifications", icon: "pi pi-bell", label: t("social.notifications"), description: t("organizations.menu.notifications") },
   { key: "members", icon: "pi pi-sitemap", label: t("organizations.members"), description: t("organizations.menu.members") },
-  { key: "invites", icon: "pi pi-inbox", label: t("organizations.invitations"), description: t("organizations.menu.invites") },
 ]);
+
+watch(
+  () => props.organization.id,
+  () => {
+    mobileContentOpen.value = false;
+  },
+);
 
 function initials(): string {
   return props.organization.displayName.slice(0, 1).toUpperCase();
 }
+
+function openMobileTab(tab: OrganizationAdminTab) {
+  mobileContentOpen.value = true;
+  emit("update:activeTab", tab);
+}
+
+function closeMobileTab() {
+  mobileContentOpen.value = false;
+}
 </script>
 
 <template>
-  <section class="org-admin">
+  <section class="org-admin" :class="{ 'org-admin--mobile-content': mobileContentOpen }">
     <header class="org-admin-header">
       <div class="org-admin-title">
         <span class="org-admin-avatar">
@@ -67,7 +82,7 @@ function initials(): string {
         type="button"
         class="org-mobile-row"
         :class="{ active: activeTab === tab.key }"
-        @click="emit('update:activeTab', tab.key)"
+        @click="openMobileTab(tab.key)"
       >
         <span class="org-mobile-icon"><i :class="tab.icon"></i></span>
         <span class="min-w-0">
@@ -79,6 +94,7 @@ function initials(): string {
     </nav>
 
     <main class="org-admin-content">
+      <PButton class="org-mobile-back" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" @click="closeMobileTab" />
       <slot />
     </main>
   </section>
@@ -170,6 +186,12 @@ function initials(): string {
   display: none;
 }
 
+.org-mobile-back {
+  display: none;
+  justify-self: start;
+  margin: 0 0 10px -8px;
+}
+
 .org-mobile-row {
   width: 100%;
   min-height: 62px;
@@ -227,6 +249,22 @@ function initials(): string {
   .org-mobile-menu {
     display: grid;
     gap: 8px;
+  }
+
+  .org-admin-content {
+    display: none;
+  }
+
+  .org-admin--mobile-content .org-mobile-menu {
+    display: none;
+  }
+
+  .org-admin--mobile-content .org-admin-content {
+    display: block;
+  }
+
+  .org-admin--mobile-content .org-mobile-back {
+    display: inline-flex;
   }
 }
 </style>

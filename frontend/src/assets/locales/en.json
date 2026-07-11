@@ -206,6 +206,10 @@
         "title": "New follow request",
         "body": "A user wants to follow your profile."
       },
+      "organizationInvitation": {
+        "title": "Organization invitation",
+        "body": "You were invited to join an organization."
+      },
       "newSubscriber": {
         "title": "New follower",
         "body": "A user followed your profile."
@@ -323,6 +327,12 @@
     "inviteHint": "The user will receive an invitation inside Account.",
     "inviteUsername": "Username",
     "invited": "Invitation sent.",
+    "invitedStatus": "Invited",
+    "alreadyMember": "Member",
+    "accept": "Accept",
+    "decline": "Decline",
+    "invitationAccepted": "Invitation accepted.",
+    "invitationDeclined": "Invitation declined.",
     "accepted": "Invitation accepted.",
     "declined": "Invitation declined.",
     "active": "Active",

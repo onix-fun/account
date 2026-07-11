@@ -17,6 +17,8 @@ data class Notification(
     val metadataJson: String = "{}",
     val isRead: Boolean = false,
     val actorId: UUID? = null,
+    val sourceOwner: OwnerRef? = null,
+    val targetOwner: OwnerRef? = null,
     val entityType: String? = null,
     val entityId: String? = null,
     val sourceEventId: String? = null,
@@ -95,6 +97,7 @@ enum class NotificationOutboxStatus {
 
 data class UserActivityEvent(
     val sourceEventId: String,
+    val actorType: OwnerType = OwnerType.USER,
     val actorId: UUID,
     val activityType: UserActivityType,
     val entityType: String? = null,

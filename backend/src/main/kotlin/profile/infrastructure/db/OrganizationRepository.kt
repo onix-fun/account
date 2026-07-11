@@ -228,6 +228,21 @@ class OrganizationRepository(private val dataSource: DataSource) {
         }
     }
 
+    fun pendingInvitation(orgId: String, userId: String): OrganizationInvitation? {
+        dataSource.connection.use { conn ->
+            return conn.prepareStatement("""
+                SELECT * FROM organization_invitations
+                WHERE organization_id = ? AND invited_user_id = ? AND status = 'PENDING'
+                LIMIT 1
+            """.trimIndent()).use { stmt ->
+                stmt.setObject(1, UUID.fromString(orgId))
+                stmt.setObject(2, UUID.fromString(userId))
+                val rs = stmt.executeQuery()
+                if (rs.next()) mapInvitation(rs) else null
+            }
+        }
+    }
+
     fun findInvitation(id: String): OrganizationInvitation? {
         dataSource.connection.use { conn ->
             return conn.prepareStatement("SELECT * FROM organization_invitations WHERE id = ?").use { stmt ->

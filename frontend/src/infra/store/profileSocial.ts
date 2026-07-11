@@ -67,11 +67,11 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
     }
   }
 
-  async function loadSettings() {
+  async function loadSettings(owner?: { ownerType: "USER" | "ORGANIZATION"; ownerId: string } | null) {
     const [nextPrivacy, nextPrefs, nextNotificationSettings] = await Promise.all([
       ProfileSocialService.getPrivacy(),
       ProfileSocialService.getNotificationPrefs(),
-      ProfileSocialService.getNotificationSettings(),
+      ProfileSocialService.getNotificationSettings(owner),
     ]);
     privacy.value = nextPrivacy;
     notificationPrefs.value = nextPrefs;
@@ -116,7 +116,7 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
     }
   }
 
-  async function setNotificationSetting(serviceKey: string, typeKey: string, enabled: boolean) {
+  async function setNotificationSetting(serviceKey: string, typeKey: string, enabled: boolean, owner?: { ownerType: "USER" | "ORGANIZATION"; ownerId: string } | null) {
     const previous = notificationSettings.value;
     notificationSettings.value = {
       services: notificationSettings.value.services.map((service) => ({
@@ -125,7 +125,7 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
       })),
     };
     try {
-      await ProfileSocialService.updateNotificationSetting(serviceKey, typeKey, enabled);
+      await ProfileSocialService.updateNotificationSetting(serviceKey, typeKey, enabled, owner);
     } catch (cause) {
       notificationSettings.value = previous;
       throw cause;
@@ -203,23 +203,32 @@ export const useProfileSocialStore = defineStore("profileSocial", () => {
   }
 
   async function follow(user: PublicUser): Promise<Relationship> {
-    const relationship = await ProfileSocialService.follow(user.id);
+    const ownerType = user.ownerType || "USER";
+    const relationship = ownerType === "USER"
+      ? await ProfileSocialService.follow(user.id)
+      : await ProfileSocialService.followOwner(ownerType, user.id);
     await syncAfterSocialMutation();
     return relationship;
   }
 
   async function unfollow(user: PublicUser) {
-    await ProfileSocialService.unfollow(user.id);
+    const ownerType = user.ownerType || "USER";
+    if (ownerType === "USER") await ProfileSocialService.unfollow(user.id);
+    else await ProfileSocialService.unfollowOwner(ownerType, user.id);
     await syncAfterSocialMutation();
   }
 
   async function block(user: PublicUser) {
-    await ProfileSocialService.block(user.id);
+    const ownerType = user.ownerType || "USER";
+    if (ownerType === "USER") await ProfileSocialService.block(user.id);
+    else await ProfileSocialService.blockOwner(ownerType, user.id);
     await syncAfterSocialMutation();
   }
 
   async function unblock(user: PublicUser) {
-    await ProfileSocialService.unblock(user.id);
+    const ownerType = user.ownerType || "USER";
+    if (ownerType === "USER") await ProfileSocialService.unblock(user.id);
+    else await ProfileSocialService.unblockOwner(ownerType, user.id);
     await syncAfterSocialMutation();
   }
 

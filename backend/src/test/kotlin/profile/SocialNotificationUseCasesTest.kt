@@ -9,6 +9,7 @@ import profile.domain.Notification
 import profile.domain.NotificationServiceCatalog
 import profile.domain.NotificationOutboxItem
 import profile.domain.NotificationPrefs
+import profile.domain.OwnerRef
 import profile.domain.LocalizedNotificationServiceSettings
 import profile.domain.PublishActivityStatus
 import profile.domain.Subscription
@@ -57,7 +58,7 @@ class SocialNotificationUseCasesTest {
         val subscriberId = UUID.randomUUID()
         val privateTargetId = UUID.randomUUID()
         val publicTargetId = UUID.randomUUID()
-        fixtures.privacyRepo.save(PrivacySettings(privateTargetId, isPrivate = true))
+        fixtures.privacyRepo.save(PrivacySettings(userId = privateTargetId, isPrivate = true))
 
         val pending = fixtures.socialUseCases.subscribe(subscriberId, privateTargetId)
         val accepted = fixtures.socialUseCases.subscribe(subscriberId, publicTargetId)
@@ -327,7 +328,7 @@ private class FakeBlockRepository : BlockRepository {
 private class FakePrivacyRepository : PrivacyRepository {
     private val settings = mutableMapOf<UUID, PrivacySettings>()
 
-    override fun get(userId: UUID): PrivacySettings = settings[userId] ?: PrivacySettings(userId)
+    override fun get(userId: UUID): PrivacySettings = settings[userId] ?: PrivacySettings(userId = userId)
 
     override fun save(settings: PrivacySettings) {
         this.settings[settings.userId] = settings
@@ -367,22 +368,24 @@ private class FakeNotificationRepository : NotificationRepository {
 
     override fun notificationTypeExists(serviceKey: String, typeKey: String): Boolean = true
 
-    override fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String): Boolean {
+    override fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String, owner: OwnerRef?): Boolean {
         val prefs = getPrefs(userId)
         return when ("$serviceKey.$typeKey") {
             "content.post_published" -> prefs.inAppPublications
             "content.story_published" -> prefs.inAppNewStories
             "content.author_mention" -> prefs.inAppAuthorMentions
             "content.post_comment" -> prefs.inAppPostComments
-            "account.subscription_request", "account.subscription_accepted" -> prefs.inAppSubscriptions
+            "account.subscription_request", "account.subscription_accepted", "account.organization_invitation" -> prefs.inAppSubscriptions
             "account.birthday_today" -> prefs.inAppBirthdays
             else -> true
         }
     }
 
-    override fun getLocalizedSettings(userId: UUID, locale: String): List<LocalizedNotificationServiceSettings> = emptyList()
+    override fun getLocalizedSettings(userId: UUID, locale: String, owner: OwnerRef?): List<LocalizedNotificationServiceSettings> = emptyList()
 
     override fun savePreference(userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean) = Unit
+
+    override fun saveOwnerPreference(userId: UUID, owner: OwnerRef, serviceKey: String, typeKey: String, enabled: Boolean) = Unit
 }
 
 private class FakeOutboxRepository : NotificationOutboxRepository {

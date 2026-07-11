@@ -19,19 +19,38 @@ fun Route.socialRoutes(
 ) {
     route("/api/profile") {
         post("/{id}/follow") {
-            val uid = requireUserId(call)
+            val actor = activeOwnerRef(call)
             val targetId = UUID.fromString(call.parameters["id"]!!)
-            val sub = socialUseCases.subscribe(uid, targetId)
-            notificationUseCases.createSubscriptionCreatedNotification(sub)
-                ?.let { sseManager.push(sub.subscribedToId.toString(), it) }
-            val rel = socialUseCases.getRelationship(uid, targetId)
+            val target = OwnerRef.user(targetId)
+            val sub = socialUseCases.subscribe(actor, target)
+            if (target.type == OwnerType.USER) {
+                notificationUseCases.createSubscriptionCreatedNotification(sub)
+                    ?.let { sseManager.push(sub.subscribedToId.toString(), it) }
+            }
+            val rel = socialUseCases.getRelationship(actor, target)
             call.respond(rel.toResponse())
         }
 
         delete("/{id}/follow") {
-            val uid = requireUserId(call)
+            val actor = activeOwnerRef(call)
             val targetId = UUID.fromString(call.parameters["id"]!!)
-            socialUseCases.removeSubscription(uid, targetId)
+            socialUseCases.removeSubscription(actor, OwnerRef.user(targetId))
+            call.respond(SuccessResponse())
+        }
+
+        post("/owners/{ownerType}/{ownerId}/follow") {
+            val actor = activeOwnerRef(call)
+            val target = ownerRefFromParameters(call)
+            val sub = socialUseCases.subscribe(actor, target)
+            if (target.type == OwnerType.USER) {
+                notificationUseCases.createSubscriptionCreatedNotification(sub)
+                    ?.let { sseManager.push(sub.subscribedToId.toString(), it) }
+            }
+            call.respond(socialUseCases.getRelationship(actor, target).toResponse())
+        }
+
+        delete("/owners/{ownerType}/{ownerId}/follow") {
+            socialUseCases.removeSubscription(activeOwnerRef(call), ownerRefFromParameters(call))
             call.respond(SuccessResponse())
         }
 
@@ -110,6 +129,16 @@ fun Route.socialRoutes(
             call.respond(SuccessResponse())
         }
 
+        post("/owners/{ownerType}/{ownerId}/block") {
+            socialUseCases.blockOwner(activeOwnerRef(call), ownerRefFromParameters(call))
+            call.respond(SuccessResponse())
+        }
+
+        delete("/owners/{ownerType}/{ownerId}/block") {
+            socialUseCases.unblockOwner(activeOwnerRef(call), ownerRefFromParameters(call))
+            call.respond(SuccessResponse())
+        }
+
         get("/me/blocked") {
             val owner = activeOwnerRef(call)
             val uid = requireUserId(call)
@@ -147,4 +176,12 @@ fun Route.socialRoutes(
         }
     }
 
+}
+
+private fun ownerRefFromParameters(call: ApplicationCall): OwnerRef {
+    val ownerType = runCatching {
+        OwnerType.valueOf(call.parameters["ownerType"].orEmpty().uppercase())
+    }.getOrDefault(OwnerType.USER)
+    val ownerId = call.parameters["ownerId"] ?: throw IllegalArgumentException("ownerId is required")
+    return OwnerRef(ownerType, UUID.fromString(ownerId))
 }

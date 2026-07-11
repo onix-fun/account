@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
 import { useAuthStore } from "@/infra/store";
 import type { Organization, SocialLink } from "@/domain";
+import AvatarCropper from "@/features/avatar/ui/AvatarCropper.vue";
 
 const props = defineProps<{
   organization: Organization;
@@ -18,6 +19,8 @@ const { t } = useI18n();
 const isSaving = ref(false);
 const isUploading = ref(false);
 const avatarInput = ref<HTMLInputElement | null>(null);
+const cropFile = ref<File | null>(null);
+const avatarPreviewUrl = ref<string | null>(null);
 const edit = reactive<{ orgName: string; displayName: string; bio: string; socialLinks: SocialLink[] }>({
   orgName: "",
   displayName: "",
@@ -26,6 +29,7 @@ const edit = reactive<{ orgName: string; displayName: string; bio: string; socia
 });
 
 const canEdit = computed(() => props.organization.role === "OWNER");
+const avatarPreview = computed(() => avatarPreviewUrl.value || props.organization.avatarUrl || "");
 const isDirty = computed(() => (
   edit.orgName.trim() !== props.organization.orgName ||
   edit.displayName.trim() !== props.organization.displayName ||
@@ -43,6 +47,10 @@ watch(
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  revokeAvatarPreview();
+});
 
 function initials(): string {
   return props.organization.displayName.slice(0, 1).toUpperCase();
@@ -82,11 +90,32 @@ async function save() {
   }
 }
 
-async function uploadAvatar(event: Event) {
+function openAvatarPicker() {
+  if (canEdit.value && !isUploading.value) avatarInput.value?.click();
+}
+
+function onAvatarChange(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0] || null;
   input.value = "";
   if (!file || !canEdit.value) return;
+
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    emit("message", t("profile.avatarTypeError"), "error");
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    emit("message", t("profile.avatarSizeError"), "error");
+    return;
+  }
+
+  cropFile.value = file;
+}
+
+async function uploadCroppedAvatar(file: File, previewUrl: string) {
+  revokeAvatarPreview();
+  avatarPreviewUrl.value = previewUrl;
+  cropFile.value = null;
   isUploading.value = true;
   try {
     await authStore.uploadOrganizationAvatar(props.organization.id, file);
@@ -97,32 +126,47 @@ async function uploadAvatar(event: Event) {
     isUploading.value = false;
   }
 }
+
+function revokeAvatarPreview() {
+  if (avatarPreviewUrl.value) URL.revokeObjectURL(avatarPreviewUrl.value);
+  avatarPreviewUrl.value = null;
+}
 </script>
 
 <template>
   <section class="grid gap-4">
-    <input ref="avatarInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" @change="uploadAvatar" />
-
-    <article class="org-overview">
-      <button
-        type="button"
-        class="org-avatar"
-        :disabled="!canEdit || isUploading"
-        :aria-label="t('profile.changePhoto')"
-        @click="avatarInput?.click()"
-      >
-        <img v-if="organization.avatarUrl" :src="organization.avatarUrl" alt="" />
-        <i v-else-if="isUploading" class="pi pi-spinner pi-spin"></i>
-        <span v-else>{{ initials() }}</span>
-      </button>
-      <div class="min-w-0">
-        <h2>{{ organization.displayName }}</h2>
-        <p>{{ organization.orgName }} · {{ organization.role }}</p>
-      </div>
-      <span v-if="organization.role !== 'OWNER'" class="readonly-pill">{{ t("profile.readonly") }}</span>
-    </article>
+    <input ref="avatarInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" @change="onAvatarChange" />
 
     <article class="settings-card">
+      <div class="avatar-row">
+        <button
+          type="button"
+          class="org-avatar"
+          :disabled="!canEdit || isUploading"
+          :aria-label="t('profile.changePhoto')"
+          @click="openAvatarPicker"
+        >
+          <img v-if="avatarPreview" :src="avatarPreview" alt="" />
+          <i v-else-if="isUploading" class="pi pi-spinner pi-spin"></i>
+          <span v-else>{{ initials() }}</span>
+        </button>
+        <div class="min-w-0">
+          <h3>{{ t("profile.changePhoto") }}</h3>
+          <p>{{ t("profile.avatarHint") }}</p>
+        </div>
+        <PButton
+          icon="pi pi-image"
+          :label="t('profile.changePhoto')"
+          severity="secondary"
+          variant="outlined"
+          :loading="isUploading"
+          :disabled="!canEdit"
+          @click="openAvatarPicker"
+        />
+      </div>
+
+      <span v-if="organization.role !== 'OWNER'" class="readonly-pill">{{ t("profile.readonly") }}</span>
+
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="field">
           <span>{{ t("organizations.orgName") }}</span>
@@ -167,18 +211,24 @@ async function uploadAvatar(event: Event) {
       class="justify-self-start"
       @click="save"
     />
+
+    <AvatarCropper
+      v-if="cropFile"
+      :file="cropFile"
+      @cancel="cropFile = null"
+      @apply="uploadCroppedAvatar"
+    />
   </section>
 </template>
 
 <style scoped>
-.org-overview,
 .settings-card {
   border-radius: 18px;
   background: var(--surface);
   padding: 16px;
 }
 
-.org-overview {
+.avatar-row {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) auto;
   align-items: center;
@@ -206,14 +256,12 @@ async function uploadAvatar(event: Event) {
   object-fit: cover;
 }
 
-.org-overview h2,
 .settings-card h3 {
   margin: 0;
   color: var(--text);
   font-weight: 900;
 }
 
-.org-overview p,
 .settings-card p {
   margin: 4px 0 0;
   color: var(--muted);
@@ -248,8 +296,13 @@ async function uploadAvatar(event: Event) {
 }
 
 @media (max-width: 560px) {
-  .org-overview {
+  .avatar-row {
     grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .avatar-row :deep(.p-button) {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .readonly-pill {

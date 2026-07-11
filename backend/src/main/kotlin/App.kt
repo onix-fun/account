@@ -386,6 +386,7 @@ fun Application.module() {
     val searchController by inject<SearchController>()
     val sessionController by inject<SessionController>()
     val organizationController by inject<OrganizationController>()
+    val organizationService by inject<OrganizationService>()
     val dataSource by inject<DataSource>()
     val readinessRedis by inject<RedisManager>()
     val readinessS3 by inject<S3Client>()
@@ -497,7 +498,7 @@ fun Application.module() {
 
             authenticate {
                 organizationRouting(organizationController)
-                searchRoutes(searchService, socialUseCases)
+                searchRoutes(searchService, socialUseCases, organizationService)
                 profileRoutes(userService, socialRepo, privacyRepo, socialUseCases, notificationRepo, birthdayNotificationService)
                 socialRoutes(userService, socialUseCases, notificationUseCases, sseManager)
                 notificationRoutes(userService, notificationUseCases, sseManager)

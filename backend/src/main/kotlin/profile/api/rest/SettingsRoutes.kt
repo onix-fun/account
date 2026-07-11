@@ -8,6 +8,7 @@ import profile.domain.*
 import profile.infrastructure.*
 import profile.usecases.*
 import profile.users.UserService
+import java.util.UUID
 
 fun Route.settingsRoutes(
     socialUseCases: SocialUseCases,
@@ -37,15 +38,28 @@ fun Route.settingsRoutes(
             val uid = requireUserId(call)
             val locale = userService.getProfile(uid.toString())?.preferredLocale
                 ?: call.request.headers["Accept-Language"].orEmpty()
+            val owner = call.request.queryParameters["ownerId"]?.takeIf(String::isNotBlank)?.let { ownerId ->
+                OwnerRef(
+                    type = runCatching { OwnerType.valueOf(call.request.queryParameters["ownerType"].orEmpty()) }.getOrDefault(OwnerType.ORGANIZATION),
+                    id = UUID.fromString(ownerId)
+                )
+            }
             call.respond(NotificationSettingsResponse(
-                services = notificationUseCases.getLocalizedSettings(uid, locale).map { it.toResponse() }
+                services = notificationUseCases.getLocalizedSettings(uid, locale, owner).map { it.toResponse() }
             ))
         }
 
         put("/settings") {
             val uid = requireUserId(call)
             val body = call.receive<NotificationPreferenceUpdateRequest>()
-            notificationUseCases.savePreference(uid, body.serviceKey, body.typeKey, body.enabled)
+            val owner = body.ownerId?.takeIf(String::isNotBlank)?.let { ownerId ->
+                OwnerRef(
+                    type = runCatching { OwnerType.valueOf(body.ownerType.orEmpty()) }.getOrDefault(OwnerType.ORGANIZATION),
+                    id = UUID.fromString(ownerId)
+                )
+            }
+            if (owner != null) notificationUseCases.saveOwnerPreference(uid, owner, body.serviceKey, body.typeKey, body.enabled)
+            else notificationUseCases.savePreference(uid, body.serviceKey, body.typeKey, body.enabled)
             call.respond(SuccessResponse())
         }
 

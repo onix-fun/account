@@ -114,6 +114,10 @@ private fun normalizedMetadata(n: Notification): NotificationMetadataResponse {
                         val targetUserId = action["targetUserId"]?.jsonPrimitive?.contentOrNull ?: return@forEach
                         actions.add(NotificationActionResponse(kind = kind, targetUserId = targetUserId))
                     }
+                    "accept_organization_invitation", "decline_organization_invitation" -> {
+                        val invitationId = action["invitationId"]?.jsonPrimitive?.contentOrNull ?: return@forEach
+                        actions.add(NotificationActionResponse(kind = kind, invitationId = invitationId))
+                    }
                     "open_url" -> {
                         val actionHref = action["href"]?.jsonPrimitive?.contentOrNull ?: return@forEach
                         actions.add(NotificationActionResponse(kind = kind, href = actionHref))
@@ -123,7 +127,7 @@ private fun normalizedMetadata(n: Notification): NotificationMetadataResponse {
         }
     }
 
-    if (n.type == "subscription_request" && n.actorId != null) {
+    if (n.typeKey == "subscription_request" && n.actorId != null) {
         val targetUserId = n.actorId.toString()
         if (actions.none { it.kind == "accept_follow" && it.targetUserId == targetUserId }) {
             actions.add(NotificationActionResponse(kind = "accept_follow", targetUserId = targetUserId))

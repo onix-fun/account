@@ -2,6 +2,7 @@ package profile.infrastructure
 
 import org.slf4j.LoggerFactory
 import profile.domain.NotificationOutboxItem
+import profile.domain.OwnerRef
 import profile.usecases.BlockRepository
 import profile.usecases.NotificationOutboxProcessor
 import profile.usecases.NotificationUseCases
@@ -39,14 +40,15 @@ class NotificationOutboxWorker(
     internal fun processBatch(): Int = outboxRepo.processPending(limit = 25, handler = ::fanOut)
 
     private fun fanOut(item: NotificationOutboxItem) {
+        val actor = OwnerRef(item.event.actorType, item.event.actorId)
         var page = 1
         val limit = 250
         while (true) {
-            val (followers, total) = socialUseCases.getFollowers(item.event.actorId, page, limit)
+            val (followers, total) = socialUseCases.getFollowers(actor, page, limit)
             followers
                 .asSequence()
                 .map { it.subscriberId }
-                .filterNot { recipientId -> blockRepo.isBlockedEither(item.event.actorId, recipientId) }
+                .filterNot { recipientId -> blockRepo.isBlockedEither(actor, OwnerRef.user(recipientId)) }
                 .forEach { recipientId ->
                     val notification = notificationUseCases.createActivityNotification(item.event, recipientId)
                     if (notification != null) sseManager.push(recipientId.toString(), notification)

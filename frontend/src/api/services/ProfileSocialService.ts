@@ -2,10 +2,13 @@ import { profileClient } from "@/api/client";
 
 export interface PublicUser {
   id: string;
+  ownerType?: "USER" | "ORGANIZATION";
   username: string;
+  displayName?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   avatarUrl?: string | null;
+  bio?: string | null;
   birthday?: BirthdayParts | null;
   socialLinks?: SocialLink[];
 }
@@ -30,6 +33,7 @@ export interface Relationship {
 
 export interface RelatedUser extends PublicUser {
   relationship?: Relationship;
+  organizationMembershipState?: "NONE" | "INVITED" | "MEMBER" | null;
 }
 
 export interface ProfileSummary extends PublicUser {
@@ -103,6 +107,8 @@ export interface NotificationSettings {
 export type NotificationAction =
   | { kind: "accept_follow"; targetUserId: string }
   | { kind: "reject_follow"; targetUserId: string }
+  | { kind: "accept_organization_invitation"; invitationId: string }
+  | { kind: "decline_organization_invitation"; invitationId: string }
   | { kind: "open_url"; href: string };
 
 export interface NotificationMetadata {
@@ -115,10 +121,15 @@ export interface NotificationMetadata {
 export interface NotificationItem {
   id: string;
   type: string;
+  typeKey?: string;
   title: string;
   body: string;
   isRead: boolean;
   actorId?: string | null;
+  sourceOwnerType?: "USER" | "ORGANIZATION" | null;
+  sourceOwnerId?: string | null;
+  targetOwnerType?: "USER" | "ORGANIZATION" | null;
+  targetOwnerId?: string | null;
   entityType?: string | null;
   entityId?: string | null;
   metadataJson?: string;
@@ -141,6 +152,12 @@ function normalizeAction(value: unknown): NotificationAction | null {
   }
   if (value.kind === "reject_follow" && typeof value.targetUserId === "string") {
     return { kind: "reject_follow", targetUserId: value.targetUserId };
+  }
+  if (value.kind === "accept_organization_invitation" && typeof value.invitationId === "string") {
+    return { kind: "accept_organization_invitation", invitationId: value.invitationId };
+  }
+  if (value.kind === "decline_organization_invitation" && typeof value.invitationId === "string") {
+    return { kind: "decline_organization_invitation", invitationId: value.invitationId };
   }
   if (value.kind === "open_url" && typeof value.href === "string") {
     return { kind: "open_url", href: value.href };
@@ -200,16 +217,33 @@ export class ProfileSocialService {
     return response.data;
   }
 
+  static async followOwner(ownerType: "USER" | "ORGANIZATION", ownerId: string): Promise<Relationship> {
+    const response = await profileClient.post<Relationship>(`/profile/owners/${ownerType}/${ownerId}/follow`);
+    return response.data;
+  }
+
   static async unfollow(userId: string): Promise<void> {
     await profileClient.delete(`/profile/${userId}/follow`);
+  }
+
+  static async unfollowOwner(ownerType: "USER" | "ORGANIZATION", ownerId: string): Promise<void> {
+    await profileClient.delete(`/profile/owners/${ownerType}/${ownerId}/follow`);
   }
 
   static async block(userId: string): Promise<void> {
     await profileClient.post(`/profile/${userId}/block`);
   }
 
+  static async blockOwner(ownerType: "USER" | "ORGANIZATION", ownerId: string): Promise<void> {
+    await profileClient.post(`/profile/owners/${ownerType}/${ownerId}/block`);
+  }
+
   static async unblock(userId: string): Promise<void> {
     await profileClient.delete(`/profile/${userId}/block`);
+  }
+
+  static async unblockOwner(ownerType: "USER" | "ORGANIZATION", ownerId: string): Promise<void> {
+    await profileClient.delete(`/profile/owners/${ownerType}/${ownerId}/block`);
   }
 
   static async getRequests(page = 1, limit = 20): Promise<Page<SubscriptionRequest>> {
@@ -257,13 +291,15 @@ export class ProfileSocialService {
     return response.data;
   }
 
-  static async getNotificationSettings(): Promise<NotificationSettings> {
-    const response = await profileClient.get<NotificationSettings>("/notifications/settings");
+  static async getNotificationSettings(owner?: { ownerType: "USER" | "ORGANIZATION"; ownerId: string } | null): Promise<NotificationSettings> {
+    const response = await profileClient.get<NotificationSettings>("/notifications/settings", {
+      params: owner ? { ownerType: owner.ownerType, ownerId: owner.ownerId } : undefined,
+    });
     return response.data;
   }
 
-  static async updateNotificationSetting(serviceKey: string, typeKey: string, enabled: boolean): Promise<void> {
-    await profileClient.put("/notifications/settings", { serviceKey, typeKey, enabled });
+  static async updateNotificationSetting(serviceKey: string, typeKey: string, enabled: boolean, owner?: { ownerType: "USER" | "ORGANIZATION"; ownerId: string } | null): Promise<void> {
+    await profileClient.put("/notifications/settings", { serviceKey, typeKey, enabled, ownerType: owner?.ownerType, ownerId: owner?.ownerId });
   }
 
   static async updateNotificationPrefs(prefs: NotificationPrefs): Promise<void> {

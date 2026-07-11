@@ -3,8 +3,10 @@ package profile.organizations
 import profile.domain.*
 import profile.infrastructure.db.OrganizationRepository
 import profile.infrastructure.db.UserRepository
+import profile.infrastructure.SseManager
 import profile.infrastructure.storage.AvatarProcessor
 import profile.infrastructure.storage.S3Client
+import profile.usecases.NotificationUseCases
 import profile.users.toPublicDto
 import java.net.URI
 import java.util.UUID
@@ -12,7 +14,9 @@ import java.util.UUID
 class OrganizationService(
     private val organizationRepository: OrganizationRepository,
     private val userRepository: UserRepository,
-    private val s3Client: S3Client
+    private val s3Client: S3Client,
+    private val notificationUseCases: NotificationUseCases,
+    private val sseManager: SseManager
 ) {
     fun create(userId: String, request: CreateOrganizationRequest): OrganizationDto {
         val orgName = normalizeOrgName(request.orgName)
@@ -130,7 +134,10 @@ class OrganizationService(
                 role = role
             )
         )
-        return invitation.toDto()
+        val dto = invitation.toDto()
+        notificationUseCases.createOrganizationInvitationNotification(invitation, dto.organization)
+            ?.let { sseManager.push(invitation.invitedUserId, it) }
+        return dto
     }
 
     fun pendingInvitations(userId: String): List<OrganizationInvitationDto> =
@@ -205,6 +212,13 @@ class OrganizationService(
 
     fun role(userId: String, orgId: String): OrganizationRole? =
         organizationRepository.member(orgId, userId)?.role
+
+    fun membershipState(orgId: String, userId: String): String =
+        when {
+            organizationRepository.member(orgId, userId) != null -> "MEMBER"
+            organizationRepository.pendingInvitation(orgId, userId) != null -> "INVITED"
+            else -> "NONE"
+        }
 
     private fun requireInvitation(userId: String, invitationId: String): OrganizationInvitation {
         val invitation = organizationRepository.findInvitation(invitationId)

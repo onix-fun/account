@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
 import { ProfileSocialService, type PublicUser, type RelatedUser } from "@/api/services/ProfileSocialService";
-import { useProfileSocialStore } from "@/infra/store";
+import { useAuthStore, useProfileSocialStore } from "@/infra/store";
 import ProfileUserRow from "@/features/profile/ui/ProfileUserRow.vue";
 
 const props = withDefaults(defineProps<{
@@ -23,6 +23,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const authStore = useAuthStore();
 const socialStore = useProfileSocialStore();
 const query = ref("");
 const results = ref<RelatedUser[]>([]);
@@ -38,6 +39,8 @@ const title = computed(() => props.mode === "close-friends"
     : t("social.searchUsers"));
 
 const emptyText = computed(() => query.value.trim().length < 2 ? t("social.searchHint") : t("social.noUsersFound"));
+const isOrganizationMode = computed(() => authStore.activeOwner?.ownerType === "ORGANIZATION");
+const activeOrganizationId = computed(() => isOrganizationMode.value ? authStore.activeOwner?.ownerId || "" : "");
 
 watch(
   () => props.visible,
@@ -96,112 +99,157 @@ async function runAction(user: PublicUser, action: () => Promise<void>, successK
     busyUserId.value = null;
   }
 }
+
+async function inviteUser(user: PublicUser, role: "OWNER" | "CONTRIBUTOR") {
+  if (!activeOrganizationId.value || (user.ownerType || "USER") !== "USER") return;
+  busyUserId.value = user.id;
+  try {
+    await authStore.inviteOrganizationMember(activeOrganizationId.value, { userId: user.id, role });
+    emit("message", t("organizations.invited"));
+    await search(query.value);
+  } catch (cause) {
+    emit("message", apiErrorMessage(cause), "error");
+  } finally {
+    busyUserId.value = null;
+  }
+}
 </script>
 
 <template>
-  <section v-if="page && visible" class="grid gap-3">
-    <header class="grid gap-3">
-      <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="emit('close')" />
-      <div class="flex items-center gap-3 px-1">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
-          <i class="pi pi-search"></i>
+  <section v-if="visible" class="search-surface" :class="{ 'search-surface--overlay': !page }">
+    <div class="search-inner">
+      <header class="search-header">
+        <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2" @click="emit('close')" />
+        <div class="search-title">
+          <span><i class="pi pi-search"></i></span>
+          <div class="min-w-0">
+            <h2>{{ title }}</h2>
+            <p>{{ isOrganizationMode ? t("organizations.inviteHint") : t("social.searchShortcutStyle") }}</p>
+          </div>
         </div>
-        <div class="min-w-0 flex-1">
-          <h2 class="m-0 text-base font-bold text-[var(--text)]">{{ title }}</h2>
-          <p class="m-0 text-xs text-[var(--muted)]">{{ t("social.searchShortcutStyle") }}</p>
-        </div>
-      </div>
-    </header>
+      </header>
 
-    <div class="relative">
       <PInputText
         ref="searchInput"
         v-model="query"
-        class="w-full"
+        class="search-input"
         :placeholder="t('social.searchPlaceholder')"
         autocomplete="off"
         @keydown.esc="emit('close')"
       />
-    </div>
 
-    <div class="grid gap-1.5 overflow-y-auto pr-1">
-      <div v-if="isSearching" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
-        <i class="pi pi-spinner pi-spin mr-2"></i>{{ t("common.loading") }}
-      </div>
-      <div v-else-if="!results.length" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
-        {{ emptyText }}
-      </div>
-      <ProfileUserRow
-        v-for="user in results"
-        v-else
-        :key="user.id"
-        :user="user"
-        :relationship="user.relationship"
-        :mode="mode === 'close-friends' ? 'close-add' : 'default'"
-        :busy="busyUserId === user.id"
-        @follow="(target) => runAction(target, () => socialStore.follow(target).then(() => undefined), 'social.followActionDone')"
-        @unfollow="(target) => runAction(target, () => socialStore.unfollow(target), 'social.unfollowActionDone')"
-        @block="(target) => runAction(target, () => socialStore.block(target), 'social.blockActionDone')"
-        @unblock="(target) => runAction(target, () => socialStore.unblock(target), 'social.unblockActionDone')"
-        @add-close="(target) => runAction(target, () => socialStore.addCloseFriend(target), 'social.closeFriendAdded')"
-      />
-    </div>
-  </section>
-
-  <PDialog
-    v-else
-    :visible="visible"
-    modal
-    dismissable-mask
-    :show-header="false"
-    class="mobile-fullscreen-dialog w-[min(720px,calc(100vw-24px))]"
-    @update:visible="emit('close')"
-  >
-    <section class="grid gap-3 p-2 sm:p-3">
-      <header class="flex items-center gap-3 px-1">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
-          <i class="pi pi-search"></i>
-        </div>
-        <div class="min-w-0 flex-1">
-          <h2 class="m-0 text-base font-bold text-[var(--text)]">{{ title }}</h2>
-          <p class="m-0 text-xs text-[var(--muted)]">{{ t("social.searchShortcutStyle") }}</p>
-        </div>
-        <PButton icon="pi pi-times" variant="text" severity="secondary" class="w-9 h-9" :aria-label="t('common.close')" @click="emit('close')" />
-      </header>
-
-      <div class="relative">
-        <PInputText
-          ref="searchInput"
-          v-model="query"
-          class="w-full"
-          :placeholder="t('social.searchPlaceholder')"
-          autocomplete="off"
-          @keydown.esc="emit('close')"
-        />
-      </div>
-
-      <div class="grid gap-1.5 max-h-[55vh] overflow-y-auto pr-1">
-        <div v-if="isSearching" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
+      <div class="search-results">
+        <div v-if="isSearching" class="search-state">
           <i class="pi pi-spinner pi-spin mr-2"></i>{{ t("common.loading") }}
         </div>
-        <div v-else-if="!results.length" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
+        <div v-else-if="!results.length" class="search-state">
           {{ emptyText }}
         </div>
         <ProfileUserRow
           v-for="user in results"
           v-else
-          :key="user.id"
+          :key="`${user.ownerType || 'USER'}:${user.id}`"
           :user="user"
           :relationship="user.relationship"
           :mode="mode === 'close-friends' ? 'close-add' : 'default'"
+          :show-invite="isOrganizationMode && (user.ownerType || 'USER') === 'USER'"
+          :membership-state="user.organizationMembershipState"
           :busy="busyUserId === user.id"
           @follow="(target) => runAction(target, () => socialStore.follow(target).then(() => undefined), 'social.followActionDone')"
           @unfollow="(target) => runAction(target, () => socialStore.unfollow(target), 'social.unfollowActionDone')"
           @block="(target) => runAction(target, () => socialStore.block(target), 'social.blockActionDone')"
           @unblock="(target) => runAction(target, () => socialStore.unblock(target), 'social.unblockActionDone')"
           @add-close="(target) => runAction(target, () => socialStore.addCloseFriend(target), 'social.closeFriendAdded')"
+          @invite="inviteUser"
         />
       </div>
-    </section>
-  </PDialog>
+    </div>
+  </section>
 </template>
+
+<style scoped>
+.search-surface {
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+.search-surface--overlay {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+}
+
+.search-inner {
+  width: min(920px, calc(100% - 28px));
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(18px, env(safe-area-inset-top)) 0 24px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.search-header {
+  display: grid;
+  gap: 10px;
+}
+
+.search-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-title > span {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.search-title h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.search-title p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.search-input {
+  width: 100%;
+}
+
+.search-results {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.search-state {
+  min-height: 180px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+  font-size: 14px;
+  font-weight: 700;
+}
+</style>

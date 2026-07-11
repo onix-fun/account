@@ -16,7 +16,6 @@ import BlockedUsersTab from "@/features/profile/ui/BlockedUsersTab.vue";
 import CloseFriendsTab from "@/features/profile/ui/CloseFriendsTab.vue";
 import NotificationsPage from "@/features/profile/ui/NotificationsPage.vue";
 import OrganizationAdminLayout, { type OrganizationAdminTab } from "@/features/profile/ui/OrganizationAdminLayout.vue";
-import OrganizationInvites from "@/features/profile/ui/OrganizationInvites.vue";
 import OrganizationMembers from "@/features/profile/ui/OrganizationMembers.vue";
 import OrganizationProfileSettings from "@/features/profile/ui/OrganizationProfileSettings.vue";
 import OrganizationSelectorScreen from "@/features/profile/ui/OrganizationSelectorScreen.vue";
@@ -25,7 +24,6 @@ import ProfileMobileMenu from "@/features/profile/ui/ProfileMobileMenu.vue";
 import ProfileNav, { type ProfileTab } from "@/features/profile/ui/ProfileNav.vue";
 import ProfileSearchOverlay from "@/features/profile/ui/ProfileSearchOverlay.vue";
 import ProfileTopCard from "@/features/profile/ui/ProfileTopCard.vue";
-import RequestsTab from "@/features/profile/ui/RequestsTab.vue";
 import SessionsTab from "@/features/sessions/ui/SessionsTab.vue";
 import SocialSettingsTab from "@/features/profile/ui/SocialSettingsTab.vue";
 import SystemTab from "@/features/profile/ui/SystemTab.vue";
@@ -49,7 +47,6 @@ const isSavingProfile = ref(false);
 const isUploadingAvatar = ref(false);
 const isAccountModalOpen = ref(false);
 const isOrganizationSelectorOpen = ref(false);
-const isSearchOpen = ref(false);
 const selectedOrganizationId = ref<string | null>(null);
 const cropFile = ref<File | null>(null);
 const avatarPreviewUrl = ref<string | null>(null);
@@ -77,17 +74,21 @@ const editingFields = reactive<Record<EditableProfileField, boolean>>({
 
 const backUrl = computed(() => trustedRedirectUrl(route.query.redirect));
 const avatarPreview = computed(() => avatarPreviewUrl.value || authStore.currentUser?.avatarUrl || "");
-const showRequests = computed(() => socialStore.privacy.isPrivate);
 const selectedOrganization = computed<Organization | null>(() => {
   const activeOrgId = authStore.activeOwner?.ownerType === "ORGANIZATION" ? authStore.activeOwner.ownerId : null;
   const id = selectedOrganizationId.value || activeOrgId;
   return authStore.organizations.find((organization) => organization.id === id) || null;
 });
+const selectedOrganizationNotificationOwner = computed(() => selectedOrganization.value
+  ? { ownerType: "ORGANIZATION" as const, ownerId: selectedOrganization.value.id }
+  : null
+);
 const queryView = computed<ProfileView | null>(() => {
   const value = route.query.view;
   return isProfileView(value) ? value : null;
 });
 const contentView = computed<ProfileView>(() => queryView.value ?? activeTab.value);
+const hideAccountHeader = computed(() => contentView.value === "notifications" || contentView.value === "search");
 const showExternalBack = computed(() => Boolean(backUrl.value) && !queryView.value);
 const showOrganizationSelector = computed(() => !queryView.value && accountMode.value === "organization" && (isOrganizationSelectorOpen.value || !selectedOrganization.value));
 const isProfileDirty = computed(() => {
@@ -159,11 +160,6 @@ watch(queryView, (view) => {
   if (view === "following") socialStore.loadFollowing().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
   if (view === "notifications") socialStore.loadNotifications().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
 }, { immediate: true });
-watch(showRequests, (enabled) => {
-  if (enabled) return;
-  if (activeTab.value === "requests") activeTab.value = "profile";
-  if (queryView.value === "requests") closeView();
-});
 
 onMounted(async () => {
   await Promise.allSettled([
@@ -214,7 +210,6 @@ function closeView() {
 function isProfileView(value: unknown): value is ProfileView {
   return (
     value === "profile" ||
-    value === "requests" ||
     value === "close" ||
     value === "blocked" ||
     value === "settings" ||
@@ -354,6 +349,7 @@ function revokeAvatarPreview() {
 <template>
   <main class="w-full max-w-[940px] mx-auto px-4 py-10 sm:py-16 grid gap-6">
     <AccountHeader
+      v-if="!hideAccountHeader"
       :mode="accountMode"
       :user="authStore.currentUser"
       :summary="socialStore.summary"
@@ -362,7 +358,7 @@ function revokeAvatarPreview() {
       @organization-mode="openOrganizationMode"
       @account="isAccountModalOpen = true"
       @notifications="openView('notifications')"
-      @search="isSearchOpen = true"
+      @search="openView('search')"
     />
 
     <ProfileTopCard
@@ -396,9 +392,9 @@ function revokeAvatarPreview() {
       :class="queryView || accountMode === 'organization' ? 'max-w-[720px] w-full mx-auto' : 'lg:grid-cols-[52px_minmax(0,720px)]'"
     >
       <div v-if="!queryView && accountMode === 'user'" class="hidden lg:block">
-        <ProfileNav v-model:active-tab="activeTab" :show-requests="showRequests" @search="isSearchOpen = true" />
+        <ProfileNav v-model:active-tab="activeTab" />
       </div>
-      <ProfileMobileMenu v-if="!queryView && accountMode === 'user'" :show-requests="showRequests" @search="openView('search')" @open-view="openView" />
+      <ProfileMobileMenu v-if="!queryView && accountMode === 'user'" @open-view="openView" />
 
       <div class="min-w-0" :class="{ 'hidden lg:block': !queryView && accountMode === 'user' }">
         <section v-if="!queryView && accountMode === 'organization'" class="grid gap-4">
@@ -420,12 +416,10 @@ function revokeAvatarPreview() {
                   <PButton :label="t('social.following')" icon="pi pi-user-plus" severity="secondary" variant="outlined" @click="openView('following')" />
                 </div>
               </article>
-              <SocialSettingsTab @message="setMessage" />
+              <SocialSettingsTab :notification-owner="selectedOrganizationNotificationOwner" @message="setMessage" />
             </section>
             <BlockedUsersTab v-else-if="activeOrganizationTab === 'blocked'" @message="setMessage" />
-            <NotificationsPage v-else-if="activeOrganizationTab === 'notifications'" @back="activeOrganizationTab = 'profile'" @message="setMessage" />
             <OrganizationMembers v-else-if="activeOrganizationTab === 'members'" :organization="selectedOrganization" @message="setMessage" />
-            <OrganizationInvites v-else @message="setMessage" />
           </OrganizationAdminLayout>
         </section>
 
@@ -576,11 +570,6 @@ function revokeAvatarPreview() {
           </form>
         </section>
 
-        <section v-else-if="contentView === 'requests'" class="grid gap-4">
-          <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
-          <RequestsTab @message="setMessage" />
-        </section>
-
         <section v-else-if="contentView === 'close'" class="grid gap-4">
           <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
           <CloseFriendsTab @message="setMessage" />
@@ -608,11 +597,6 @@ function revokeAvatarPreview() {
       </div>
     </div>
 
-    <ProfileSearchOverlay
-      :visible="isSearchOpen"
-      @close="isSearchOpen = false"
-      @message="setMessage"
-    />
     <AccountSwitchModal :visible="isAccountModalOpen" @close="isAccountModalOpen = false" />
     <AvatarCropper
       v-if="cropFile"

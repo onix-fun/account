@@ -38,10 +38,14 @@ data class InternalSocialGraphResponse(
 @Serializable
 data class PublicUserRelationshipResponse(
     val id: String,
+    val ownerType: String = "USER",
     val username: String,
+    val displayName: String? = null,
     val firstName: String? = null,
     val lastName: String? = null,
     val avatarUrl: String? = null,
+    val bio: String? = null,
+    val organizationMembershipState: String? = null,
     val relationship: RelationshipResponse? = null
 )
 
@@ -162,7 +166,9 @@ data class NotificationTypeSettingsResponse(
 data class NotificationPreferenceUpdateRequest(
     val serviceKey: String,
     val typeKey: String,
-    val enabled: Boolean
+    val enabled: Boolean,
+    val ownerType: String? = null,
+    val ownerId: String? = null
 )
 
 @Serializable
@@ -181,6 +187,10 @@ data class NotificationResponse(
     val body: String,
     val isRead: Boolean,
     val actorId: String? = null,
+    val sourceOwnerType: String? = null,
+    val sourceOwnerId: String? = null,
+    val targetOwnerType: String? = null,
+    val targetOwnerId: String? = null,
     val entityType: String? = null,
     val entityId: String? = null,
     val metadataJson: String,
@@ -200,6 +210,7 @@ data class NotificationMetadataResponse(
 data class NotificationActionResponse(
     val kind: String,
     val targetUserId: String? = null,
+    val invitationId: String? = null,
     val href: String? = null
 )
 
@@ -213,10 +224,13 @@ fun Relationship.toResponse() = RelationshipResponse(
 
 fun UserPublicDto.withRelationship(relationship: RelationshipResponse? = null) = PublicUserRelationshipResponse(
     id = id,
+    ownerType = "USER",
     username = username,
+    displayName = listOfNotNull(firstName, lastName).joinToString(" ").ifBlank { username },
     firstName = firstName,
     lastName = lastName,
     avatarUrl = avatarUrl,
+    bio = bio,
     relationship = relationship
 )
 
@@ -270,6 +284,10 @@ fun Notification.toResponse(metadata: NotificationMetadataResponse) = Notificati
     body = body,
     isRead = isRead,
     actorId = actorId?.toString(),
+    sourceOwnerType = sourceOwner?.type?.name,
+    sourceOwnerId = sourceOwner?.id?.toString(),
+    targetOwnerType = targetOwner?.type?.name,
+    targetOwnerId = targetOwner?.id?.toString(),
     entityType = entityType,
     entityId = entityId,
     metadataJson = metadataJson,

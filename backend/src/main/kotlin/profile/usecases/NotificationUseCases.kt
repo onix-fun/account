@@ -16,9 +16,10 @@ interface NotificationRepository {
     fun registerCatalog(catalog: NotificationServiceCatalog)
     fun activateServiceForUser(userId: UUID, serviceKey: String)
     fun notificationTypeExists(serviceKey: String, typeKey: String): Boolean
-    fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String): Boolean
-    fun getLocalizedSettings(userId: UUID, locale: String): List<LocalizedNotificationServiceSettings>
+    fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String, owner: OwnerRef? = null): Boolean
+    fun getLocalizedSettings(userId: UUID, locale: String, owner: OwnerRef? = null): List<LocalizedNotificationServiceSettings>
     fun savePreference(userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean)
+    fun saveOwnerPreference(userId: UUID, owner: OwnerRef, serviceKey: String, typeKey: String, enabled: Boolean)
 }
 
 interface NotificationOutboxRepository {
@@ -41,6 +42,8 @@ class NotificationUseCases(
         title: String,
         body: String,
         actorId: UUID? = null,
+        sourceOwner: OwnerRef? = actorId?.let { OwnerRef.user(it) },
+        targetOwner: OwnerRef? = null,
         entityType: String? = null,
         entityId: String? = null,
         metadataJson: String = "{}"
@@ -50,7 +53,7 @@ class NotificationUseCases(
         val typeKey = scopedType(type)
         if (repo.notificationTypeExists(serviceKey, typeKey)) {
             repo.activateServiceForUser(recipientId, serviceKey)
-            if (!repo.notificationTypeEnabled(recipientId, serviceKey, typeKey)) return null
+            if (!repo.notificationTypeEnabled(recipientId, serviceKey, typeKey, notificationPreferenceOwner(sourceOwner, targetOwner))) return null
         }
 
         val notif = Notification(
@@ -59,6 +62,8 @@ class NotificationUseCases(
             typeKey = typeKey,
             title = title, body = body,
             metadataJson = metadataJson, actorId = actorId, entityType = entityType,
+            sourceOwner = sourceOwner,
+            targetOwner = targetOwner,
             entityId = entityId, sourceEventId = eventId.ifBlank { null }, createdAt = Instant.now()
         )
         repo.save(notif)
@@ -83,13 +88,16 @@ class NotificationUseCases(
 
     fun activateServiceForUser(userId: UUID, serviceKey: String) = repo.activateServiceForUser(userId, serviceKey)
 
-    fun getLocalizedSettings(userId: UUID, locale: String): List<LocalizedNotificationServiceSettings> {
+    fun getLocalizedSettings(userId: UUID, locale: String, owner: OwnerRef? = null): List<LocalizedNotificationServiceSettings> {
         repo.activateServiceForUser(userId, "account")
-        return repo.getLocalizedSettings(userId, locale)
+        return repo.getLocalizedSettings(userId, locale, owner)
     }
 
     fun savePreference(userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean) =
         repo.savePreference(userId, serviceKey, typeKey, enabled)
+
+    fun saveOwnerPreference(userId: UUID, owner: OwnerRef, serviceKey: String, typeKey: String, enabled: Boolean) =
+        repo.saveOwnerPreference(userId, owner, serviceKey, typeKey, enabled)
 
     fun sendToUser(
         sourceEventId: String,
@@ -99,6 +107,8 @@ class NotificationUseCases(
         title: LocalizedText,
         body: LocalizedText,
         actorId: UUID? = null,
+        sourceOwner: OwnerRef? = actorId?.let { OwnerRef.user(it) },
+        targetOwner: OwnerRef? = null,
         entityType: String? = null,
         entityId: String? = null,
         metadataJson: String = "{}"
@@ -109,7 +119,7 @@ class NotificationUseCases(
         require(repo.notificationTypeExists(serviceKey, typeKey)) { "notification type is not registered" }
         if (repo.existsBySourceEventId(sourceEventId)) return null
         repo.activateServiceForUser(recipientId, serviceKey)
-        if (!repo.notificationTypeEnabled(recipientId, serviceKey, typeKey)) return null
+        if (!repo.notificationTypeEnabled(recipientId, serviceKey, typeKey, notificationPreferenceOwner(sourceOwner, targetOwner))) return null
         val notif = Notification(
             recipientId = recipientId,
             type = scopedTypeName(serviceKey, typeKey),
@@ -121,6 +131,8 @@ class NotificationUseCases(
             bodyI18nJson = localizedJson(body),
             metadataJson = metadataJson.ifBlank { "{}" },
             actorId = actorId,
+            sourceOwner = sourceOwner,
+            targetOwner = targetOwner,
             entityType = entityType,
             entityId = entityId,
             sourceEventId = sourceEventId,
@@ -136,12 +148,14 @@ class NotificationUseCases(
         activityType: UserActivityType,
         entityType: String?,
         entityId: String?,
-        metadataJson: String
+        metadataJson: String,
+        actorType: OwnerType = OwnerType.USER
     ): PublishActivityResult {
         require(sourceEventId.isNotBlank()) { "source_event_id is required" }
         val event = UserActivityEvent(
             sourceEventId = sourceEventId,
             actorId = actorId,
+            actorType = actorType,
             activityType = activityType,
             entityType = entityType?.takeIf { it.isNotBlank() },
             entityId = entityId?.takeIf { it.isNotBlank() },
@@ -164,6 +178,8 @@ class NotificationUseCases(
             title = copy.title,
             body = copy.body,
             actorId = event.actorId,
+            sourceOwner = OwnerRef(event.actorType, event.actorId),
+            targetOwner = OwnerRef(event.actorType, event.actorId),
             entityType = event.entityType,
             entityId = event.entityId,
             metadataJson = event.metadataJson
@@ -184,7 +200,9 @@ class NotificationUseCases(
             title = if (pending) "New subscription request" else "New subscriber",
             body = if (pending) "Someone wants to subscribe to you" else "Someone subscribed to you",
             actorId = sub.subscriberId,
-            entityType = "user",
+            sourceOwner = OwnerRef(sub.subscriberType, sub.subscriberId),
+            targetOwner = OwnerRef(sub.subscribedToType, sub.subscribedToId),
+            entityType = sub.subscriberType.name.lowercase(),
             entityId = sub.subscriberId.toString(),
             metadataJson = metadataJson
         )
@@ -198,8 +216,30 @@ class NotificationUseCases(
             title = "Request accepted",
             body = "Your subscription request was accepted",
             actorId = sub.subscribedToId,
-            entityType = "user",
+            sourceOwner = OwnerRef(sub.subscribedToType, sub.subscribedToId),
+            targetOwner = OwnerRef(sub.subscriberType, sub.subscriberId),
+            entityType = sub.subscribedToType.name.lowercase(),
             entityId = sub.subscribedToId.toString()
+        )
+    }
+
+    fun createOrganizationInvitationNotification(
+        invitation: OrganizationInvitation,
+        organization: OrganizationDto
+    ): Notification? {
+        val organizationOwner = OwnerRef.organization(UUID.fromString(invitation.organizationId))
+        return createFromEvent(
+            eventId = "organization.invitation:${invitation.id}",
+            recipientId = UUID.fromString(invitation.invitedUserId),
+            type = "account.organization_invitation",
+            title = "Organization invitation",
+            body = "You were invited to ${organization.displayName}",
+            actorId = UUID.fromString(invitation.invitedByUserId),
+            sourceOwner = organizationOwner,
+            targetOwner = organizationOwner,
+            entityType = "organization",
+            entityId = invitation.organizationId,
+            metadataJson = """{"titleKey":"organizationInvitation","bodyKey":"organizationInvitation","organizationName":${jsonString(organization.displayName)},"organizationUsername":${jsonString(organization.orgName)},"role":${jsonString(invitation.role.name)},"actions":[{"kind":"accept_organization_invitation","invitationId":"${invitation.id}"},{"kind":"decline_organization_invitation","invitationId":"${invitation.id}"}]}"""
         )
     }
 
@@ -211,6 +251,8 @@ class NotificationUseCases(
             title = "Birthday today",
             body = "Someone you follow has a birthday today",
             actorId = birthdayUserId,
+            sourceOwner = OwnerRef.user(birthdayUserId),
+            targetOwner = OwnerRef.user(recipientId),
             entityType = "user",
             entityId = birthdayUserId.toString(),
             metadataJson = """{"titleKey":"birthdayToday","bodyKey":"birthdayToday"}"""
@@ -256,7 +298,10 @@ private fun scopedType(type: String): String = type.substringAfter('.', type)
 
 private fun scopedTypeName(serviceKey: String, typeKey: String): String = "$serviceKey.$typeKey"
 
-private val accountTypeKeys = setOf("subscription_request", "subscription_accepted", "birthday_today")
+private fun notificationPreferenceOwner(sourceOwner: OwnerRef?, targetOwner: OwnerRef?): OwnerRef? =
+    listOfNotNull(targetOwner, sourceOwner).firstOrNull { it.type == OwnerType.ORGANIZATION }
+
+private val accountTypeKeys = setOf("subscription_request", "subscription_accepted", "birthday_today", "organization_invitation")
 
 private fun localizedJson(text: LocalizedText): String =
     """{"ru":${jsonString(text.ru)},"en":${jsonString(text.en)}}"""

@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { apiErrorMessage } from "@/api/client";
 import type { PrivacySettings, VisibilityAudience } from "@/api/services/ProfileSocialService";
 import { useAuthStore, useProfileSocialStore } from "@/infra/store";
+
+const props = defineProps<{
+  notificationOwner?: { ownerType: "USER" | "ORGANIZATION"; ownerId: string } | null;
+}>();
 
 const emit = defineEmits<{
   message: [message: string, tone?: "success" | "error" | "warning"];
@@ -27,8 +31,15 @@ const visibilityRows = computed(() => authStore.activeOwner?.ownerType === "ORGA
 const visibilityOptions: VisibilityAudience[] = ["public", "followers", "friends", "private"];
 
 onMounted(() => {
-  socialStore.loadSettings().catch((cause) => emit("message", apiErrorMessage(cause), "error"));
+  socialStore.loadSettings(props.notificationOwner).catch((cause) => emit("message", apiErrorMessage(cause), "error"));
 });
+
+watch(
+  () => props.notificationOwner,
+  (owner) => {
+    socialStore.loadSettings(owner).catch((cause) => emit("message", apiErrorMessage(cause), "error"));
+  },
+);
 
 async function setPrivacy(value: boolean) {
   savingKey.value = "privacy";
@@ -45,7 +56,7 @@ async function setPrivacy(value: boolean) {
 async function setNotificationSetting(serviceKey: string, typeKey: string, value: boolean) {
   savingKey.value = `notification:${serviceKey}:${typeKey}`;
   try {
-    await socialStore.setNotificationSetting(serviceKey, typeKey, value);
+    await socialStore.setNotificationSetting(serviceKey, typeKey, value, props.notificationOwner);
     emit("message", t("social.settingsSaved"));
   } catch (cause) {
     emit("message", apiErrorMessage(cause), "error");

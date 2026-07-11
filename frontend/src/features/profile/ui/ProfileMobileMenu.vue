@@ -1,16 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ProfileTab } from "@/features/profile/ui/ProfileNav.vue";
 
-const props = withDefaults(defineProps<{
-  showRequests?: boolean;
-}>(), {
-  showRequests: true,
-});
-
 defineEmits<{
-  search: [];
   openView: [view: ProfileTab];
 }>();
 
@@ -18,29 +10,18 @@ const { t } = useI18n();
 
 const menuItems: Array<{ key: ProfileTab; icon: string; description: string }> = [
   { key: "profile", icon: "pi pi-user", description: "profile.menu.profile" },
-  { key: "requests", icon: "pi pi-inbox", description: "profile.menu.requests" },
   { key: "close", icon: "pi pi-star", description: "profile.menu.close" },
   { key: "blocked", icon: "pi pi-ban", description: "profile.menu.blocked" },
   { key: "settings", icon: "pi pi-sliders-h", description: "profile.menu.settings" },
   { key: "sessions", icon: "pi pi-desktop", description: "profile.menu.sessions" },
   { key: "system", icon: "pi pi-cog", description: "profile.menu.system" },
 ];
-const visibleMenuItems = computed(() => menuItems.filter((item) => props.showRequests || item.key !== "requests"));
 </script>
 
 <template>
   <nav class="grid gap-2 w-full max-w-[800px] mx-auto lg:hidden" aria-label="Profile menu">
-    <button class="profile-menu-row" type="button" @click="$emit('search')">
-      <span class="profile-menu-icon" aria-hidden="true"><i class="pi pi-search"></i></span>
-      <span class="min-w-0">
-        <strong>{{ t("social.search") }}</strong>
-        <small>{{ t("profile.menu.search") }}</small>
-      </span>
-      <i class="pi pi-chevron-right text-[var(--subtle)]" aria-hidden="true"></i>
-    </button>
-
     <button
-      v-for="item in visibleMenuItems"
+      v-for="item in menuItems"
       :key="item.key"
       class="profile-menu-row"
       type="button"

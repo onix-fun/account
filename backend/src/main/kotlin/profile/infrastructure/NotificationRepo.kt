@@ -23,9 +23,10 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
                 conn.prepareStatement("""
                     INSERT INTO user_notifications (
                         id, recipient_id, type, service_key, type_key, title, body, title_i18n, body_i18n,
-                        metadata_json, is_read, actor_id, entity_type, entity_id, source_event_id, created_at
+                        metadata_json, is_read, actor_id, source_owner_type, source_owner_id, target_owner_type,
+                        target_owner_id, entity_type, entity_id, source_event_id, created_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (source_event_id) WHERE source_event_id IS NOT NULL DO NOTHING
                 """.trimIndent()).use { ps ->
                     ps.setObject(1, n.id); ps.setObject(2, n.recipientId)
@@ -37,9 +38,13 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
                     ps.setString(9, n.bodyI18nJson)
                     ps.setString(10, n.metadataJson); ps.setBoolean(11, n.isRead)
                     if (n.actorId != null) ps.setObject(12, n.actorId) else ps.setNull(12, java.sql.Types.OTHER)
-                    ps.setString(13, n.entityType); ps.setString(14, n.entityId)
-                    ps.setString(15, n.sourceEventId)
-                    ps.setTimestamp(16, Timestamp.from(n.createdAt))
+                    ps.setString(13, n.sourceOwner?.type?.name)
+                    if (n.sourceOwner != null) ps.setObject(14, n.sourceOwner.id) else ps.setNull(14, java.sql.Types.OTHER)
+                    ps.setString(15, n.targetOwner?.type?.name)
+                    if (n.targetOwner != null) ps.setObject(16, n.targetOwner.id) else ps.setNull(16, java.sql.Types.OTHER)
+                    ps.setString(17, n.entityType); ps.setString(18, n.entityId)
+                    ps.setString(19, n.sourceEventId)
+                    ps.setTimestamp(20, Timestamp.from(n.createdAt))
                     ps.executeUpdate()
                 }
                 conn.commit()
@@ -66,7 +71,8 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
             }
             val items = conn.prepareStatement("""
                 SELECT id, recipient_id, type, service_key, type_key, title, body, title_i18n, body_i18n,
-                       metadata_json, is_read, actor_id, entity_type, entity_id, source_event_id, created_at
+                       metadata_json, is_read, actor_id, source_owner_type, source_owner_id, target_owner_type,
+                       target_owner_id, entity_type, entity_id, source_event_id, created_at
                 FROM user_notifications WHERE recipient_id = ?
                 ORDER BY created_at DESC LIMIT ? OFFSET ?
             """.trimIndent()).use { ps ->
@@ -262,23 +268,32 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
             }
         }
 
-    override fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String): Boolean =
+    override fun notificationTypeEnabled(userId: UUID, serviceKey: String, typeKey: String, owner: OwnerRef?): Boolean =
         ds.connection.use { conn ->
             conn.prepareStatement("""
-                SELECT COALESCE(p.enabled, t.default_enabled) AS enabled
+                SELECT COALESCE(op.enabled, p.enabled, t.default_enabled) AS enabled
                 FROM notification_types t
                 LEFT JOIN user_notification_preferences p
                     ON p.user_id = ? AND p.service_key = t.service_key AND p.type_key = t.type_key
+                LEFT JOIN user_owner_notification_preferences op
+                    ON op.user_id = ?
+                    AND op.owner_type = ?
+                    AND op.owner_id = ?
+                    AND op.service_key = t.service_key
+                    AND op.type_key = t.type_key
                 WHERE t.service_key = ? AND t.type_key = ? AND t.active = true
             """.trimIndent()).use { ps ->
                 ps.setObject(1, userId)
-                ps.setString(2, serviceKey)
-                ps.setString(3, typeKey)
+                ps.setObject(2, userId)
+                ps.setString(3, owner?.type?.name)
+                if (owner != null) ps.setObject(4, owner.id) else ps.setNull(4, java.sql.Types.OTHER)
+                ps.setString(5, serviceKey)
+                ps.setString(6, typeKey)
                 ps.executeQuery().use { rs -> if (rs.next()) rs.getBoolean("enabled") else false }
             }
         }
 
-    override fun getLocalizedSettings(userId: UUID, locale: String): List<LocalizedNotificationServiceSettings> {
+    override fun getLocalizedSettings(userId: UUID, locale: String, owner: OwnerRef?): List<LocalizedNotificationServiceSettings> {
         val normalizedLocale = if (locale.lowercase().startsWith("ru")) "ru" else "en"
         return ds.connection.use { conn ->
             val rows = conn.prepareStatement("""
@@ -293,16 +308,24 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
                     t.description_i18n AS type_description_i18n,
                     t.icon AS type_icon,
                     t.display_order AS type_order,
-                    COALESCE(p.enabled, t.default_enabled) AS enabled
+                    COALESCE(op.enabled, p.enabled, t.default_enabled) AS enabled
                 FROM user_notification_service_activations a
                 JOIN notification_services s ON s.service_key = a.service_key AND s.active = true
                 JOIN notification_types t ON t.service_key = s.service_key AND t.active = true
                 LEFT JOIN user_notification_preferences p
                     ON p.user_id = a.user_id AND p.service_key = t.service_key AND p.type_key = t.type_key
+                LEFT JOIN user_owner_notification_preferences op
+                    ON op.user_id = a.user_id
+                    AND op.owner_type = ?
+                    AND op.owner_id = ?
+                    AND op.service_key = t.service_key
+                    AND op.type_key = t.type_key
                 WHERE a.user_id = ?
                 ORDER BY s.display_order, s.service_key, t.display_order, t.type_key
             """.trimIndent()).use { ps ->
-                ps.setObject(1, userId)
+                ps.setString(1, owner?.type?.name)
+                if (owner != null) ps.setObject(2, owner.id) else ps.setNull(2, java.sql.Types.OTHER)
+                ps.setObject(3, userId)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
@@ -356,6 +379,32 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
         }
     }
 
+    override fun saveOwnerPreference(userId: UUID, owner: OwnerRef, serviceKey: String, typeKey: String, enabled: Boolean) {
+        ds.connection.use { conn ->
+            try {
+                conn.prepareStatement("""
+                    INSERT INTO user_owner_notification_preferences (user_id, owner_type, owner_id, service_key, type_key, enabled, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id, owner_type, owner_id, service_key, type_key) DO UPDATE SET
+                        enabled = EXCLUDED.enabled,
+                        updated_at = EXCLUDED.updated_at
+                """.trimIndent()).use { ps ->
+                    ps.setObject(1, userId)
+                    ps.setString(2, owner.type.name)
+                    ps.setObject(3, owner.id)
+                    ps.setString(4, serviceKey)
+                    ps.setString(5, typeKey)
+                    ps.setBoolean(6, enabled)
+                    ps.executeUpdate()
+                }
+                conn.commit()
+            } catch (error: Throwable) {
+                conn.rollback()
+                throw error
+            }
+        }
+    }
+
     private fun savePreference(conn: java.sql.Connection, userId: UUID, serviceKey: String, typeKey: String, enabled: Boolean) {
         conn.prepareStatement("""
             INSERT INTO user_notification_preferences (user_id, service_key, type_key, enabled, updated_at)
@@ -382,10 +431,17 @@ class NotificationRepo(private val ds: DataSource) : NotificationRepository {
         titleI18nJson = rs.getString("title_i18n"),
         bodyI18nJson = rs.getString("body_i18n"),
         metadataJson = rs.getString("metadata_json"), isRead = rs.getBoolean("is_read"),
-        actorId = rs.getObject("actor_id") as? UUID, entityType = rs.getString("entity_type"),
+        actorId = rs.getObject("actor_id") as? UUID,
+        sourceOwner = ownerRef(rs.getString("source_owner_type"), rs.getObject("source_owner_id") as? UUID),
+        targetOwner = ownerRef(rs.getString("target_owner_type"), rs.getObject("target_owner_id") as? UUID),
+        entityType = rs.getString("entity_type"),
         entityId = rs.getString("entity_id"), sourceEventId = rs.getObject("source_event_id")?.toString(),
         createdAt = rs.getTimestamp("created_at").toInstant()
     )
+
+    private fun ownerRef(type: String?, id: UUID?): OwnerRef? =
+        if (type.isNullOrBlank() || id == null) null
+        else OwnerRef(runCatching { OwnerType.valueOf(type) }.getOrDefault(OwnerType.USER), id)
 
     private data class SettingsRow(
         val serviceKey: String,
@@ -418,17 +474,18 @@ class NotificationOutboxRepo(private val ds: DataSource) : NotificationOutboxRep
         return ds.connection.use { conn ->
             try {
                 val inserted = conn.prepareStatement("""
-                    INSERT INTO notification_outbox (source_event_id, actor_id, activity_type, entity_type, entity_id, metadata_json, status, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?::jsonb, 'PENDING', ?)
+                    INSERT INTO notification_outbox (source_event_id, actor_type, actor_id, activity_type, entity_type, entity_id, metadata_json, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, 'PENDING', ?)
                     ON CONFLICT (source_event_id) DO NOTHING
                 """.trimIndent()).use { ps ->
                     ps.setString(1, event.sourceEventId)
-                    ps.setObject(2, event.actorId)
-                    ps.setString(3, event.activityType.name)
-                    ps.setString(4, event.entityType)
-                    ps.setString(5, event.entityId)
-                    ps.setString(6, event.metadataJson)
-                    ps.setTimestamp(7, Timestamp.from(event.createdAt))
+                    ps.setString(2, event.actorType.name)
+                    ps.setObject(3, event.actorId)
+                    ps.setString(4, event.activityType.name)
+                    ps.setString(5, event.entityType)
+                    ps.setString(6, event.entityId)
+                    ps.setString(7, event.metadataJson)
+                    ps.setTimestamp(8, Timestamp.from(event.createdAt))
                     ps.executeUpdate() == 1
                 }
                 conn.commit()
@@ -445,7 +502,7 @@ class NotificationOutboxRepo(private val ds: DataSource) : NotificationOutboxRep
         ds.connection.use { conn ->
             try {
                 val rows = conn.prepareStatement("""
-                    SELECT id, source_event_id, actor_id, activity_type, entity_type, entity_id, metadata_json, attempts, created_at
+                    SELECT id, source_event_id, actor_type, actor_id, activity_type, entity_type, entity_id, metadata_json, attempts, created_at
                     FROM notification_outbox
                     WHERE status = 'PENDING' AND next_attempt_at <= CURRENT_TIMESTAMP
                     ORDER BY created_at
@@ -460,6 +517,7 @@ class NotificationOutboxRepo(private val ds: DataSource) : NotificationOutboxRep
                                     id = rs.getObject("id") as UUID,
                                     event = UserActivityEvent(
                                         sourceEventId = rs.getString("source_event_id"),
+                                        actorType = runCatching { OwnerType.valueOf(rs.getString("actor_type")) }.getOrDefault(OwnerType.USER),
                                         actorId = rs.getObject("actor_id") as UUID,
                                         activityType = UserActivityType.valueOf(rs.getString("activity_type")),
                                         entityType = rs.getString("entity_type"),
