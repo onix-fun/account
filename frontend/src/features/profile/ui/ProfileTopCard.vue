@@ -23,7 +23,7 @@ const displayInitials = computed(() => userInitials(props.user));
 </script>
 
 <template>
-  <header class="w-full max-w-[800px] mx-auto grid gap-4 bg-[var(--surface)] rounded-2xl p-5 shadow-sm border-0">
+  <UiSurface as="header" class="w-full max-w-[800px] mx-auto grid gap-4">
     <div class="flex items-center justify-between gap-4 min-w-0">
       <div class="flex items-center gap-4 min-w-0">
         <button
@@ -58,7 +58,7 @@ const displayInitials = computed(() => userInitials(props.user));
         <small>{{ t("social.following") }}</small>
       </button>
     </div>
-  </header>
+  </UiSurface>
 </template>
 
 <style scoped>
@@ -72,7 +72,7 @@ const displayInitials = computed(() => userInitials(props.user));
 .profile-stat-button {
   min-width: 0;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
   color: var(--text);
   padding: 10px 8px;
@@ -80,6 +80,12 @@ const displayInitials = computed(() => userInitials(props.user));
   gap: 1px;
   text-align: center;
   cursor: pointer;
+  transition: background var(--motion), transform var(--motion-fast);
+}
+
+.profile-stat-button:hover {
+  background: var(--surface-active);
+  transform: translateY(-1px);
 }
 
 .profile-stat-button span {

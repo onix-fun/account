@@ -39,7 +39,7 @@ const steps = [
 </script>
 
 <template>
-  <section class="min-h-screen bg-[var(--bg)] grid place-items-center p-4 sm:p-8 relative">
+  <section class="min-h-screen grid place-items-center p-4 sm:p-8 relative">
     <a
       v-if="externalBackUrl && !hasFlowBack"
       :href="externalBackUrl"
@@ -50,14 +50,14 @@ const steps = [
       <span>{{ t("common.back") }}</span>
     </a>
 
-    <main class="w-full max-w-[420px] grid gap-6" aria-live="polite">
+    <UiSurface as="main" class="w-full max-w-[420px] grid gap-6" aria-live="polite">
       <nav v-if="flow.showRegistrationSteps.value" class="flex items-center justify-between gap-3 relative" aria-label="Authentication steps">
         <div class="absolute left-5 right-5 top-[19px] h-px bg-[var(--surface-muted)] z-0"></div>
         <span
           v-for="step in steps"
           :key="step.key"
-          class="w-10 h-10 rounded-full bg-[var(--surface)] border flex items-center justify-center relative z-10 text-sm transition-colors"
-          :class="flow.activeStep.value === step.key ? 'bg-[var(--text)] border-[var(--text)] text-white' : 'text-[var(--subtle)] border-[var(--surface-muted)]'"
+          class="w-10 h-10 rounded-full bg-[var(--surface)] flex items-center justify-center relative z-10 text-sm transition-colors shadow-sm"
+          :class="flow.activeStep.value === step.key ? 'bg-[var(--text)] text-white' : 'text-[var(--subtle)]'"
           :aria-label="t(step.label)"
           :title="t(step.label)"
         >
@@ -80,8 +80,7 @@ const steps = [
       </div>
 
       <form v-if="flow.mode.value === 'identifier'" class="grid gap-4" @submit.prevent="flow.continueToPassword">
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.emailOrUsername") }}</span>
+        <UiField :label="t('auth.emailOrUsername')">
           <PInputText v-model="flow.loginIdentifier.value" autocomplete="username" required autofocus class="w-full" />
           <PMessage v-if="flow.loginIdentifier.value && flow.identifierError.value" severity="error" variant="simple">
             {{ flow.identifierError.value }}
@@ -89,7 +88,7 @@ const steps = [
           <PMessage v-else-if="flow.fieldErrors.value.identifier" severity="error" variant="simple">
             {{ flow.fieldErrors.value.identifier }}
           </PMessage>
-        </div>
+        </UiField>
         <div class="flex items-center justify-between gap-3 pt-1">
           <PButton :label="t('auth.createAccount')" variant="text" severity="secondary" @click="flow.mode.value = 'register'" />
           <PButton type="submit" :label="t('common.continue')" :disabled="flow.isLookupLoading.value || Boolean(flow.identifierError.value)" :loading="flow.isLookupLoading.value" />
@@ -101,13 +100,12 @@ const steps = [
       </form>
 
       <form v-else-if="flow.mode.value === 'password'" class="grid gap-4" @submit.prevent="flow.login">
-        <div class="flex items-center gap-2 bg-[var(--surface-muted)] rounded-full px-3 py-1.5 w-fit max-w-full text-sm font-bold text-[var(--muted)]">
+        <div class="ui-chip w-fit">
           <img v-if="flow.accountAvatarUrl.value" class="w-6 h-6 rounded-full object-cover shrink-0" :src="flow.accountAvatarUrl.value" alt="" />
           <i v-else class="pi pi-user"></i>
           <span class="truncate">{{ flow.accountDisplayName.value }}</span>
         </div>
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.password") }}</span>
+        <UiField :label="t('auth.password')">
           <PasswordInput
             v-model="flow.loginPassword.value"
             autocomplete="current-password"
@@ -117,7 +115,7 @@ const steps = [
           <PMessage v-if="flow.fieldErrors.value.password" severity="error" variant="simple">
             {{ flow.fieldErrors.value.password }}
           </PMessage>
-        </div>
+        </UiField>
         <div class="flex items-center justify-between gap-3 pt-1">
           <PButton :label="t('auth.forgotPassword')" variant="text" severity="secondary" @click="flow.showForgotStep" />
           <PButton type="submit" :label="t('auth.signIn')" :disabled="authStore.isLoading" :loading="authStore.isLoading" />
@@ -125,8 +123,7 @@ const steps = [
       </form>
 
       <form v-else-if="flow.mode.value === 'register'" class="grid gap-4" @submit.prevent="flow.register">
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.username") }}</span>
+        <UiField :label="t('auth.username')">
           <div class="relative w-full">
             <PInputText v-model="flow.registerForm.value.username" autocomplete="username" required class="w-full" />
             <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
@@ -147,10 +144,9 @@ const steps = [
           <PMessage v-else-if="flow.usernameCheckTouched.value && flow.registerForm.value.username && !flow.isCheckingUsername.value && !flow.isUsernameTaken.value" severity="success" variant="simple">
             {{ t("auth.usernameAvailable") }}
           </PMessage>
-        </div>
+        </UiField>
 
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.email") }}</span>
+        <UiField :label="t('auth.email')">
           <PInputText v-model="flow.registerForm.value.email" type="email" autocomplete="email" required class="w-full" />
           <PMessage v-if="flow.registerForm.value.email && flow.registrationErrors.value.email" severity="error" variant="simple">
             {{ flow.registrationErrors.value.email }}
@@ -158,10 +154,9 @@ const steps = [
           <PMessage v-else-if="flow.fieldErrors.value.email" severity="error" variant="simple">
             {{ flow.fieldErrors.value.email }}
           </PMessage>
-        </div>
+        </UiField>
 
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.password") }}</span>
+        <UiField :label="t('auth.password')">
           <PasswordInput
             v-model="flow.registerForm.value.password"
             autocomplete="new-password"
@@ -171,10 +166,9 @@ const steps = [
           <PMessage v-if="flow.fieldErrors.value.password" severity="error" variant="simple">
             {{ flow.fieldErrors.value.password }}
           </PMessage>
-        </div>
+        </UiField>
 
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.confirmPassword") }}</span>
+        <UiField :label="t('auth.confirmPassword')">
           <PasswordInput
             v-model="flow.registerForm.value.confirmPassword"
             autocomplete="new-password"
@@ -182,7 +176,7 @@ const steps = [
             minlength="8"
             :aria-invalid="flow.registerPasswordMismatch.value"
           />
-        </div>
+        </UiField>
 
         <div class="grid gap-1.5 pt-1" aria-live="polite">
           <div class="flex items-center gap-2 text-xs font-semibold transition-colors" :class="flow.registerPasswordValid.value ? 'text-[var(--success)]' : 'text-[var(--danger)]'">
@@ -207,14 +201,13 @@ const steps = [
       </form>
 
       <form v-else-if="flow.mode.value === 'verify' || flow.mode.value === 'confirm'" class="grid gap-4" @submit.prevent="flow.mode.value === 'verify' ? flow.confirmPublicVerification() : flow.confirmRegistration()">
-        <div class="flex items-center gap-2 bg-[var(--surface-muted)] rounded-full px-3 py-1.5 w-fit max-w-full text-sm font-bold text-[var(--muted)]">
+        <div class="ui-chip w-fit">
           <img v-if="flow.accountAvatarUrl.value" class="w-6 h-6 rounded-full object-cover shrink-0" :src="flow.accountAvatarUrl.value" alt="" />
           <i v-else-if="flow.mode.value === 'verify'" class="pi pi-envelope"></i>
           <i v-else class="pi pi-user"></i>
           <span class="truncate">{{ flow.mode.value === 'confirm' ? flow.pendingRegistrationEmail.value : flow.accountDisplayName.value }}</span>
         </div>
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.verificationCode") }}</span>
+        <UiField :label="t('auth.verificationCode')">
           <VerificationCodeInput
             v-if="flow.mode.value === 'verify'"
             v-model="flow.publicVerificationCode.value"
@@ -227,7 +220,7 @@ const steps = [
             :autofocus="true"
             :error="flow.fieldErrors.value.code"
           />
-        </div>
+        </UiField>
         <PButton 
           type="submit" 
           class="w-full"
@@ -242,25 +235,22 @@ const steps = [
       </form>
 
       <form v-else-if="flow.mode.value === 'name'" class="grid gap-4" @submit.prevent="flow.completeNameStep">
-        <div class="flex items-center gap-2 bg-[var(--surface-muted)] border rounded-full px-3 py-1.5 w-fit max-w-full text-sm font-bold text-[var(--muted)]">
+        <div class="ui-chip w-fit">
           <img v-if="flow.accountAvatarUrl.value" class="w-6 h-6 rounded-full object-cover shrink-0" :src="flow.accountAvatarUrl.value" alt="" />
           <i v-else class="pi pi-check-circle"></i>
           <span class="truncate">{{ authStore.currentUser?.username }}</span>
         </div>
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.firstName") }}</span>
+        <UiField :label="t('auth.firstName')">
           <PInputText v-model="flow.nameForm.value.firstName" autocomplete="given-name" required class="w-full" />
-        </div>
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.lastName") }}</span>
+        </UiField>
+        <UiField :label="t('auth.lastName')">
           <PInputText v-model="flow.nameForm.value.lastName" autocomplete="family-name" required class="w-full" />
-        </div>
+        </UiField>
         <PButton type="submit" class="w-full" :label="t('common.continue')" :loading="authStore.isLoading" />
       </form>
 
       <form v-else-if="flow.mode.value === 'forgot'" class="grid gap-4" @submit.prevent="flow.forgotPassword">
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.emailOrUsername") }}</span>
+        <UiField :label="t('auth.emailOrUsername')">
           <PInputText v-model="flow.forgotIdentifier.value" autocomplete="username" required autofocus class="w-full" />
           <PMessage v-if="flow.forgotIdentifier.value && flow.forgotIdentifierError.value" severity="error" variant="simple">
             {{ flow.forgotIdentifierError.value }}
@@ -268,29 +258,27 @@ const steps = [
           <PMessage v-else-if="flow.fieldErrors.value.identifier" severity="error" variant="simple">
             {{ flow.fieldErrors.value.identifier }}
           </PMessage>
-        </div>
+        </UiField>
         <PButton type="submit" class="w-full" :label="t('auth.sendCode')" :disabled="authStore.isLoading || flow.isLookupLoading.value || Boolean(flow.forgotIdentifierError.value)" :loading="authStore.isLoading" />
       </form>
 
       <form v-else class="grid gap-4" @submit.prevent="flow.submitResetPassword">
-        <div class="flex items-center gap-2 bg-[var(--surface-muted)] border rounded-full px-3 py-1.5 w-fit max-w-full text-sm font-bold text-[var(--muted)]">
+        <div class="ui-chip w-fit">
           <img v-if="flow.accountAvatarUrl.value" class="w-6 h-6 rounded-full object-cover shrink-0" :src="flow.accountAvatarUrl.value" alt="" />
           <i v-else class="pi pi-user"></i>
           <span class="truncate">{{ flow.accountDisplayName.value }}</span>
         </div>
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.verificationCode") }}</span>
+        <UiField :label="t('auth.verificationCode')">
           <VerificationCodeInput v-model="flow.resetCode.value" :error="flow.fieldErrors.value.code" />
-        </div>
-        <div class="flex flex-col gap-2">
-          <span class="text-[13px] font-bold text-[var(--muted)]">{{ t("auth.newPassword") }}</span>
+        </UiField>
+        <UiField :label="t('auth.newPassword')">
           <PasswordInput v-model="flow.resetPassword.value" autocomplete="new-password" required minlength="8" />
-        </div>
+        </UiField>
         <PButton type="submit" class="w-full" :label="t('auth.resetPassword')" :disabled="authStore.isLoading || !/^\d{6}$/.test(flow.resetCode.value)" :loading="authStore.isLoading" />
       </form>
 
       <p v-if="flow.authMessage.value" class="m-0 text-sm text-[var(--muted)] text-center">{{ flow.authMessage.value }}</p>
-    </main>
+    </UiSurface>
 
     <LocaleSwitcher class="fixed left-1/2 bottom-[max(18px,env(safe-area-inset-bottom))] -translate-x-1/2" />
     <QrLoginScanner

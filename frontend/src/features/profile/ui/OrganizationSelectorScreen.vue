@@ -53,7 +53,7 @@ async function createOrganization() {
 <template>
   <section class="selector-screen">
     <header class="selector-header">
-      <span class="selector-icon"><i class="pi pi-building"></i></span>
+      <UiIconTile tone="cyan" class="selector-icon"><i class="pi pi-building"></i></UiIconTile>
       <div class="min-w-0">
         <h1>{{ t("organizations.choose") }}</h1>
         <p>{{ t("organizations.selectorHint") }}</p>
@@ -61,7 +61,7 @@ async function createOrganization() {
     </header>
 
     <div v-if="!authStore.organizations.length" class="selector-empty">
-      <span class="selector-empty-icon"><i class="pi pi-building"></i></span>
+      <UiIconTile tone="cyan" class="selector-empty-icon"><i class="pi pi-building"></i></UiIconTile>
       <h2>{{ t("organizations.emptyTitle") }}</h2>
       <p>{{ t("organizations.emptyHint") }}</p>
       <PButton :label="t('organizations.create')" icon="pi pi-plus" @click="isCreateOpen = true" />
@@ -88,7 +88,7 @@ async function createOrganization() {
       </button>
 
       <button type="button" class="selector-row create" @click="isCreateOpen = true">
-        <span class="selector-avatar"><i class="pi pi-plus"></i></span>
+        <UiIconTile tone="info" class="selector-avatar"><i class="pi pi-plus"></i></UiIconTile>
         <strong>{{ t("organizations.create") }}</strong>
       </button>
     </div>
@@ -156,14 +156,7 @@ async function createOrganization() {
 .selector-empty-icon {
   width: 48px;
   height: 48px;
-  border-radius: 16px;
-  background: var(--surface-muted);
-  color: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   font-size: 19px;
-  flex-shrink: 0;
 }
 
 .selector-empty {

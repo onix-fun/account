@@ -95,9 +95,9 @@ const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleS
 
 <template>
   <section class="grid gap-4">
-    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 min-h-[40px]">
-      <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.sessions") }}</h2>
-      <div class="flex gap-2 w-full sm:w-auto">
+    <UiSectionHeader :title="t('profile.sessions')">
+      <template #actions>
+      <div class="ui-action-group w-full sm:w-auto">
         <PButton
           icon="pi pi-qrcode"
           :label="t('auth.qr.otherDeviceAction')"
@@ -127,22 +127,24 @@ const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleS
           @click="logoutAll"
         />
       </div>
-    </div>
+      </template>
+    </UiSectionHeader>
 
-    <div class="grid gap-1.5">
-      <div v-if="!authStore.sessions.length" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] border border-[var(--surface-muted)] rounded-xl">
+    <div class="ui-list">
+      <div v-if="!authStore.sessions.length" class="ui-empty">
         {{ t("profile.noSessions") }}
       </div>
-      <article
+      <UiFlatRow
         v-for="session in authStore.sessions"
         :key="session.id"
+        as="article"
         class="session-card"
-        :class="{ 'session-card-current': session.isCurrent }"
+        :active="session.isCurrent"
       >
         <div class="session-heading">
-          <span class="session-icon" aria-hidden="true">
+          <UiIconTile :tone="session.isCurrent ? 'success' : 'info'">
             <i :class="sessionIcon(session)"></i>
-          </span>
+          </UiIconTile>
           <span class="session-title-wrap">
             <strong class="session-title">{{ sessionDevice(session) }}</strong>
             <span v-if="session.isCurrent" class="session-badge">{{ t("common.current") }}</span>
@@ -188,7 +190,7 @@ const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleS
             @click="revokeSession(session)"
           />
         </div>
-      </article>
+      </UiFlatRow>
     </div>
 
     <QrLoginDialog
@@ -205,21 +207,8 @@ const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleS
   display: grid;
   gap: 11px;
   padding: 14px;
-  border-radius: 14px;
-  background: var(--surface);
   border: 0;
   transition: background 0.16s ease, transform 0.16s ease;
-}
-
-.session-card-current {
-  background: var(--surface-active);
-}
-
-.session-icon {
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1;
-  flex: 0 0 auto;
 }
 
 .session-heading {

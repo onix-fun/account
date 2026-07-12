@@ -150,41 +150,39 @@ const deleteAccount = async () => {
 
 <template>
   <section class="grid gap-2">
-    <div class="flex items-center justify-between gap-3 min-h-[40px] px-1">
-      <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("system.title") }}</h2>
-    </div>
+    <UiSectionHeader :title="t('system.title')" />
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl flex flex-row items-center justify-between gap-3">
+    <UiSurface as="section" class="flex flex-row items-center justify-between gap-3">
       <div class="flex items-center gap-3.5 min-w-0">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="info">
           <i class="pi pi-language text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("system.interface") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed truncate">{{ t("system.languageHint") }}</p>
         </div>
       </div>
       <LocaleSwitcher variant="dropdown" class="shrink-0" />
-    </section>
+    </UiSurface>
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <UiSurface as="section" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div class="flex items-center gap-3.5 min-w-0">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="warning">
           <i class="pi pi-palette text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("system.theme") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed truncate">{{ t("system.themeHint") }}</p>
         </div>
       </div>
       <ThemeSwitcher class="shrink-0" />
-    </section>
+    </UiSurface>
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl grid gap-4">
+    <UiSurface as="section" class="grid gap-4">
       <div class="flex items-start gap-3.5">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="info">
           <i class="pi pi-at text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("profile.changeEmail") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed">{{ t("system.changeEmailHint", { email: accountEmail }) }}</p>
@@ -213,13 +211,13 @@ const deleteAccount = async () => {
           <PButton type="button" :label="t('common.cancel')" variant="text" severity="secondary" class="w-full sm:w-auto" :disabled="isChangingEmail" @click="cancelEmailChange" />
         </div>
       </form>
-    </section>
+    </UiSurface>
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl grid gap-4">
+    <UiSurface as="section" class="grid gap-4">
       <div class="flex items-start gap-3.5">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="warning">
           <i class="pi pi-key text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("system.changePassword") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed">{{ t("system.changePasswordHint") }}</p>
@@ -244,13 +242,13 @@ const deleteAccount = async () => {
         </div>
         <PButton type="submit" :label="t('system.changePasswordAction')" icon="pi pi-check" class="w-full sm:w-auto self-start" :disabled="authStore.isLoading || directPasswordMismatch" :loading="authStore.isLoading" />
       </form>
-    </section>
+    </UiSurface>
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl grid gap-4">
+    <UiSurface as="section" class="grid gap-4">
       <div class="flex items-start gap-3.5">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="pink">
           <i class="pi pi-envelope text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("system.emailReset") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed">{{ t("system.emailResetHint", { email: accountEmail }) }}</p>
@@ -282,13 +280,13 @@ const deleteAccount = async () => {
           <PButton type="button" :label="t('system.resendResetCode')" icon="pi pi-refresh" variant="text" severity="secondary" class="w-full sm:w-auto" :disabled="authStore.isLoading" @click="requestResetCode" />
         </div>
       </form>
-    </section>
+    </UiSurface>
 
-    <section class="bg-[var(--danger-section-bg)] p-4 rounded-2xl grid gap-4">
+    <UiSurface as="section" tone="danger" class="grid gap-4">
       <div class="flex items-start gap-3.5">
-        <div class="w-10 h-10 rounded-lg bg-[var(--toast-error-bg)] flex items-center justify-center text-[var(--danger)] shrink-0">
+        <UiIconTile tone="danger">
           <i class="pi pi-trash text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("system.deleteAccount") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed">{{ t("system.deleteAccountHint") }}</p>
@@ -306,6 +304,6 @@ const deleteAccount = async () => {
         </div>
         <PButton type="submit" :label="t('system.deleteAccountAction')" icon="pi pi-trash" severity="danger" variant="text" class="w-full sm:w-auto self-start" :disabled="authStore.isLoading || !canDeleteAccount" :loading="authStore.isLoading" />
       </form>
-    </section>
+    </UiSurface>
   </section>
 </template>

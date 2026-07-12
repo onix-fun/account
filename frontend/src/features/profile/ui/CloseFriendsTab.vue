@@ -81,13 +81,14 @@ async function remove(user: PublicUser) {
 
 <template>
   <section class="grid gap-4">
-    <div class="flex items-center justify-between gap-3 min-h-[40px]">
-      <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.close") }}</h2>
-      <PButton icon="pi pi-plus" :label="t('social.add')" size="small" @click="openAddDialog" />
-    </div>
+    <UiSectionHeader :title="t('profile.close')">
+      <template #actions>
+        <PButton icon="pi pi-plus" :label="t('social.add')" size="small" @click="openAddDialog" />
+      </template>
+    </UiSectionHeader>
 
-    <div class="grid gap-1.5">
-      <div v-if="!socialStore.closeFriends.length" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] rounded-xl">
+    <div class="ui-list">
+      <div v-if="!socialStore.closeFriends.length" class="ui-empty">
         {{ t("social.noCloseFriends") }}
       </div>
       <ProfileUserRow
@@ -123,20 +124,21 @@ async function remove(user: PublicUser) {
         </div>
 
         <div class="grid gap-1.5 max-h-[55vh] overflow-y-auto pr-1">
-          <div v-if="isLoadingCandidates" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
+          <div v-if="isLoadingCandidates" class="ui-empty !min-h-[88px]">
             <i class="pi pi-spinner pi-spin mr-2"></i>{{ t("common.loading") }}
           </div>
-          <div v-else-if="!followingCandidates.length" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
+          <div v-else-if="!followingCandidates.length" class="ui-empty !min-h-[88px]">
             {{ t("social.noFollowing") }}
           </div>
-          <div v-else-if="!filteredCandidates.length" class="p-8 text-center text-sm text-[var(--muted)] bg-[var(--surface-muted)] rounded-xl">
+          <div v-else-if="!filteredCandidates.length" class="ui-empty !min-h-[88px]">
             {{ t("social.noUsersFound") }}
           </div>
-          <article
+          <UiFlatRow
             v-for="user in filteredCandidates"
             v-else
             :key="user.id"
-            class="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3.5 rounded-xl bg-[var(--surface-muted)] border-0 min-w-0"
+            muted
+            class="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3.5 min-w-0"
           >
             <div class="flex items-center gap-3.5 min-w-0 flex-1">
               <span class="w-11 h-11 rounded-full bg-[var(--surface)] flex items-center justify-center text-sm font-bold text-[var(--text)] overflow-hidden shrink-0">
@@ -157,7 +159,7 @@ async function remove(user: PublicUser) {
               :loading="busyUserId === user.id"
               @click="add(user)"
             />
-          </article>
+          </UiFlatRow>
         </div>
       </section>
     </PDialog>

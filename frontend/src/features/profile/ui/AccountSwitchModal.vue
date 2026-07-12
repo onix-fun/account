@@ -46,7 +46,7 @@ const logoutAll = async () => {
       <button
         v-for="account in authStore.storedAccounts"
         :key="account.id"
-        class="w-full min-h-[64px] flex items-center gap-3.5 p-3 rounded-xl border border-transparent transition-colors text-left group"
+        class="w-full min-h-[64px] flex items-center gap-3.5 p-3 rounded-xl border-0 transition-colors text-left group"
         :class="account.id === authStore.currentUser?.id ? 'bg-[var(--surface-active)] cursor-default' : 'bg-[var(--surface-raised)] hover:bg-[var(--surface-active)]'"
         type="button"
         @click="account.id === authStore.currentUser?.id ? emit('close') : switchAccount(account.id)"
@@ -67,9 +67,9 @@ const logoutAll = async () => {
         type="button" 
         @click="addAccount"
       >
-        <span class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="info">
           <i class="pi pi-plus"></i>
-        </span>
+        </UiIconTile>
         <span class="flex-1 min-w-0">
           <strong class="text-sm font-bold text-[var(--text)] truncate">{{ t("profile.addAccount") }}</strong>
         </span>

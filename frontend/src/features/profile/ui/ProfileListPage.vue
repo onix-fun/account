@@ -49,8 +49,8 @@ async function runAction(user: PublicUser, action: () => Promise<void>, successK
   <section class="grid gap-4">
     <div class="grid gap-2">
       <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="emit('back')" />
-      <div class="flex items-center justify-between gap-3 min-h-[40px]">
-        <h2 class="text-base font-bold m-0 text-[var(--text)] truncate">{{ title }}</h2>
+      <div class="ui-section-header">
+        <h2 class="ui-section-title truncate">{{ title }}</h2>
         <span class="text-sm font-bold text-[var(--muted)]">{{ totalCount }}</span>
       </div>
     </div>
@@ -60,11 +60,11 @@ async function runAction(user: PublicUser, action: () => Promise<void>, successK
       <span>{{ t("social.friendsOnly") }}</span>
     </label>
 
-    <div class="grid gap-1.5">
-      <div v-if="isLoading" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] rounded-xl">
+    <div class="ui-list">
+      <div v-if="isLoading" class="ui-empty">
         <i class="pi pi-spinner pi-spin mr-2"></i>{{ t("common.loading") }}
       </div>
-      <div v-else-if="!visibleItems.length" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] rounded-xl">
+      <div v-else-if="!visibleItems.length" class="ui-empty">
         {{ emptyText }}
       </div>
       <ProfileUserRow
@@ -97,7 +97,7 @@ async function runAction(user: PublicUser, action: () => Promise<void>, successK
   gap: 8px;
   padding: 7px 10px;
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--surface-muted);
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;

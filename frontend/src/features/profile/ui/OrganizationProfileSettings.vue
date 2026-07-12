@@ -137,7 +137,7 @@ function revokeAvatarPreview() {
   <section class="grid gap-4">
     <input ref="avatarInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" @change="onAvatarChange" />
 
-    <article class="settings-card">
+    <UiSurface as="article" class="settings-card">
       <div class="avatar-row">
         <button
           type="button"
@@ -182,9 +182,9 @@ function revokeAvatarPreview() {
         <span>{{ t("organizations.bio") }}</span>
         <PTextarea v-model="edit.bio" :disabled="!canEdit" auto-resize rows="4" />
       </label>
-    </article>
+    </UiSurface>
 
-    <article class="settings-card">
+    <UiSurface as="article" class="settings-card">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <h3>{{ t("profile.socialLinks") }}</h3>
@@ -201,7 +201,7 @@ function revokeAvatarPreview() {
           <PButton icon="pi pi-trash" rounded variant="text" severity="secondary" :disabled="!canEdit" @click="removeSocialLink(index)" />
         </article>
       </div>
-    </article>
+    </UiSurface>
 
     <PButton
       :label="t('common.save')"
@@ -223,9 +223,8 @@ function revokeAvatarPreview() {
 
 <style scoped>
 .settings-card {
-  border-radius: 18px;
-  background: var(--surface);
-  padding: 16px;
+  display: grid;
+  gap: 14px;
 }
 
 .avatar-row {
@@ -276,11 +275,6 @@ function revokeAvatarPreview() {
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 900;
-}
-
-.settings-card {
-  display: grid;
-  gap: 14px;
 }
 
 .field {

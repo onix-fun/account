@@ -347,7 +347,7 @@ function revokeAvatarPreview() {
 </script>
 
 <template>
-  <main class="w-full max-w-[940px] mx-auto px-4 py-10 sm:py-16 grid gap-6">
+  <main class="ui-shell">
     <AccountHeader
       v-if="!hideAccountHeader"
       :mode="accountMode"
@@ -391,7 +391,7 @@ function revokeAvatarPreview() {
       class="grid grid-cols-1 justify-center items-start gap-7"
       :class="queryView || accountMode === 'organization' ? 'max-w-[720px] w-full mx-auto' : 'lg:grid-cols-[52px_minmax(0,720px)]'"
     >
-      <div v-if="!queryView && accountMode === 'user'" class="hidden lg:block">
+      <div v-if="!queryView && accountMode === 'user'" class="profile-nav-column hidden lg:block">
         <ProfileNav v-model:active-tab="activeTab" />
       </div>
       <ProfileMobileMenu v-if="!queryView && accountMode === 'user'" @open-view="openView" />
@@ -410,12 +410,12 @@ function revokeAvatarPreview() {
               @message="setMessage"
             />
             <section v-else-if="activeOrganizationTab === 'social'" class="grid gap-4">
-              <article class="grid gap-3 bg-[var(--surface)] rounded-[18px] p-4">
+              <UiSurface as="section" class="grid gap-3">
                 <div class="grid gap-2 sm:grid-cols-2">
                   <PButton :label="t('social.followers')" icon="pi pi-users" severity="secondary" variant="outlined" @click="openView('followers')" />
                   <PButton :label="t('social.following')" icon="pi pi-user-plus" severity="secondary" variant="outlined" @click="openView('following')" />
                 </div>
-              </article>
+              </UiSurface>
               <SocialSettingsTab :notification-owner="selectedOrganizationNotificationOwner" @message="setMessage" />
             </section>
             <BlockedUsersTab v-else-if="activeOrganizationTab === 'blocked'" @message="setMessage" />
@@ -468,18 +468,21 @@ function revokeAvatarPreview() {
         />
 
         <section v-else-if="contentView === 'profile'" class="grid gap-4">
-          <div class="flex items-center justify-between gap-3 min-h-[40px]">
-            <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2" @click="closeView" />
-            <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.profile") }}</h2>
-          </div>
+          <UiSectionHeader :title="t('profile.profile')">
+            <template v-if="queryView" #actions>
+              <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2" @click="closeView" />
+            </template>
+          </UiSectionHeader>
 
           <form class="grid gap-2" @submit.prevent>
-            <div class="grid gap-1.5" aria-label="Profile details">
-              <article
+            <div class="ui-list" aria-label="Profile details">
+              <UiFlatRow
                 v-for="field in editableProfileFields"
                 :key="field.key"
-                class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[132px_minmax(0,1fr)_auto] items-center gap-3 sm:gap-4 bg-[var(--surface)] p-3 sm:p-4 rounded-xl transition-colors border-0"
-                :class="{ 'bg-[var(--surface-active)]': editingFields[field.key] }"
+                as="article"
+                :active="editingFields[field.key]"
+                muted
+                class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[132px_minmax(0,1fr)_auto] items-center gap-3 sm:gap-4 p-3 sm:p-4"
               >
                 <label class="col-span-2 sm:col-span-1 sm:col-start-1 sm:row-start-1 text-[13px] font-bold text-[var(--muted)]" :for="`profile-${field.key}`">{{ field.label }}</label>
 
@@ -543,20 +546,16 @@ function revokeAvatarPreview() {
                     }}
                   </div>
                 </div>
-              </article>
+              </UiFlatRow>
             </div>
 
-            <section class="grid gap-3 bg-[var(--surface)] p-3 sm:p-4 rounded-xl">
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <h3 class="m-0 text-[15px] font-bold text-[var(--text)]">{{ t("profile.socialLinks") }}</h3>
-                  <p class="m-0 mt-1 text-xs text-[var(--muted)]">{{ t("profile.socialLinksHint") }}</p>
-                </div>
-                <div class="flex items-center gap-1">
+            <UiSurface as="section" class="grid gap-3">
+              <UiSectionHeader :title="t('profile.socialLinks')" :caption="t('profile.socialLinksHint')">
+                <template #actions>
                   <PButton icon="pi pi-plus" rounded variant="text" severity="secondary" :disabled="socialLinks.length >= 10 || isSavingProfile" @click="addSocialLink" />
                   <PButton icon="pi pi-check" rounded variant="text" severity="secondary" :loading="isSavingProfile" :disabled="!isProfileDirty" @click="saveProfile" />
-                </div>
-              </div>
+                </template>
+              </UiSectionHeader>
 
               <div class="grid gap-2">
                 <div v-if="!socialLinks.length" class="text-sm text-[var(--subtle)] px-1">{{ t("profile.noSocialLinks") }}</div>
@@ -566,7 +565,7 @@ function revokeAvatarPreview() {
                   <PButton icon="pi pi-trash" rounded variant="text" severity="secondary" :disabled="isSavingProfile" @click="removeSocialLink(index)" />
                 </article>
               </div>
-            </section>
+            </UiSurface>
           </form>
         </section>
 
@@ -607,3 +606,17 @@ function revokeAvatarPreview() {
     <PToast />
   </main>
 </template>
+
+<style scoped>
+.profile-nav-column {
+  align-self: start;
+}
+
+@media (min-width: 1024px) {
+  .profile-nav-column {
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 24px);
+    z-index: 20;
+  }
+}
+</style>

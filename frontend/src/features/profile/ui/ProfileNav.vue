@@ -13,30 +13,95 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const tabs: Array<{ key: ProfileTab; icon: string }> = [
-  { key: "profile", icon: "pi pi-user" },
-  { key: "close", icon: "pi pi-star" },
-  { key: "blocked", icon: "pi pi-ban" },
-  { key: "settings", icon: "pi pi-sliders-h" },
-  { key: "sessions", icon: "pi pi-desktop" },
-  { key: "system", icon: "pi pi-cog" },
+const tabs: Array<{ key: ProfileTab; icon: string; tone: string }> = [
+  { key: "profile", icon: "pi pi-user", tone: "var(--info)" },
+  { key: "close", icon: "pi pi-star", tone: "var(--success)" },
+  { key: "blocked", icon: "pi pi-ban", tone: "var(--danger)" },
+  { key: "settings", icon: "pi pi-sliders-h", tone: "var(--warning)" },
+  { key: "sessions", icon: "pi pi-desktop", tone: "var(--info)" },
+  { key: "system", icon: "pi pi-cog", tone: "var(--muted)" },
 ];
 </script>
 
 <template>
-  <nav class="lg:sticky lg:top-6 flex lg:flex-col items-center justify-center gap-2" aria-label="Profile sections">
-    <div class="flex lg:flex-col items-center gap-2">
-      <PButton
+  <nav class="profile-nav" aria-label="Profile sections">
+    <div class="profile-nav-rail">
+      <button
         v-for="tab in tabs"
         :key="tab.key"
         v-tooltip.right="t(`profile.${tab.key}`)"
-        :icon="tab.icon"
-        :variant="activeTab === tab.key ? 'primary' : 'text'"
-        :severity="activeTab === tab.key ? undefined : 'secondary'"
-        class="w-11 h-11 border-0"
+        type="button"
+        class="profile-nav-button"
+        :class="{ active: activeTab === tab.key }"
+        :style="{ '--tab-tone': tab.tone }"
         :aria-label="t(`profile.${tab.key}`)"
         @click="emit('update:activeTab', tab.key)"
-      />
+      >
+        <i :class="tab.icon" aria-hidden="true"></i>
+      </button>
     </div>
   </nav>
 </template>
+
+<style scoped>
+.profile-nav {
+  display: flex;
+  justify-content: center;
+}
+
+.profile-nav-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-nav-button {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--tab-tone);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--motion), color var(--motion), transform var(--motion-fast);
+}
+
+.profile-nav-button::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  width: 3px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--tab-tone);
+  opacity: 0;
+  transform: scaleY(0.6);
+  transition: opacity var(--motion), transform var(--motion);
+}
+
+.profile-nav-button:hover,
+.profile-nav-button.active {
+  background: var(--surface-muted);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.profile-nav-button.active::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+@media (max-width: 1023.98px) {
+  .profile-nav-rail {
+    flex-direction: row;
+  }
+}
+</style>

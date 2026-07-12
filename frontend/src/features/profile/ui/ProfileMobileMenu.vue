@@ -8,13 +8,13 @@ defineEmits<{
 
 const { t } = useI18n();
 
-const menuItems: Array<{ key: ProfileTab; icon: string; description: string }> = [
-  { key: "profile", icon: "pi pi-user", description: "profile.menu.profile" },
-  { key: "close", icon: "pi pi-star", description: "profile.menu.close" },
-  { key: "blocked", icon: "pi pi-ban", description: "profile.menu.blocked" },
-  { key: "settings", icon: "pi pi-sliders-h", description: "profile.menu.settings" },
-  { key: "sessions", icon: "pi pi-desktop", description: "profile.menu.sessions" },
-  { key: "system", icon: "pi pi-cog", description: "profile.menu.system" },
+const menuItems: Array<{ key: ProfileTab; icon: string; description: string; tone: "info" | "success" | "danger" | "warning" | "pink" | "cyan" }> = [
+  { key: "profile", icon: "pi pi-user", description: "profile.menu.profile", tone: "info" },
+  { key: "close", icon: "pi pi-star", description: "profile.menu.close", tone: "pink" },
+  { key: "blocked", icon: "pi pi-ban", description: "profile.menu.blocked", tone: "danger" },
+  { key: "settings", icon: "pi pi-sliders-h", description: "profile.menu.settings", tone: "warning" },
+  { key: "sessions", icon: "pi pi-desktop", description: "profile.menu.sessions", tone: "cyan" },
+  { key: "system", icon: "pi pi-cog", description: "profile.menu.system", tone: "success" },
 ];
 </script>
 
@@ -27,7 +27,7 @@ const menuItems: Array<{ key: ProfileTab; icon: string; description: string }> =
       type="button"
       @click="$emit('openView', item.key)"
     >
-      <span class="profile-menu-icon" aria-hidden="true"><i :class="item.icon"></i></span>
+      <UiIconTile :tone="item.tone" class="profile-menu-icon"><i :class="item.icon"></i></UiIconTile>
       <span class="min-w-0">
         <strong>{{ t(`profile.${item.key}`) }}</strong>
         <small>{{ t(item.description) }}</small>
@@ -42,7 +42,7 @@ const menuItems: Array<{ key: ProfileTab; icon: string; description: string }> =
   width: 100%;
   min-height: 64px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text);
   padding: 12px;
@@ -52,17 +52,16 @@ const menuItems: Array<{ key: ProfileTab; icon: string; description: string }> =
   gap: 12px;
   text-align: left;
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--motion), transform var(--motion-fast), box-shadow var(--motion);
+}
+
+.profile-menu-row:hover {
+  background: var(--surface-muted);
+  transform: translateY(-1px);
 }
 
 .profile-menu-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: var(--surface-muted);
-  color: var(--text);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   font-size: 16px;
 }
 

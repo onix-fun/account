@@ -191,17 +191,17 @@ async function respond(invitationId: string, accept: boolean) {
   <section class="grid gap-5">
     <input ref="avatarInput" class="hidden" type="file" accept="image/jpeg,image/png,image/webp" @change="uploadAvatar" />
 
-    <div class="flex items-center justify-between gap-3">
+    <div class="ui-section-header">
       <div>
-        <h2 class="m-0 text-base font-bold text-[var(--text)]">{{ t("organizations.management") }}</h2>
-        <p class="m-0 mt-1 text-sm text-[var(--muted)]">{{ t("organizations.managementHint") }}</p>
+        <h2 class="ui-section-title">{{ t("organizations.management") }}</h2>
+        <p class="ui-section-caption">{{ t("organizations.managementHint") }}</p>
       </div>
       <PButton :label="t('organizations.create')" icon="pi pi-plus" @click="isCreateOpen = true" />
     </div>
 
     <div v-if="authStore.organizationInvitations.length" class="grid gap-3">
       <h2 class="m-0 text-base font-bold text-[var(--text)]">{{ t("organizations.invitations") }}</h2>
-      <article v-for="invitation in authStore.organizationInvitations" :key="invitation.id" class="grid gap-3 rounded-xl bg-[var(--surface)] p-4">
+      <UiFlatRow v-for="invitation in authStore.organizationInvitations" :key="invitation.id" class="grid gap-3 p-4">
         <div>
           <strong>{{ invitation.organization.displayName }}</strong>
           <p class="m-0 text-sm text-[var(--muted)]">{{ invitation.organization.orgName }} · {{ invitation.role }}</p>
@@ -210,14 +210,14 @@ async function respond(invitationId: string, accept: boolean) {
           <PButton :label="t('common.accept')" size="small" @click="respond(invitation.id, true)" />
           <PButton :label="t('common.decline')" size="small" severity="secondary" variant="text" @click="respond(invitation.id, false)" />
         </div>
-      </article>
+      </UiFlatRow>
     </div>
 
-    <div v-if="!authStore.organizations.length" class="min-h-[320px] grid place-items-center rounded-2xl bg-[var(--surface)] p-8 text-center">
+    <div v-if="!authStore.organizations.length" class="ui-empty min-h-[320px]">
       <div class="grid gap-3 justify-items-center max-w-[360px]">
-        <span class="w-16 h-16 rounded-2xl bg-[var(--surface-muted)] flex items-center justify-center text-2xl text-[var(--muted)]">
+        <UiIconTile tone="info" class="!w-16 !h-16 !rounded-2xl text-2xl">
           <i class="pi pi-building"></i>
-        </span>
+        </UiIconTile>
         <h2 class="m-0 text-xl font-bold text-[var(--text)]">{{ t("organizations.emptyTitle") }}</h2>
         <p class="m-0 text-sm text-[var(--muted)]">{{ t("organizations.emptyHint") }}</p>
         <PButton :label="t('organizations.create')" icon="pi pi-plus" @click="isCreateOpen = true" />
@@ -226,7 +226,7 @@ async function respond(invitationId: string, accept: boolean) {
 
     <div v-else class="grid gap-3">
       <h2 class="m-0 text-base font-bold text-[var(--text)]">{{ t("organizations.mine") }}</h2>
-      <article v-for="organization in visibleOrganizations" :key="organization.id" class="grid gap-4 rounded-xl bg-[var(--surface)] p-4">
+      <UiSurface v-for="organization in visibleOrganizations" :key="organization.id" as="article" class="grid gap-4">
         <div class="flex items-start justify-between gap-3">
           <div class="flex items-center gap-3 min-w-0">
             <button
@@ -321,7 +321,7 @@ async function respond(invitationId: string, accept: boolean) {
             </span>
           </article>
         </section>
-      </article>
+      </UiSurface>
     </div>
 
     <PDialog

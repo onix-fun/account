@@ -59,7 +59,7 @@ async function createChallenge() {
       margin: 1,
       width: 232,
       color: {
-        dark: "#111827",
+        dark: "#17191c",
         light: "#ffffff",
       },
     });
@@ -193,7 +193,7 @@ function cleanup() {
   width: 232px;
   height: 232px;
   border-radius: 12px;
-  background: #fff;
+  background: #ffffff;
 }
 
 .qr-loading {

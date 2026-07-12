@@ -80,15 +80,13 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
 
 <template>
   <section class="grid gap-2">
-    <div class="flex items-center justify-between gap-3 min-h-[40px] px-1">
-      <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.settings") }}</h2>
-    </div>
+    <UiSectionHeader :title="t('profile.settings')" />
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <UiSurface as="section" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div class="flex items-center gap-3.5 min-w-0">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="warning">
           <i class="pi pi-lock text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("social.privateProfile") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed">{{ t("social.privateProfileHint") }}</p>
@@ -99,13 +97,13 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
         <i v-if="savingKey === 'privacy'" class="pi pi-spinner pi-spin"></i>
         <i v-else :class="socialStore.privacy.isPrivate ? 'pi pi-lock' : 'pi pi-globe'"></i>
       </button>
-    </section>
+    </UiSurface>
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl grid gap-3">
+    <UiSurface as="section" class="grid gap-3">
       <div class="flex items-start gap-3.5">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="info">
           <i class="pi pi-eye text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("social.visibility") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed">{{ t("social.visibilityHint") }}</p>
@@ -113,11 +111,11 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
       </div>
 
       <div class="grid gap-1.5">
-        <article v-for="row in visibilityRows" :key="row.key" class="grid gap-3 p-3 rounded-xl bg-[var(--surface-muted)]">
+        <UiFlatRow v-for="row in visibilityRows" :key="row.key" muted class="grid gap-3 p-3">
           <div class="flex items-center gap-3 min-w-0">
-            <span class="w-9 h-9 rounded-lg bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] shrink-0">
+            <UiIconTile size="sm">
               <i :class="row.icon"></i>
-            </span>
+            </UiIconTile>
             <span class="min-w-0">
               <strong class="block text-sm text-[var(--text)] truncate">{{ t(`social.visibilityFields.${row.key}`) }}</strong>
               <small class="block text-xs text-[var(--muted)] truncate">{{ t(`social.visibilityFields.${row.key}Hint`) }}</small>
@@ -136,15 +134,15 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
               {{ t(`social.visibilityOptions.${option}`) }}
             </button>
           </div>
-        </article>
+        </UiFlatRow>
       </div>
-    </section>
+    </UiSurface>
 
-    <section class="bg-[var(--surface)] p-4 rounded-2xl grid gap-3">
+    <UiSurface as="section" class="grid gap-3">
       <div class="flex items-start gap-3.5">
-        <div class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+        <UiIconTile tone="pink">
           <i class="pi pi-bell text-lg"></i>
-        </div>
+        </UiIconTile>
         <div class="min-w-0">
           <h3 class="text-[15px] font-bold m-0 text-[var(--text)] leading-tight">{{ t("social.notificationPrefs") }}</h3>
           <p class="m-0 mt-1 text-xs text-[var(--muted)] leading-relaxed">{{ t("social.notificationPrefsHint") }}</p>
@@ -154,19 +152,19 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
       <div class="grid gap-1.5">
         <section v-for="service in socialStore.notificationSettings.services" :key="service.serviceKey" class="grid gap-1.5">
           <div class="flex items-center gap-3 min-w-0 px-1 pt-1">
-            <span class="w-9 h-9 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+            <UiIconTile size="sm" tone="info">
               <i :class="service.icon"></i>
-            </span>
+            </UiIconTile>
             <span class="min-w-0">
               <strong class="block text-sm text-[var(--text)] truncate">{{ service.name }}</strong>
               <small class="block text-xs text-[var(--muted)] truncate">{{ service.description }}</small>
             </span>
           </div>
-          <article v-for="item in service.items" :key="`${item.serviceKey}:${item.typeKey}`" class="flex flex-row items-center justify-between gap-3 p-3 rounded-xl bg-[var(--surface-muted)]">
+          <UiFlatRow v-for="item in service.items" :key="`${item.serviceKey}:${item.typeKey}`" muted class="flex flex-row items-center justify-between gap-3 p-3">
             <div class="flex items-center gap-3 min-w-0">
-              <span class="w-9 h-9 rounded-lg bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] shrink-0">
+              <UiIconTile size="sm">
                 <i :class="item.icon"></i>
-              </span>
+              </UiIconTile>
               <span class="min-w-0">
                 <strong class="block text-sm text-[var(--text)] truncate">{{ item.name }}</strong>
                 <small class="block text-xs text-[var(--muted)] truncate">{{ item.description }}</small>
@@ -187,10 +185,10 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
                 </span>
               </span>
             </button>
-          </article>
+          </UiFlatRow>
         </section>
       </div>
-    </section>
+    </UiSurface>
   </section>
 </template>
 
@@ -211,8 +209,8 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
 }
 
 .profile-toggle[aria-pressed="true"] {
-  background: var(--text);
-  color: var(--btn-primary-text);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .profile-toggle:disabled {
@@ -237,7 +235,7 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
   border-radius: 999px;
   padding: 3px;
   display: block;
-  background: var(--surface-active);
+  background: var(--danger);
   transition: background 0.16s ease;
 }
 
@@ -247,7 +245,7 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
-  box-shadow: 0 2px 8px rgba(22, 34, 51, 0.16);
+  box-shadow: var(--shadow-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -257,7 +255,7 @@ async function setVisibility(key: keyof PrivacySettings["fieldVisibility"], valu
 }
 
 .profile-switch[aria-checked="true"] .profile-switch-track {
-  background: var(--text);
+  background: var(--success);
 }
 
 .profile-switch[aria-checked="true"] .profile-switch-thumb {

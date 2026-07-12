@@ -49,7 +49,7 @@ const inviteLabel = computed(() => {
 </script>
 
 <template>
-  <article class="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3.5 rounded-xl bg-[var(--surface)] border-0 min-w-0">
+  <UiFlatRow as="article" class="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3.5 min-w-0">
     <div class="flex items-center gap-3.5 min-w-0 flex-1">
       <span class="w-11 h-11 rounded-full bg-[var(--surface-muted)] flex items-center justify-center text-sm font-bold text-[var(--text)] overflow-hidden shrink-0">
         <img v-if="user.avatarUrl" :src="user.avatarUrl" alt="" class="w-full h-full object-cover" />
@@ -136,20 +136,25 @@ const inviteLabel = computed(() => {
         />
       </template>
     </div>
-  </article>
+  </UiFlatRow>
 </template>
 
 <style scoped>
 .role-select {
   height: 34px;
   min-width: 128px;
-  border: 1px solid var(--surface-active);
-  border-radius: 8px;
-  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
   color: var(--text);
   padding: 0 9px;
   font: inherit;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 720;
+  outline: none;
+}
+
+.role-select:focus {
+  box-shadow: 0 0 0 4px var(--focus-ring);
 }
 </style>

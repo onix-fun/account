@@ -86,7 +86,7 @@ function memberName(member: OrganizationMember): string {
 
 <template>
   <section class="grid gap-4">
-    <article v-if="organization.role === 'OWNER'" class="member-card">
+    <UiSurface v-if="organization.role === 'OWNER'" as="article" class="member-card">
       <div class="min-w-0">
         <h2>{{ t("organizations.invite") }}</h2>
         <p>{{ t("organizations.inviteHint") }}</p>
@@ -95,9 +95,9 @@ function memberName(member: OrganizationMember): string {
         <PInputText v-model="invite.username" :placeholder="t('organizations.inviteUsername')" @keyup.enter="inviteMember" />
         <PButton icon="pi pi-send" :label="t('organizations.invite')" :loading="busyKey === 'invite'" @click="inviteMember" />
       </div>
-    </article>
+    </UiSurface>
 
-    <article class="member-card">
+    <UiSurface as="article" class="member-card">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <h2>{{ t("organizations.members") }}</h2>
@@ -107,7 +107,7 @@ function memberName(member: OrganizationMember): string {
       </div>
 
       <div class="grid gap-2">
-        <article v-for="member in members" :key="member.userId" class="member-row">
+        <UiFlatRow v-for="member in members" :key="member.userId" as="article" class="member-row" muted>
           <span class="member-avatar">
             <img v-if="member.avatarUrl" :src="member.avatarUrl" alt="" />
             <span v-else>{{ member.username.slice(0, 1).toUpperCase() }}</span>
@@ -134,17 +134,14 @@ function memberName(member: OrganizationMember): string {
               @click="remove(member)"
             />
           </span>
-        </article>
+        </UiFlatRow>
       </div>
-    </article>
+    </UiSurface>
   </section>
 </template>
 
 <style scoped>
 .member-card {
-  border-radius: 18px;
-  background: var(--surface);
-  padding: 16px;
   display: grid;
   gap: 14px;
 }

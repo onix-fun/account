@@ -28,7 +28,7 @@ const initials = computed(() => userInitials(props.user));
 </script>
 
 <template>
-  <header class="account-header">
+  <UiSurface as="header" class="account-header" :padded="false">
     <div class="header-side">
       <PButton
         v-if="backUrl"
@@ -76,7 +76,7 @@ const initials = computed(() => userInitials(props.user));
         <span v-else>{{ initials }}</span>
       </button>
     </div>
-  </header>
+  </UiSurface>
 </template>
 
 <style scoped>
@@ -84,6 +84,7 @@ const initials = computed(() => userInitials(props.user));
   width: min(800px, 100%);
   min-height: 48px;
   margin: 0 auto;
+  padding: 8px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
@@ -115,13 +116,20 @@ const initials = computed(() => userInitials(props.user));
 .account-button {
   position: relative;
   border: 0;
-  background: var(--surface);
+  background: var(--surface-muted);
   color: var(--text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  box-shadow: none;
+  transition: background var(--motion), transform var(--motion-fast);
+}
+
+.header-icon-button:hover,
+.account-button:hover {
+  background: var(--surface-active);
+  transform: translateY(-1px);
 }
 
 .account-button {

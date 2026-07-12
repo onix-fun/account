@@ -34,16 +34,17 @@ async function run(user: PublicUser, action: () => Promise<void>, successKey: st
 
 <template>
   <section class="grid gap-4">
-    <div class="flex items-center justify-between gap-3 min-h-[40px]">
-      <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.requests") }}</h2>
-      <PButton icon="pi pi-refresh" :label="t('profile.refresh')" variant="text" severity="secondary" size="small" :loading="socialStore.requests.isLoading" @click="socialStore.loadRequests()" />
-    </div>
+    <UiSectionHeader :title="t('profile.requests')">
+      <template #actions>
+        <PButton icon="pi pi-refresh" :label="t('profile.refresh')" variant="text" severity="secondary" size="small" :loading="socialStore.requests.isLoading" @click="socialStore.loadRequests()" />
+      </template>
+    </UiSectionHeader>
 
-    <div class="grid gap-1.5">
-      <div v-if="socialStore.requests.isLoading" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] rounded-xl">
+    <div class="ui-list">
+      <div v-if="socialStore.requests.isLoading" class="ui-empty">
         <i class="pi pi-spinner pi-spin mr-2"></i>{{ t("common.loading") }}
       </div>
-      <div v-else-if="!requestUsers.length" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] rounded-xl">
+      <div v-else-if="!requestUsers.length" class="ui-empty">
         {{ t("social.noRequests") }}
       </div>
       <ProfileUserRow

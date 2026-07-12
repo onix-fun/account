@@ -35,13 +35,14 @@ async function unblock(user: PublicUser) {
 
 <template>
   <section class="grid gap-4">
-    <div class="flex items-center justify-between gap-3 min-h-[40px]">
-      <h2 class="text-base font-bold m-0 text-[var(--text)]">{{ t("profile.blocked") }}</h2>
-      <PButton icon="pi pi-plus" :label="t('social.add')" size="small" @click="isAddOpen = true" />
-    </div>
+    <UiSectionHeader :title="t('profile.blocked')">
+      <template #actions>
+        <PButton icon="pi pi-plus" :label="t('social.add')" size="small" @click="isAddOpen = true" />
+      </template>
+    </UiSectionHeader>
 
-    <div class="grid gap-1.5">
-      <div v-if="!socialStore.blockedUsers.length" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] rounded-xl">
+    <div class="ui-list">
+      <div v-if="!socialStore.blockedUsers.length" class="ui-empty">
         {{ t("social.noBlockedUsers") }}
       </div>
       <ProfileUserRow

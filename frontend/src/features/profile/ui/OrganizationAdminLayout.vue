@@ -17,11 +17,11 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const mobileContentOpen = ref(false);
-const tabs = computed<Array<{ key: OrganizationAdminTab; icon: string; label: string; description: string }>>(() => [
-  { key: "profile", icon: "pi pi-id-card", label: t("profile.profile"), description: t("organizations.menu.profile") },
-  { key: "social", icon: "pi pi-users", label: t("organizations.social"), description: t("organizations.menu.social") },
-  { key: "blocked", icon: "pi pi-ban", label: t("profile.blocked"), description: t("organizations.menu.blocked") },
-  { key: "members", icon: "pi pi-sitemap", label: t("organizations.members"), description: t("organizations.menu.members") },
+const tabs = computed<Array<{ key: OrganizationAdminTab; icon: string; label: string; description: string; tone: "info" | "success" | "danger" | "cyan" }>>(() => [
+  { key: "profile", icon: "pi pi-id-card", label: t("profile.profile"), description: t("organizations.menu.profile"), tone: "info" },
+  { key: "social", icon: "pi pi-users", label: t("organizations.social"), description: t("organizations.menu.social"), tone: "success" },
+  { key: "blocked", icon: "pi pi-ban", label: t("profile.blocked"), description: t("organizations.menu.blocked"), tone: "danger" },
+  { key: "members", icon: "pi pi-sitemap", label: t("organizations.members"), description: t("organizations.menu.members"), tone: "cyan" },
 ]);
 
 watch(
@@ -69,7 +69,8 @@ function closeMobileTab() {
         :icon="tab.icon"
         :variant="activeTab === tab.key ? 'primary' : 'text'"
         :severity="activeTab === tab.key ? undefined : 'secondary'"
-        class="w-11 h-11 border-0"
+        class="org-admin-tab-button w-11 h-11 border-0"
+        :class="`org-admin-tab-button--${tab.tone}`"
         :aria-label="tab.label"
         @click="emit('update:activeTab', tab.key)"
       />
@@ -84,7 +85,7 @@ function closeMobileTab() {
         :class="{ active: activeTab === tab.key }"
         @click="openMobileTab(tab.key)"
       >
-        <span class="org-mobile-icon"><i :class="tab.icon"></i></span>
+        <UiIconTile :tone="tab.tone" class="org-mobile-icon"><i :class="tab.icon"></i></UiIconTile>
         <span class="min-w-0">
           <strong>{{ tab.label }}</strong>
           <small>{{ tab.description }}</small>
@@ -178,6 +179,43 @@ function closeMobileTab() {
   gap: 8px;
 }
 
+.org-admin-tab-button {
+  position: relative;
+}
+
+.org-admin-tab-button::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  width: 3px;
+  height: 15px;
+  border-radius: 999px;
+  opacity: 0;
+  transform: scaleY(0.65);
+  transition: opacity var(--motion), transform var(--motion);
+}
+
+.org-admin-tab-button.p-button:not(.p-button-text)::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.org-admin-tab-button--info::before {
+  background: var(--info);
+}
+
+.org-admin-tab-button--success::before {
+  background: var(--success);
+}
+
+.org-admin-tab-button--danger::before {
+  background: var(--danger);
+}
+
+.org-admin-tab-button--cyan::before {
+  background: var(--cyan);
+}
+
 .org-admin-content {
   min-width: 0;
 }
@@ -196,7 +234,7 @@ function closeMobileTab() {
   width: 100%;
   min-height: 62px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text);
   padding: 11px;
@@ -206,20 +244,18 @@ function closeMobileTab() {
   gap: 12px;
   text-align: left;
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--motion), transform var(--motion-fast), box-shadow var(--motion);
 }
 
+.org-mobile-row:hover,
 .org-mobile-row.active {
   background: var(--surface-active);
+  transform: translateY(-1px);
 }
 
 .org-mobile-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: var(--surface-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 16px;
 }
 
 .org-mobile-row strong,

@@ -138,7 +138,7 @@ const applyCrop = async () => {
 
       <div class="grid gap-3 justify-items-center">
         <div 
-          class="w-full max-w-[300px] aspect-square relative overflow-hidden rounded-xl bg-[#101828] touch-none cursor-move"
+          class="avatar-crop-frame"
           @pointerdown="onPointerDown"
         >
           <img 
@@ -149,7 +149,7 @@ const applyCrop = async () => {
             class="absolute left-1/2 top-1/2 max-w-none select-none origin-center pointer-events-none"
             @load="onImageLoad" 
           />
-          <div class="absolute inset-0 border border-white/80 rounded-xl shadow-[inset_0_0_0_999px_rgba(16,24,40,0.16)] pointer-events-none" aria-hidden="true"></div>
+          <div class="avatar-crop-mask" aria-hidden="true"></div>
         </div>
         <p class="m-0 text-xs text-[var(--muted)] text-center">{{ t("profile.cropInstructions") }}</p>
       </div>
@@ -195,3 +195,26 @@ const applyCrop = async () => {
     </template>
   </PDialog>
 </template>
+
+<style scoped>
+.avatar-crop-frame {
+  width: 100%;
+  max-width: 300px;
+  aspect-ratio: 1;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+  touch-action: none;
+  cursor: move;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface-strong) 70%, transparent);
+}
+
+.avatar-crop-mask {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+</style>

@@ -23,7 +23,7 @@ async function respond(invitationId: string, accept: boolean) {
 <template>
   <section class="grid gap-3">
     <article v-if="!authStore.organizationInvitations.length" class="invite-empty">
-      <span><i class="pi pi-inbox"></i></span>
+      <UiIconTile tone="info" size="md" class="invite-empty-icon"><i class="pi pi-inbox"></i></UiIconTile>
       <h2>{{ t("organizations.noInvitations") }}</h2>
       <p>{{ t("organizations.noInvitationsHint") }}</p>
     </article>
@@ -31,7 +31,7 @@ async function respond(invitationId: string, accept: boolean) {
     <article v-for="invitation in authStore.organizationInvitations" :key="invitation.id" class="invite-card">
       <span class="invite-avatar">
         <img v-if="invitation.organization.avatarUrl" :src="invitation.organization.avatarUrl" alt="" />
-        <i v-else class="pi pi-building"></i>
+        <UiIconTile v-else tone="cyan" size="md" class="invite-avatar-icon"><i class="pi pi-building"></i></UiIconTile>
       </span>
       <span class="min-w-0">
         <strong>{{ invitation.organization.displayName }}</strong>
@@ -62,7 +62,6 @@ async function respond(invitationId: string, accept: boolean) {
   text-align: center;
 }
 
-.invite-empty span,
 .invite-avatar {
   width: 48px;
   height: 48px;
@@ -73,6 +72,14 @@ async function respond(invitationId: string, accept: boolean) {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+}
+
+.invite-empty-icon,
+.invite-avatar-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  font-size: 17px;
 }
 
 .invite-empty h2 {

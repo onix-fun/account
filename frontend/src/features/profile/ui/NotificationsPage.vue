@@ -166,8 +166,8 @@ async function markAllRead() {
   <section class="grid gap-4">
     <div class="grid gap-2">
       <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="emit('back')" />
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-h-[40px]">
-        <h2 class="text-base font-bold m-0 text-[var(--text)] truncate">{{ t("social.notifications") }}</h2>
+      <UiSectionHeader :title="t('social.notifications')">
+        <template #actions>
         <PButton
           icon="pi pi-check-circle"
           :label="t('social.markAllRead')"
@@ -178,27 +178,29 @@ async function markAllRead() {
           :disabled="!socialStore.notifications.items.length"
           @click="markAllRead"
         />
-      </div>
+        </template>
+      </UiSectionHeader>
     </div>
 
-    <div class="grid gap-1.5">
-      <div v-if="socialStore.notifications.isLoading" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] rounded-xl">
+    <div class="ui-list">
+      <div v-if="socialStore.notifications.isLoading" class="ui-empty">
         <i class="pi pi-spinner pi-spin mr-2"></i>{{ t("common.loading") }}
       </div>
-      <div v-else-if="!socialStore.notifications.items.length" class="p-9 text-center text-sm text-[var(--muted)] bg-[var(--surface)] rounded-xl">
+      <div v-else-if="!socialStore.notifications.items.length" class="ui-empty">
         {{ t("social.noNotifications") }}
       </div>
-      <article
+      <UiFlatRow
         v-for="item in socialStore.notifications.items"
         v-else
         :key="item.id"
-        class="grid gap-3 p-4 rounded-xl bg-[var(--surface)] border-0"
-        :class="{ 'bg-[var(--surface-active)]': !item.isRead }"
+        as="article"
+        class="grid gap-3 p-4"
+        :active="!item.isRead"
       >
         <div class="flex items-start gap-3 min-w-0">
-          <span class="w-10 h-10 rounded-lg bg-[var(--surface-muted)] flex items-center justify-center text-[var(--muted)] shrink-0">
+          <UiIconTile :tone="item.isRead ? 'neutral' : 'info'">
             <i :class="notificationIcon(item)"></i>
-          </span>
+          </UiIconTile>
           <div class="min-w-0 flex-1">
             <h3 class="m-0 text-[15px] font-bold text-[var(--text)] leading-tight">{{ notificationTitle(item) }}</h3>
             <p class="m-0 mt-1 text-sm text-[var(--muted)] leading-relaxed">{{ notificationBody(item) }}</p>
@@ -229,7 +231,7 @@ async function markAllRead() {
             @click="markRead(item.id)"
           />
         </div>
-      </article>
+      </UiFlatRow>
     </div>
 
     <div v-if="socialStore.notifications.totalCount > socialStore.notifications.limit" class="flex items-center justify-between gap-2">
