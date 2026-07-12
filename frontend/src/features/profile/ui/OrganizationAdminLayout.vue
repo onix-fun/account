@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { Organization } from "@/domain";
 
-export type OrganizationAdminTab = "profile" | "social" | "blocked" | "members";
+export type OrganizationAdminTab = "profile" | "connections" | "social" | "blocked" | "members";
 
 const props = defineProps<{
   organization: Organization;
@@ -17,9 +17,10 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const mobileContentOpen = ref(false);
-const tabs = computed<Array<{ key: OrganizationAdminTab; icon: string; label: string; description: string; tone: "info" | "success" | "danger" | "cyan" }>>(() => [
+const tabs = computed<Array<{ key: OrganizationAdminTab; icon: string; label: string; description: string; tone: "info" | "success" | "danger" | "warning" | "cyan" }>>(() => [
   { key: "profile", icon: "pi pi-id-card", label: t("profile.profile"), description: t("organizations.menu.profile"), tone: "info" },
-  { key: "social", icon: "pi pi-users", label: t("organizations.social"), description: t("organizations.menu.social"), tone: "success" },
+  { key: "connections", icon: "pi pi-users", label: t("social.connections"), description: t("organizations.menu.connections"), tone: "cyan" },
+  { key: "social", icon: "pi pi-sliders-h", label: t("organizations.social"), description: t("organizations.menu.social"), tone: "warning" },
   { key: "blocked", icon: "pi pi-ban", label: t("profile.blocked"), description: t("organizations.menu.blocked"), tone: "danger" },
   { key: "members", icon: "pi pi-sitemap", label: t("organizations.members"), description: t("organizations.menu.members"), tone: "cyan" },
 ]);
@@ -30,10 +31,6 @@ watch(
     mobileContentOpen.value = false;
   },
 );
-
-function initials(): string {
-  return props.organization.displayName.slice(0, 1).toUpperCase();
-}
 
 function openMobileTab(tab: OrganizationAdminTab) {
   mobileContentOpen.value = true;
@@ -47,20 +44,6 @@ function closeMobileTab() {
 
 <template>
   <section class="org-admin" :class="{ 'org-admin--mobile-content': mobileContentOpen }">
-    <header class="org-admin-header">
-      <div class="org-admin-title">
-        <span class="org-admin-avatar">
-          <img v-if="organization.avatarUrl" :src="organization.avatarUrl" alt="" />
-          <span v-else>{{ initials() }}</span>
-        </span>
-        <span class="min-w-0">
-          <h1>{{ organization.displayName }}</h1>
-          <small>{{ organization.orgName }} · {{ organization.role }}</small>
-        </span>
-      </div>
-      <PButton icon="pi pi-building" variant="text" severity="secondary" class="w-10 h-10 border-0" :aria-label="t('organizations.choose')" @click="emit('choose')" />
-    </header>
-
     <nav class="org-admin-tabs" aria-label="Organization sections">
       <PButton
         v-for="tab in tabs"
@@ -112,62 +95,7 @@ function closeMobileTab() {
 }
 
 .org-admin-header {
-  grid-column: 1 / -1;
-  border-radius: 20px;
-  background: var(--surface);
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.org-admin-title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.org-admin-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 18px;
-  background: var(--surface-muted);
-  overflow: hidden;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 900;
-  flex-shrink: 0;
-}
-
-.org-admin-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.org-admin-title h1 {
-  margin: 0;
-  color: var(--text);
-  font-size: 22px;
-  line-height: 1.1;
-  font-weight: 900;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.org-admin-title small {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .org-admin-tabs {
@@ -210,6 +138,10 @@ function closeMobileTab() {
 
 .org-admin-tab-button--danger::before {
   background: var(--danger);
+}
+
+.org-admin-tab-button--warning::before {
+  background: var(--warning);
 }
 
 .org-admin-tab-button--cyan::before {

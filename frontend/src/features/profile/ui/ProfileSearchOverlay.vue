@@ -119,7 +119,7 @@ async function inviteUser(user: PublicUser, role: "OWNER" | "CONTRIBUTOR") {
   <section v-if="visible" class="search-surface" :class="{ 'search-surface--overlay': !page }">
     <div class="search-inner">
       <header class="search-header">
-        <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2" @click="emit('close')" />
+        <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="emit('close')" />
         <div class="search-title">
           <span><i class="pi pi-search"></i></span>
           <div class="min-w-0">
@@ -191,6 +191,7 @@ async function inviteUser(user: PublicUser, role: "OWNER" | "CONTRIBUTOR") {
 
 .search-header {
   display: grid;
+  justify-items: start;
   gap: 10px;
 }
 

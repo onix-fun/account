@@ -13,6 +13,7 @@ const i18n = createI18n({
       social: { search: "Search" },
       profile: {
         profile: "Profile",
+        connections: "Connections",
         requests: "Requests",
         close: "Close friends",
         blocked: "Blocked",
@@ -22,6 +23,7 @@ const i18n = createI18n({
         menu: {
           search: "Find people.",
           profile: "Edit profile.",
+          connections: "Followers and following.",
           requests: "Follow requests.",
           close: "Close friends.",
           blocked: "Blocked users.",
@@ -41,11 +43,11 @@ describe("ProfileMobileMenu", () => {
     });
 
     const rows = wrapper.findAll(".profile-menu-row");
-    expect(rows).toHaveLength(6);
+    expect(rows).toHaveLength(7);
     expect(rows[0].text()).toContain("Profile");
 
     await rows[0].trigger("click");
-    await rows[2].trigger("click");
+    await rows[3].trigger("click");
 
     expect(wrapper.emitted("openView")).toEqual([["profile"], ["blocked"]]);
   });
@@ -56,6 +58,6 @@ describe("ProfileMobileMenu", () => {
     });
 
     expect(wrapper.text()).not.toContain("Requests");
-    expect(wrapper.findAll(".profile-menu-row")).toHaveLength(6);
+    expect(wrapper.findAll(".profile-menu-row")).toHaveLength(7);
   });
 });

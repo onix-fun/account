@@ -10,6 +10,7 @@ const { t } = useI18n();
 
 const menuItems: Array<{ key: ProfileTab; icon: string; description: string; tone: "info" | "success" | "danger" | "warning" | "pink" | "cyan" }> = [
   { key: "profile", icon: "pi pi-user", description: "profile.menu.profile", tone: "info" },
+  { key: "connections", icon: "pi pi-users", description: "profile.menu.connections", tone: "cyan" },
   { key: "close", icon: "pi pi-star", description: "profile.menu.close", tone: "pink" },
   { key: "blocked", icon: "pi pi-ban", description: "profile.menu.blocked", tone: "danger" },
   { key: "settings", icon: "pi pi-sliders-h", description: "profile.menu.settings", tone: "warning" },

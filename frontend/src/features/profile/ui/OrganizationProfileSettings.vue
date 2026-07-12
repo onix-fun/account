@@ -5,6 +5,8 @@ import { apiErrorMessage } from "@/api/client";
 import { useAuthStore } from "@/infra/store";
 import type { Organization, SocialLink } from "@/domain";
 import AvatarCropper from "@/features/avatar/ui/AvatarCropper.vue";
+import SocialLinksEditor from "@/features/profile/ui/SocialLinksEditor.vue";
+import { hasDuplicateSocialLinks, hasInvalidSocialLinks, normalizeSocialLinks } from "@/shared/lib/socialLinks";
 
 const props = defineProps<{
   organization: Organization;
@@ -36,6 +38,7 @@ const isDirty = computed(() => (
   edit.bio.trim() !== (props.organization.bio || "") ||
   JSON.stringify(normalizedLinks(edit.socialLinks)) !== JSON.stringify(props.organization.socialLinks || [])
 ));
+const hasSocialLinkErrors = computed(() => hasInvalidSocialLinks(edit.socialLinks) || hasDuplicateSocialLinks(edit.socialLinks));
 
 watch(
   () => props.organization,
@@ -57,9 +60,7 @@ function initials(): string {
 }
 
 function normalizedLinks(links: SocialLink[]): SocialLink[] {
-  return links
-    .map((link) => ({ label: link.label.trim(), url: link.url.trim() }))
-    .filter((link) => link.label || link.url);
+  return normalizeSocialLinks(links);
 }
 
 function addSocialLink() {
@@ -74,6 +75,10 @@ function removeSocialLink(index: number) {
 
 async function save() {
   if (!canEdit.value || !isDirty.value) return;
+  if (hasSocialLinkErrors.value) {
+    emit("message", t("profile.socialLinkValidationError"), "error");
+    return;
+  }
   isSaving.value = true;
   try {
     await authStore.updateOrganization(props.organization.id, {
@@ -193,21 +198,14 @@ function revokeAvatarPreview() {
         <PButton icon="pi pi-plus" rounded variant="text" severity="secondary" :disabled="!canEdit || edit.socialLinks.length >= 10" @click="addSocialLink" />
       </div>
 
-      <div class="grid gap-2">
-        <div v-if="!edit.socialLinks.length" class="text-sm text-[var(--subtle)] px-1">{{ t("profile.noSocialLinks") }}</div>
-        <article v-for="(link, index) in edit.socialLinks" :key="index" class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-2 items-center">
-          <PInputText v-model="link.label" :disabled="!canEdit" :placeholder="t('profile.socialLinkLabel')" />
-          <PInputText v-model="link.url" :disabled="!canEdit" :placeholder="t('profile.socialLinkUrl')" />
-          <PButton icon="pi pi-trash" rounded variant="text" severity="secondary" :disabled="!canEdit" @click="removeSocialLink(index)" />
-        </article>
-      </div>
+      <SocialLinksEditor v-model="edit.socialLinks" :disabled="!canEdit || isSaving" @remove="removeSocialLink" />
     </UiSurface>
 
     <PButton
       :label="t('common.save')"
       icon="pi pi-check"
       :loading="isSaving"
-      :disabled="!canEdit || !isDirty"
+      :disabled="!canEdit || !isDirty || hasSocialLinkErrors"
       class="justify-self-start"
       @click="save"
     />

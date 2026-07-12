@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 
-export type ProfileTab = "profile" | "close" | "blocked" | "settings" | "sessions" | "system";
+export type ProfileTab = "profile" | "connections" | "close" | "blocked" | "settings" | "sessions" | "system";
 
 defineProps<{
   activeTab: ProfileTab;
@@ -15,6 +15,7 @@ const { t } = useI18n();
 
 const tabs: Array<{ key: ProfileTab; icon: string; tone: string }> = [
   { key: "profile", icon: "pi pi-user", tone: "var(--info)" },
+  { key: "connections", icon: "pi pi-users", tone: "var(--cyan)" },
   { key: "close", icon: "pi pi-star", tone: "var(--success)" },
   { key: "blocked", icon: "pi pi-ban", tone: "var(--danger)" },
   { key: "settings", icon: "pi pi-sliders-h", tone: "var(--warning)" },

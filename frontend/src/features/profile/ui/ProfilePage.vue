@@ -14,21 +14,26 @@ import AccountHeader from "@/features/profile/ui/AccountHeader.vue";
 import AccountSwitchModal from "@/features/profile/ui/AccountSwitchModal.vue";
 import BlockedUsersTab from "@/features/profile/ui/BlockedUsersTab.vue";
 import CloseFriendsTab from "@/features/profile/ui/CloseFriendsTab.vue";
+import ConnectionsTab from "@/features/profile/ui/ConnectionsTab.vue";
 import NotificationsPage from "@/features/profile/ui/NotificationsPage.vue";
 import OrganizationAdminLayout, { type OrganizationAdminTab } from "@/features/profile/ui/OrganizationAdminLayout.vue";
 import OrganizationMembers from "@/features/profile/ui/OrganizationMembers.vue";
 import OrganizationProfileSettings from "@/features/profile/ui/OrganizationProfileSettings.vue";
 import OrganizationSelectorScreen from "@/features/profile/ui/OrganizationSelectorScreen.vue";
-import ProfileListPage from "@/features/profile/ui/ProfileListPage.vue";
 import ProfileMobileMenu from "@/features/profile/ui/ProfileMobileMenu.vue";
 import ProfileNav, { type ProfileTab } from "@/features/profile/ui/ProfileNav.vue";
 import ProfileSearchOverlay from "@/features/profile/ui/ProfileSearchOverlay.vue";
-import ProfileTopCard from "@/features/profile/ui/ProfileTopCard.vue";
 import SessionsTab from "@/features/sessions/ui/SessionsTab.vue";
 import SocialSettingsTab from "@/features/profile/ui/SocialSettingsTab.vue";
+import SocialLinksEditor from "@/features/profile/ui/SocialLinksEditor.vue";
+import SocialPlatformIcon from "@/features/profile/ui/SocialPlatformIcon.vue";
 import SystemTab from "@/features/profile/ui/SystemTab.vue";
+import { userInitials } from "@/shared/lib/user";
+import { describeSocialLink, hasDuplicateSocialLinks, hasInvalidSocialLinks, normalizeSocialLinks } from "@/shared/lib/socialLinks";
 
-type ProfileView = ProfileTab | "followers" | "following" | "notifications" | "search";
+type ConnectionsFilter = "followers" | "following" | "friends";
+type ProfileQueryView = ProfileTab | "followers" | "following" | "notifications" | "search";
+type ProfileContentView = ProfileTab | "notifications" | "search";
 type EditableProfileField = "username" | "firstName" | "lastName" | "bio" | "birthDate";
 type UsernameAvailability = "idle" | "checking" | "available" | "taken" | "invalid";
 type AccountMode = "user" | "organization";
@@ -52,6 +57,7 @@ const cropFile = ref<File | null>(null);
 const avatarPreviewUrl = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const usernameAvailability = ref<UsernameAvailability>("idle");
+const isEditingSocialLinks = ref(false);
 let usernameCheckTimeout: ReturnType<typeof setTimeout> | null = null;
 let usernameCheckSequence = 0;
 
@@ -83,12 +89,19 @@ const selectedOrganizationNotificationOwner = computed(() => selectedOrganizatio
   ? { ownerType: "ORGANIZATION" as const, ownerId: selectedOrganization.value.id }
   : null
 );
-const queryView = computed<ProfileView | null>(() => {
+const queryView = computed<ProfileQueryView | null>(() => {
   const value = route.query.view;
   return isProfileView(value) ? value : null;
 });
-const contentView = computed<ProfileView>(() => queryView.value ?? activeTab.value);
-const hideAccountHeader = computed(() => contentView.value === "notifications" || contentView.value === "search");
+const contentView = computed<ProfileContentView>(() => {
+  if (queryView.value === "followers" || queryView.value === "following") return "connections";
+  return queryView.value ?? activeTab.value;
+});
+const connectionsInitialFilter = computed<ConnectionsFilter>(() => {
+  if (queryView.value === "following") return "following";
+  return "followers";
+});
+const hideAccountHeader = computed(() => Boolean(queryView.value));
 const showExternalBack = computed(() => Boolean(backUrl.value) && !queryView.value);
 const showOrganizationSelector = computed(() => !queryView.value && accountMode.value === "organization" && (isOrganizationSelectorOpen.value || !selectedOrganization.value));
 const isProfileDirty = computed(() => {
@@ -102,6 +115,8 @@ const isProfileDirty = computed(() => {
     profileForm.username.trim() !== (user?.username || "")
   );
 });
+const hasSocialLinkErrors = computed(() => hasInvalidSocialLinks(socialLinks.value) || hasDuplicateSocialLinks(socialLinks.value));
+const socialLinkViews = computed(() => socialLinks.value.map(describeSocialLink));
 const canSaveUsername = computed(() => {
   const username = profileForm.username.trim();
   if (username.toLowerCase() === authStore.currentUser?.username.toLowerCase()) return true;
@@ -116,6 +131,7 @@ const editableProfileFields = computed<
   { key: "birthDate", label: t("profile.birthDate"), type: "date" },
   { key: "bio", label: t("profile.bio"), type: "textarea" },
 ]);
+const displayInitials = computed(() => userInitials(authStore.currentUser));
 
 watch(() => authStore.currentUser, syncProfileForm, { immediate: true });
 watch(
@@ -155,9 +171,7 @@ watch(
     }, 450);
   },
 );
-watch(queryView, (view) => {
-  if (view === "followers") socialStore.loadFollowers().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
-  if (view === "following") socialStore.loadFollowing().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
+watch(contentView, (view) => {
   if (view === "notifications") socialStore.loadNotifications().catch((cause) => setMessage(apiErrorMessage(cause), "error"));
 }, { immediate: true });
 
@@ -185,6 +199,7 @@ function syncProfileForm() {
   profileForm.bio = authStore.currentUser?.bio || "";
   profileForm.birthDate = authStore.currentUser?.birthDate || "";
   socialLinks.value = (authStore.currentUser?.socialLinks || []).map((link) => ({ ...link }));
+  isEditingSocialLinks.value = false;
 }
 
 function setMessage(message: string, tone: "success" | "error" | "warn" | "warning" | "info" = "success") {
@@ -197,7 +212,7 @@ function setMessage(message: string, tone: "success" | "error" | "warn" | "warni
   });
 }
 
-function openView(view: ProfileView) {
+function openView(view: ProfileQueryView) {
   router.push({ query: { ...route.query, view } });
 }
 
@@ -207,9 +222,10 @@ function closeView() {
   router.replace({ query: nextQuery });
 }
 
-function isProfileView(value: unknown): value is ProfileView {
+function isProfileView(value: unknown): value is ProfileQueryView {
   return (
     value === "profile" ||
+    value === "connections" ||
     value === "close" ||
     value === "blocked" ||
     value === "settings" ||
@@ -258,6 +274,15 @@ async function confirmFieldEdit(field: EditableProfileField) {
   await saveProfile();
 }
 
+async function confirmSocialLinksEdit() {
+  if (hasSocialLinkErrors.value) return;
+  if (!isProfileDirty.value) {
+    isEditingSocialLinks.value = false;
+    return;
+  }
+  await saveProfile();
+}
+
 function closeFieldEdits() {
   editingFields.username = false;
   editingFields.firstName = false;
@@ -267,6 +292,10 @@ function closeFieldEdits() {
 }
 
 async function saveProfile() {
+  if (hasSocialLinkErrors.value) {
+    setMessage(t("profile.socialLinkValidationError"), "error");
+    return;
+  }
   isSavingProfile.value = true;
   try {
     await authStore.updateProfile({
@@ -275,10 +304,11 @@ async function saveProfile() {
       lastName: profileForm.lastName,
       bio: profileForm.bio,
       birthDate: profileForm.birthDate || null,
-      socialLinks: normalizedSocialLinks(socialLinks.value),
+      socialLinks: normalizeSocialLinks(socialLinks.value),
     });
     await socialStore.refreshSummary().catch(() => undefined);
     closeFieldEdits();
+    isEditingSocialLinks.value = false;
     setMessage(t("profile.profileUpdated"));
   } catch (cause) {
     setMessage(apiErrorMessage(cause), "error");
@@ -288,13 +318,12 @@ async function saveProfile() {
 }
 
 function normalizedSocialLinks(links: Array<{ label: string; url: string }>) {
-  return links
-    .map((link) => ({ label: link.label.trim(), url: link.url.trim() }))
-    .filter((link) => link.label || link.url);
+  return normalizeSocialLinks(links);
 }
 
 function addSocialLink() {
   if (socialLinks.value.length >= 10) return;
+  isEditingSocialLinks.value = true;
   socialLinks.value = [...socialLinks.value, { label: "", url: "" }];
 }
 
@@ -361,16 +390,6 @@ function revokeAvatarPreview() {
       @search="openView('search')"
     />
 
-    <ProfileTopCard
-      v-if="!queryView && accountMode === 'user'"
-      :user="authStore.currentUser"
-      :summary="socialStore.summary"
-      :avatar-preview="avatarPreview"
-      :is-uploading-avatar="isUploadingAvatar"
-      @avatar="openAvatarPicker"
-      @open-view="openView"
-    />
-
     <input
       ref="fileInput"
       class="hidden"
@@ -409,13 +428,12 @@ function revokeAvatarPreview() {
               :organization="selectedOrganization"
               @message="setMessage"
             />
+            <ConnectionsTab
+              v-else-if="activeOrganizationTab === 'connections'"
+              initial-filter="followers"
+              @message="setMessage"
+            />
             <section v-else-if="activeOrganizationTab === 'social'" class="grid gap-4">
-              <UiSurface as="section" class="grid gap-3">
-                <div class="grid gap-2 sm:grid-cols-2">
-                  <PButton :label="t('social.followers')" icon="pi pi-users" severity="secondary" variant="outlined" @click="openView('followers')" />
-                  <PButton :label="t('social.following')" icon="pi pi-user-plus" severity="secondary" variant="outlined" @click="openView('following')" />
-                </div>
-              </UiSurface>
               <SocialSettingsTab :notification-owner="selectedOrganizationNotificationOwner" @message="setMessage" />
             </section>
             <BlockedUsersTab v-else-if="activeOrganizationTab === 'blocked'" @message="setMessage" />
@@ -437,57 +455,75 @@ function revokeAvatarPreview() {
           @message="setMessage"
         />
 
-        <ProfileListPage
-          v-else-if="contentView === 'followers'"
-          :title="t('social.followers')"
-          :items="socialStore.followers.items"
-          :total-count="socialStore.followers.totalCount"
-          :page="socialStore.followers.page"
-          :limit="socialStore.followers.limit"
-          :is-loading="socialStore.followers.isLoading"
-          :empty-text="t('social.noFollowers')"
-          show-friend-filter
+        <ConnectionsTab
+          v-else-if="contentView === 'connections'"
+          :initial-filter="connectionsInitialFilter"
+          :show-back="Boolean(queryView)"
           @back="closeView"
-          @page="(page) => socialStore.loadFollowers(page)"
           @message="setMessage"
         />
 
-        <ProfileListPage
-          v-else-if="contentView === 'following'"
-          :title="t('social.following')"
-          :items="socialStore.following.items"
-          :total-count="socialStore.following.totalCount"
-          :page="socialStore.following.page"
-          :limit="socialStore.following.limit"
-          :is-loading="socialStore.following.isLoading"
-          :empty-text="t('social.noFollowing')"
-          show-friend-filter
-          @back="closeView"
-          @page="(page) => socialStore.loadFollowing(page)"
-          @message="setMessage"
-        />
+        <section v-else-if="contentView === 'profile'" class="profile-screen">
+          <div class="fullscreen-page-heading">
+            <PButton v-if="queryView" icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2 justify-self-start" @click="closeView" />
+            <UiSectionHeader :title="t('profile.profile')" />
+          </div>
 
-        <section v-else-if="contentView === 'profile'" class="grid gap-4">
-          <UiSectionHeader :title="t('profile.profile')">
-            <template v-if="queryView" #actions>
-              <PButton icon="pi pi-arrow-left" :label="t('common.back')" variant="text" severity="secondary" class="-ml-2" @click="closeView" />
-            </template>
-          </UiSectionHeader>
+          <form class="profile-form" @submit.prevent>
+            <UiSurface as="section" class="profile-avatar-section">
+              <button
+                class="profile-avatar-button"
+                type="button"
+                :disabled="isUploadingAvatar"
+                :aria-label="t('profile.changePhoto')"
+                @click="openAvatarPicker"
+              >
+                <span class="profile-avatar-frame">
+                  <img v-if="avatarPreview" :src="avatarPreview" alt="" />
+                  <span v-else>{{ displayInitials }}</span>
+                </span>
+                <span class="profile-avatar-action" aria-hidden="true">
+                  <i :class="isUploadingAvatar ? 'pi pi-spinner pi-spin' : 'pi pi-camera'"></i>
+                </span>
+              </button>
+              <div class="min-w-0">
+                <h3 class="m-0 text-[15px] font-extrabold text-[var(--text)]">{{ t("profile.changePhoto") }}</h3>
+                <p class="m-0 mt-1 text-[12px] font-semibold text-[var(--muted)]">{{ t("profile.avatarHint") }}</p>
+              </div>
+              <PButton
+                icon="pi pi-camera"
+                :label="t('profile.changePhoto')"
+                severity="secondary"
+                variant="outlined"
+                :loading="isUploadingAvatar"
+                @click="openAvatarPicker"
+              />
+            </UiSurface>
 
-          <form class="grid gap-2" @submit.prevent>
-            <div class="ui-list" aria-label="Profile details">
+            <div class="ui-list profile-details-list" aria-label="Profile details">
               <UiFlatRow
                 v-for="field in editableProfileFields"
                 :key="field.key"
                 as="article"
                 :active="editingFields[field.key]"
                 muted
-                class="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[132px_minmax(0,1fr)_auto] items-center gap-3 sm:gap-4 p-3 sm:p-4"
+                class="profile-field-row grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[132px_minmax(0,1fr)_auto] items-center"
+                :class="{ 'profile-bio-row': field.key === 'bio' }"
               >
-                <label class="col-span-2 sm:col-span-1 sm:col-start-1 sm:row-start-1 text-[13px] font-bold text-[var(--muted)]" :for="`profile-${field.key}`">{{ field.label }}</label>
+                <label
+                  class="text-[13px] font-bold text-[var(--muted)]"
+                  :class="field.key === 'bio'
+                    ? 'col-start-1 row-start-1 col-span-1 sm:col-start-1 sm:col-span-2 sm:row-start-1'
+                    : 'col-span-2 sm:col-span-1 sm:col-start-1 sm:row-start-1'"
+                  :for="`profile-${field.key}`"
+                >
+                  <span>{{ field.label }}</span>
+                  <small v-if="field.key === 'bio'" class="profile-field-caption">{{ t("profile.bioHint") }}</small>
+                </label>
 
                 <PButton
-                  class="col-start-2 row-start-2 self-center justify-self-end sm:col-start-3 sm:row-start-1 sm:self-start shrink-0"
+                  class="justify-self-end sm:col-start-3 sm:row-start-1 sm:self-start shrink-0"
+                  :class="field.key === 'bio' ? 'col-start-2 row-start-1 self-start' : 'col-start-2 row-start-2 self-center'"
                   :disabled="isSavingProfile || (field.key === 'username' && editingFields.username && !canSaveUsername)"
                   icon="pi pi-pencil"
                   variant="text"
@@ -500,7 +536,12 @@ function revokeAvatarPreview() {
                   </template>
                 </PButton>
 
-                <div class="col-start-1 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+                <div
+                  class="profile-field-value col-start-1 row-start-2 min-w-0"
+                  :class="field.key === 'bio'
+                    ? 'profile-bio-value col-span-2 sm:col-start-1 sm:col-span-3 sm:row-start-2'
+                    : 'sm:col-span-1 sm:col-start-2 sm:row-start-1'"
+                >
                   <PInputText
                     v-if="editingFields[field.key] && (field.type === 'text' || field.type === 'date')"
                     :id="`profile-${field.key}`"
@@ -515,11 +556,19 @@ function revokeAvatarPreview() {
                     :id="`profile-${field.key}`"
                     v-model="profileForm[field.key]"
                     class="p-textarea w-full"
+                    :class="{ 'profile-bio-textarea': field.key === 'bio' }"
                     maxlength="500"
                     rows="4"
                     autofocus
                   ></textarea>
-                  <p v-else class="m-0 text-[15px] font-semibold leading-relaxed break-words whitespace-pre-wrap px-3" :class="{ 'text-[var(--subtle)]': !profileForm[field.key] }">
+                  <p
+                    v-else
+                    class="m-0 text-[15px] font-semibold leading-relaxed break-words whitespace-pre-wrap"
+                    :class="[
+                      field.key === 'bio' ? '' : 'px-3',
+                      { 'text-[var(--subtle)]': !profileForm[field.key] },
+                    ]"
+                  >
                     {{ profileForm[field.key] || t("profile.notSpecified") }}
                   </p>
 
@@ -549,23 +598,58 @@ function revokeAvatarPreview() {
               </UiFlatRow>
             </div>
 
-            <UiSurface as="section" class="grid gap-3">
-              <UiSectionHeader :title="t('profile.socialLinks')" :caption="t('profile.socialLinksHint')">
-                <template #actions>
-                  <PButton icon="pi pi-plus" rounded variant="text" severity="secondary" :disabled="socialLinks.length >= 10 || isSavingProfile" @click="addSocialLink" />
-                  <PButton icon="pi pi-check" rounded variant="text" severity="secondary" :loading="isSavingProfile" :disabled="!isProfileDirty" @click="saveProfile" />
-                </template>
-              </UiSectionHeader>
-
-              <div class="grid gap-2">
-                <div v-if="!socialLinks.length" class="text-sm text-[var(--subtle)] px-1">{{ t("profile.noSocialLinks") }}</div>
-                <article v-for="(link, index) in socialLinks" :key="index" class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-2 items-center">
-                  <PInputText v-model="link.label" :placeholder="t('profile.socialLinkLabel')" maxlength="60" class="w-full" />
-                  <PInputText v-model="link.url" :placeholder="t('profile.socialLinkUrl')" class="w-full" />
-                  <PButton icon="pi pi-trash" rounded variant="text" severity="secondary" :disabled="isSavingProfile" @click="removeSocialLink(index)" />
-                </article>
+            <UiFlatRow
+              as="section"
+              :active="isEditingSocialLinks"
+              muted
+              class="profile-social-row grid grid-cols-[minmax(0,1fr)_auto] items-start"
+            >
+              <div class="col-start-1 row-start-1 min-w-0">
+                <strong class="text-[13px] font-bold text-[var(--muted)]">{{ t("profile.socialLinks") }}</strong>
+                <p class="m-0 mt-1 text-[12px] font-semibold text-[var(--subtle)] leading-snug">{{ t("profile.socialLinksHint") }}</p>
               </div>
-            </UiSurface>
+
+              <PButton
+                class="col-start-2 row-start-1 self-start justify-self-end shrink-0"
+                :disabled="isSavingProfile || (isEditingSocialLinks && hasSocialLinkErrors)"
+                :icon="isEditingSocialLinks ? 'pi pi-check' : 'pi pi-pencil'"
+                variant="text"
+                severity="secondary"
+                rounded
+                :aria-label="t('profile.socialLinks')"
+                @click="isEditingSocialLinks ? confirmSocialLinksEdit() : (isEditingSocialLinks = true)"
+              >
+                <template #icon>
+                  <i :class="isSavingProfile && isEditingSocialLinks ? 'pi pi-spinner pi-spin' : isEditingSocialLinks ? 'pi pi-check' : 'pi pi-pencil'"></i>
+                </template>
+              </PButton>
+
+              <div class="col-start-1 col-span-2 row-start-2 min-w-0">
+                <div v-if="!isEditingSocialLinks" class="social-links-preview" :class="{ empty: !socialLinkViews.length }">
+                  <span v-if="!socialLinkViews.length">{{ t("profile.notSpecified") }}</span>
+                  <a
+                    v-for="link in socialLinkViews"
+                    v-else
+                    :key="`${link.label}-${link.url}`"
+                    :href="link.url"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="social-link-chip"
+                    :style="{ '--social-chip-color': link.meta.color }"
+                  >
+                    <span><SocialPlatformIcon :platform="link.meta.key" /></span>
+                    <strong>{{ link.preview }}</strong>
+                  </a>
+                </div>
+
+                <div v-else class="grid gap-3">
+                  <SocialLinksEditor v-model="socialLinks" :disabled="isSavingProfile" @remove="removeSocialLink" />
+                  <div class="flex flex-wrap items-center gap-2">
+                    <PButton icon="pi pi-plus" rounded variant="text" severity="secondary" :disabled="socialLinks.length >= 10 || isSavingProfile" @click="addSocialLink" />
+                  </div>
+                </div>
+              </div>
+            </UiFlatRow>
           </form>
         </section>
 
@@ -612,11 +696,233 @@ function revokeAvatarPreview() {
   align-self: start;
 }
 
+.fullscreen-page-heading {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.fullscreen-page-heading :deep(.ui-section-header) {
+  width: 100%;
+}
+
+.profile-screen,
+.profile-form {
+  display: grid;
+}
+
+.profile-screen {
+  gap: 22px;
+}
+
+.profile-form {
+  gap: 16px;
+}
+
+.profile-details-list {
+  gap: 10px;
+}
+
+.profile-field-row,
+.profile-social-row {
+  column-gap: 14px;
+  row-gap: 12px;
+  padding: 14px;
+}
+
 @media (min-width: 1024px) {
   .profile-nav-column {
     position: sticky;
     top: calc(env(safe-area-inset-top, 0px) + 24px);
     z-index: 20;
+  }
+}
+
+.profile-avatar-section {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.profile-avatar-section :deep(.p-button) {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.profile-avatar-button {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.profile-avatar-button:disabled {
+  cursor: progress;
+}
+
+.profile-avatar-button:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+.profile-avatar-frame {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-muted);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.profile-avatar-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-action {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-bio-row {
+  column-gap: 0;
+  row-gap: 14px;
+}
+
+.profile-field-caption {
+  display: block;
+  margin-top: 5px;
+  color: var(--subtle);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.profile-bio-row :deep(.p-textarea) {
+  margin: 0;
+}
+
+.profile-bio-value {
+  padding-left: 0;
+  margin-left: 0;
+}
+
+.profile-bio-row .profile-bio-textarea {
+  display: block;
+  text-indent: 0;
+}
+
+.social-links-preview {
+  min-height: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+}
+
+.social-links-preview.empty {
+  color: var(--subtle);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.social-link-chip {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  transition: background var(--motion), transform var(--motion-fast);
+}
+
+.social-link-chip:hover {
+  background: var(--surface-active);
+  transform: translateY(-1px);
+}
+
+.social-link-chip span {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--social-chip-color) 14%, transparent);
+  color: var(--social-chip-color);
+  font-size: 13px;
+}
+
+.social-link-chip span :deep(svg) {
+  width: 13px;
+  height: 13px;
+}
+
+.social-link-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .profile-screen {
+    gap: 24px;
+  }
+
+  .profile-form {
+    gap: 18px;
+  }
+
+  .profile-details-list {
+    gap: 12px;
+  }
+
+  .profile-field-row,
+  .profile-social-row {
+    column-gap: 18px;
+    row-gap: 14px;
+    padding: 18px;
+  }
+
+  .profile-avatar-section {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .profile-avatar-section :deep(.p-button) {
+    grid-column: auto;
+    justify-self: end;
   }
 }
 </style>

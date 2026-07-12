@@ -5,6 +5,8 @@ import { apiErrorMessage } from "@/api/client";
 import { AuthService } from "@/api/services/AuthService";
 import { useAuthStore } from "@/infra/store";
 import type { OrganizationMember, SocialLink } from "@/domain";
+import SocialLinksEditor from "@/features/profile/ui/SocialLinksEditor.vue";
+import { hasDuplicateSocialLinks, hasInvalidSocialLinks, normalizeSocialLinks } from "@/shared/lib/socialLinks";
 
 const props = defineProps<{
   selectedOrganizationId?: string | null;
@@ -81,13 +83,17 @@ async function createOrganization() {
 async function saveOrganization(orgId: string) {
   const edit = edits[orgId];
   if (!edit) return;
+  if (hasInvalidSocialLinks(edit.socialLinks) || hasDuplicateSocialLinks(edit.socialLinks)) {
+    emit("message", t("profile.socialLinkValidationError"), "error");
+    return;
+  }
   isSaving.value = true;
   try {
     await authStore.updateOrganization(orgId, {
       orgName: edit.orgName.trim(),
       displayName: edit.displayName.trim(),
       bio: edit.bio.trim() || null,
-      socialLinks: edit.socialLinks.map((link) => ({ label: link.label.trim(), url: link.url.trim() })).filter((link) => link.label || link.url),
+      socialLinks: normalizeSocialLinks(edit.socialLinks),
     });
     emit("message", t("organizations.updated"));
   } catch (cause) {
@@ -259,11 +265,11 @@ async function respond(invitationId: string, accept: boolean) {
               <strong class="text-sm">{{ t("profile.socialLinks") }}</strong>
               <PButton icon="pi pi-plus" rounded variant="text" severity="secondary" :disabled="organization.role !== 'OWNER' || edits[organization.id].socialLinks.length >= 10" @click="addSocialLink(organization.id)" />
             </div>
-            <article v-for="(link, index) in edits[organization.id].socialLinks" :key="index" class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-2">
-              <PInputText v-model="link.label" :disabled="organization.role !== 'OWNER'" :placeholder="t('profile.socialLinkLabel')" />
-              <PInputText v-model="link.url" :disabled="organization.role !== 'OWNER'" :placeholder="t('profile.socialLinkUrl')" />
-              <PButton icon="pi pi-trash" rounded variant="text" severity="secondary" :disabled="organization.role !== 'OWNER'" @click="removeSocialLink(organization.id, index)" />
-            </article>
+            <SocialLinksEditor
+              v-model="edits[organization.id].socialLinks"
+              :disabled="organization.role !== 'OWNER' || isSaving"
+              @remove="(index) => removeSocialLink(organization.id, index)"
+            />
           </section>
 
           <PButton
@@ -271,7 +277,7 @@ async function respond(invitationId: string, accept: boolean) {
             icon="pi pi-check"
             :loading="isSaving"
             class="justify-self-start"
-            :disabled="organization.role !== 'OWNER'"
+            :disabled="organization.role !== 'OWNER' || hasInvalidSocialLinks(edits[organization.id].socialLinks) || hasDuplicateSocialLinks(edits[organization.id].socialLinks)"
             @click="saveOrganization(organization.id)"
           />
         </div>
