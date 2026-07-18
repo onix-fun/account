@@ -8,9 +8,9 @@ export default defineConfig({
   base: "./",
   plugins: [vue(), tailwindcss()],
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: [
+      { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+    ],
   },
   server: {
     port: 5174,

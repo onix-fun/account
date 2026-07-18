@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import type { User } from "@/domain";
-import type { ProfileSummary } from "@/api/services/ProfileSocialService";
-import { userDisplayName, userInitials } from "@/shared/lib/user";
+import type { User } from "@/shared/model/domain";
+import type { ProfileSummary } from "@/shared/api/services/ProfileSocialService";
+import { userDisplayName, userInitials } from "@/shared/model/user";
 
 const props = defineProps<{
   user: User | null;

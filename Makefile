@@ -1,29 +1,21 @@
-.PHONY: setup up down clean reset-db
+.PHONY: contracts-check backend-test backend-build frontend-test frontend-build test build
 
-setup:
-	@echo "Checking development keys..."
-	cd dev && ./scripts/generate-dev-keys.sh
+contracts-check:
+	test -d .contracts/profile/proto
+	test -d .contracts/media/proto
 
-up: setup
-	@echo "Building backend JAR..."
-	cd backend && ./gradlew shadowJar -q
-	@echo "Starting account development containers..."
-	cd dev && docker compose up -d --build --remove-orphans
-	@echo "Cleaning up frontend port (5174)..."
-	-lsof -ti:5174 | xargs kill -9 2>/dev/null || true
-	@echo "Installing frontend dependencies..."
-	cd frontend && npm install
-	@echo "Starting frontend dev server..."
-	cd frontend && npm run dev
+backend-test: contracts-check
+	cd backend && ./gradlew --no-daemon test checkModuleBoundaries
 
-down:
-	@echo "Stopping containers..."
-	cd dev && docker compose down --remove-orphans
+backend-build: contracts-check
+	cd backend && ./gradlew --no-daemon :app:shadowJar
 
-clean: down
-	@echo "Cleaning up volumes..."
-	cd dev && docker compose down -v
+frontend-test:
+	cd frontend && npm test
 
-reset-db:
-	@echo "Recreating only the development PostgreSQL database..."
-	cd dev && ./scripts/reset-dev-db.sh
+frontend-build:
+	cd frontend && npm run build
+
+test: backend-test frontend-test
+
+build: backend-build frontend-build

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiErrorMessage } from "@/api/client";
-import type { AuthSession } from "@/domain";
-import { useAuthStore } from "@/infra/store";
+import { apiErrorMessage } from "@/shared/api/client";
+import type { AuthSession } from "@/shared/model/domain";
+import { useAuthStore } from "@/shared/model/store";
 import QrLoginDialog from "@/features/sessions/ui/QrLoginDialog.vue";
 
 const emit = defineEmits<{

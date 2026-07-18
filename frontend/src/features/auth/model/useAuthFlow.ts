@@ -1,10 +1,10 @@
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { AuthService, type AccountLookupResponse } from "@/api/services/AuthService";
-import { apiErrorMessage, parseApiError } from "@/api/client";
-import { trustedRedirectUrl } from "@/infra/navigation/trustedRedirect";
-import { useAuthStore } from "@/infra/store";
+import { AuthService, type AccountLookupResponse } from "@/shared/api/services/AuthService";
+import { apiErrorMessage, parseApiError } from "@/shared/api/client";
+import { trustedRedirectUrl } from "@/shared/lib/trustedRedirect";
+import { useAuthStore } from "@/shared/model/store";
 import { isEmail, isPassword, isUsername, isVerificationCode } from "@/shared/lib/validation";
 
 export type AuthMode = "identifier" | "password" | "register" | "confirm" | "verify" | "name" | "forgot" | "reset";

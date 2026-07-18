@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { runtimeConfig } from "@/runtime-config";
+import { runtimeConfig } from "@/shared/config/runtime";
 
 export const router = createRouter({
   history: createWebHistory(runtimeConfig.frontendBasePath),
@@ -7,7 +7,7 @@ export const router = createRouter({
     {
       path: "/",
       name: "Profile",
-      component: () => import("@/features/profile/ui/ProfilePage.vue"),
+      component: () => import("@/pages/profile/ProfilePage.vue"),
     },
   ],
 });

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiErrorMessage } from "@/api/client";
-import { ProfileSocialService, type PublicUser, type RelatedUser } from "@/api/services/ProfileSocialService";
-import { useAuthStore, useProfileSocialStore } from "@/infra/store";
-import ProfileUserRow from "@/features/profile/ui/ProfileUserRow.vue";
+import { apiErrorMessage } from "@/shared/api/client";
+import { ProfileSocialService, type PublicUser, type RelatedUser } from "@/shared/api/services/ProfileSocialService";
+import { useAuthStore, useProfileSocialStore } from "@/shared/model/store";
+import ProfileUserRow from "@/features/connections/ui/ProfileUserRow.vue";
 
 const props = withDefaults(defineProps<{
   visible: boolean;

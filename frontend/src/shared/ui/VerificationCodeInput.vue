@@ -85,7 +85,7 @@ watch(
         pattern="[0-9]"
         maxlength="1"
         autocomplete="one-time-code"
-        class="w-full aspect-square text-center text-xl font-bold bg-[var(--surface-muted)] text-[var(--text)] rounded-[10px] outline-none transition-all focus:bg-[var(--surface-raised)] focus:ring-3 focus:ring-[var(--focus-ring)] border-0"
+        class="w-full aspect-square text-center text-xl font-bold bg-[var(--surface-muted)] text-[var(--text)] rounded-[var(--radius-sm)] outline-none transition-all focus:bg-[var(--surface-raised)] focus:ring-3 focus:ring-[var(--focus-ring)] border-0"
         :class="{ 'bg-[var(--toast-error-bg)] ring-2 ring-[var(--danger)]/30': Boolean(localError) && modelValue.length === 6 }"
         @input="onInput(index, $event)"
         @keydown="onKeydown(index, $event)"

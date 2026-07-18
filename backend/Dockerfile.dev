@@ -4,7 +4,7 @@ WORKDIR /app
 ARG OTEL_JAVA_AGENT_VERSION=2.27.0
 COPY opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
 
-COPY build/libs/*-with-dependencies.jar /app/profile.jar
+COPY app/build/libs/*-with-dependencies.jar /app/account.jar
 
 RUN useradd -M -u 1001 appuser && mkdir -p /var/log/account/profile && chown -R appuser:appuser /app /otel /var/log/account
 
@@ -12,4 +12,4 @@ USER appuser
 
 EXPOSE 8080 9090
 
-CMD ["java", "-jar", "/app/profile.jar"]
+CMD ["java", "-jar", "/app/account.jar"]

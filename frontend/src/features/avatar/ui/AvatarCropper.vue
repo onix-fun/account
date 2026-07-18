@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { themes } from "@onix/design-system";
 
 const props = defineProps<{
   file: File;
@@ -106,7 +107,7 @@ const applyCrop = async () => {
   const context = canvas.getContext("2d");
   if (!context) return;
 
-  context.fillStyle = "#ffffff";
+  context.fillStyle = themes.light.surface;
   context.fillRect(0, 0, outputSize, outputSize);
   context.translate(outputSize / 2 + (offset.value.x / cropSize) * outputSize, outputSize / 2 + (offset.value.y / cropSize) * outputSize);
   context.rotate((rotation.value * Math.PI) / 180);

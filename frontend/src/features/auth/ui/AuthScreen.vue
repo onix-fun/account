@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { useAuthStore } from "@/infra/store";
+import { useAuthStore } from "@/shared/model/store";
 import { useAuthFlow } from "@/features/auth/model/useAuthFlow";
 import LocaleSwitcher from "@/shared/ui/LocaleSwitcher.vue";
 import VerificationCodeInput from "@/shared/ui/VerificationCodeInput.vue";
 import PasswordInput from "@/shared/ui/PasswordInput.vue";
 import QrLoginScanner from "@/features/auth/ui/QrLoginScanner.vue";
-import { apiErrorMessage } from "@/api/client";
+import { apiErrorMessage } from "@/shared/api/client";
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import { trustedRedirectUrl } from "@/infra/navigation/trustedRedirect";
+import { trustedRedirectUrl } from "@/shared/lib/trustedRedirect";
 
 const authStore = useAuthStore();
 const { t } = useI18n();

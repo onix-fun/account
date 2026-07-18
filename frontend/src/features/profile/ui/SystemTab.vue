@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { apiErrorMessage, parseApiError } from "@/api/client";
-import { useAuthStore } from "@/infra/store";
+import { apiErrorMessage, parseApiError } from "@/shared/api/client";
+import { useAuthStore } from "@/shared/model/store";
 import VerificationCodeInput from "@/shared/ui/VerificationCodeInput.vue";
 import PasswordInput from "@/shared/ui/PasswordInput.vue";
 import { isEmail, isVerificationCode } from "@/shared/lib/validation";

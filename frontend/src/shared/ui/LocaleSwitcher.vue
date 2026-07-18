@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { setLocale, type SupportedLocale } from "@/shared/i18n";
-import { useAuthStore } from "@/infra/store";
+import { useAuthStore } from "@/shared/model/store";
 
 const { locale, t } = useI18n();
 const authStore = useAuthStore();
@@ -48,7 +48,7 @@ onBeforeUnmount(() => document.removeEventListener("click", closeOnOutsideClick)
   </div>
   <div v-else ref="root" class="relative inline-block text-left" @keydown.esc="isOpen = false">
     <button
-      class="min-w-[104px] min-h-[40px] border-0 rounded-[10px] bg-[var(--surface-muted)] text-[var(--text)] px-3 flex items-center justify-between gap-3 text-xs font-bold hover:bg-[var(--surface-active)] transition-colors cursor-pointer"
+      class="min-w-[104px] min-h-[40px] border-0 rounded-[var(--radius-sm)] bg-[var(--surface-muted)] text-[var(--text)] px-3 flex items-center justify-between gap-3 text-xs font-bold hover:bg-[var(--surface-active)] transition-colors cursor-pointer"
       type="button"
       :aria-label="t('auth.language')"
       :aria-expanded="isOpen"
@@ -60,7 +60,7 @@ onBeforeUnmount(() => document.removeEventListener("click", closeOnOutsideClick)
     </button>
     <div 
       v-if="isOpen" 
-      class="absolute z-20 top-full mt-2 left-0 min-w-full p-1 rounded-[10px] bg-[var(--surface-raised)] shadow-[var(--shadow)] grid gap-1" 
+      class="absolute z-20 top-full mt-2 left-0 min-w-full p-1 rounded-[var(--radius-sm)] bg-[var(--surface-raised)] shadow-[var(--shadow)] grid gap-1"
       role="listbox" 
       :aria-label="t('auth.language')"
     >
@@ -70,7 +70,7 @@ onBeforeUnmount(() => document.removeEventListener("click", closeOnOutsideClick)
         type="button"
         role="option"
         :aria-selected="currentLocale === value"
-        class="min-h-[34px] border-0 rounded-[7px] px-2.5 flex flex-row items-center justify-between gap-3 text-[11px] font-bold transition-colors cursor-pointer w-full"
+        class="min-h-[34px] border-0 rounded-[var(--radius-xs)] px-2.5 flex flex-row items-center justify-between gap-3 text-[11px] font-bold transition-colors cursor-pointer w-full"
         :class="currentLocale === value ? 'bg-[var(--text)] text-white' : 'bg-[var(--surface-muted)] text-[var(--muted)] hover:bg-[var(--surface-active)] hover:text-[var(--text)]'"
         @click="chooseLocale(value)"
       >

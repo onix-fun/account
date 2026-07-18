@@ -1,0 +1,87 @@
+package com.onix.account.api.rest
+
+import io.ktor.server.application.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import com.onix.account.domain.*
+import com.onix.account.infrastructure.*
+import com.onix.account.usecases.*
+import com.onix.account.users.UserService
+import java.util.UUID
+
+fun Route.settingsRoutes(
+    socialUseCases: SocialUseCases,
+    notificationUseCases: NotificationUseCases,
+    userService: UserService
+) {
+    route("/api/profile/me") {
+        get("/privacy") {
+            val settings = socialUseCases.getPrivacySettings(activeOwnerRef(call))
+            call.respond(settings.toResponse())
+        }
+
+        put("/privacy") {
+            val owner = activeOwnerRef(call)
+            val body = call.receive<PrivacySettingsUpdateRequest>()
+            socialUseCases.updatePrivacySettings(
+                owner,
+                body.isPrivate,
+                body.fieldVisibility?.let { FieldVisibility.fromResponse(it) }
+            )
+            call.respond(SuccessResponse())
+        }
+    }
+
+    route("/api/notifications") {
+        get("/settings") {
+            val uid = requireUserId(call)
+            val locale = userService.getProfile(uid.toString())?.preferredLocale
+                ?: call.request.headers["Accept-Language"].orEmpty()
+            val owner = call.request.queryParameters["ownerId"]?.takeIf(String::isNotBlank)?.let { ownerId ->
+                OwnerRef(
+                    type = runCatching { OwnerType.valueOf(call.request.queryParameters["ownerType"].orEmpty()) }.getOrDefault(OwnerType.ORGANIZATION),
+                    id = UUID.fromString(ownerId)
+                )
+            }
+            call.respond(NotificationSettingsResponse(
+                services = notificationUseCases.getLocalizedSettings(uid, locale, owner).map { it.toResponse() }
+            ))
+        }
+
+        put("/settings") {
+            val uid = requireUserId(call)
+            val body = call.receive<NotificationPreferenceUpdateRequest>()
+            val owner = body.ownerId?.takeIf(String::isNotBlank)?.let { ownerId ->
+                OwnerRef(
+                    type = runCatching { OwnerType.valueOf(body.ownerType.orEmpty()) }.getOrDefault(OwnerType.ORGANIZATION),
+                    id = UUID.fromString(ownerId)
+                )
+            }
+            if (owner != null) notificationUseCases.saveOwnerPreference(uid, owner, body.serviceKey, body.typeKey, body.enabled)
+            else notificationUseCases.savePreference(uid, body.serviceKey, body.typeKey, body.enabled)
+            call.respond(SuccessResponse())
+        }
+
+        get("/preferences") {
+            val uid = requireUserId(call)
+            val prefs = notificationUseCases.getPrefs(uid)
+            call.respond(prefs.toResponse())
+        }
+
+        put("/preferences") {
+            val uid = requireUserId(call)
+            val body = call.receive<Map<String, Boolean>>()
+            notificationUseCases.savePrefs(NotificationPrefs(
+                userId = uid,
+                inAppSubscriptions = body["inAppSubscriptions"] ?: true,
+                inAppPublications = body["inAppPublications"] ?: true,
+                inAppAuthorMentions = body["inAppAuthorMentions"] ?: true,
+                inAppPostComments = body["inAppPostComments"] ?: true,
+                inAppNewStories = body["inAppNewStories"] ?: true,
+                inAppBirthdays = body["inAppBirthdays"] ?: true,
+            ))
+            call.respond(SuccessResponse())
+        }
+    }
+}

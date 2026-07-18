@@ -1,16 +1,15 @@
-rootProject.name = "accaunt-backend"
+rootProject.name = "account-backend"
 
 pluginManagement {
     repositories {
-        google()
-        mavenCentral()
         gradlePluginPortal()
+        mavenCentral()
     }
 }
 
 dependencyResolutionManagement {
-    repositories {
-        mavenCentral()
-        google()
-    }
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories { mavenCentral() }
 }
+
+include("domain", "application", "infrastructure", "app")

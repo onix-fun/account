@@ -4,15 +4,21 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "sync:design-system": "npm --prefix ../../onix-design-system run build",
+    "predev": "npm run sync:design-system",
     "dev": "vite",
+    "prebuild": "npm run sync:design-system",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
+    "pretest": "npm run sync:design-system",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "pretest:e2e": "npm run sync:design-system",
     "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
+    "@onix/design-system": "file:../../onix-design-system",
     "@primeuix/themes": "^2.0.3",
     "axios": "^1.16.0",
     "chart.js": "^4.5.1",

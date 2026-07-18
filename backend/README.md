@@ -17,16 +17,16 @@ java -jar app.jar serve --role=all
 
 ## Зависимости
 
-PostgreSQL, Redis, SMTP и S3-compatible storage обязательны. Redis используется
-только как runtime-индекс поиска пользователей по username; auth/session/rate
-state хранится в PostgreSQL. Все настройки
+PostgreSQL, Redis и SMTP обязательны; Profile и Media доступны по внутреннему
+gRPC. Account не хранит public profile и avatar blobs: он проксирует команды
+в сервисы-владельцы. Все настройки
 задаются через `ACCOUNT_*`; секреты дополнительно поддерживают `*_FILE`.
 
 Основные группы: `ACCOUNT_DATABASE_*`, `ACCOUNT_REDIS_*`, `ACCOUNT_SMTP_*`,
-`ACCOUNT_S3_*`, `ACCOUNT_JWT_*`, `ACCOUNT_HTTP_*`, `ACCOUNT_GRPC_*`,
+`ACCOUNT_PROFILE_*`, `ACCOUNT_MEDIA_*`, `ACCOUNT_JWT_*`, `ACCOUNT_HTTP_*`, `ACCOUNT_GRPC_*`,
 `ACCOUNT_SECURITY_*`.
 
-В production обязательны Secure cookies, SMTP STARTTLS, HTTPS public S3 URL и
+В production обязательны Secure cookies, SMTP STARTTLS и
 mTLS для включенного gRPC.
 
 HTTP API сохраняет `/api/*`, `/openapi.json` и `/swagger-ui`. Служебные

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import type { User } from "@/domain";
-import type { ProfileSummary } from "@/api/services/ProfileSocialService";
-import { userInitials } from "@/shared/lib/user";
+import type { User } from "@/shared/model/domain";
+import type { ProfileSummary } from "@/shared/api/services/ProfileSocialService";
+import { userInitials } from "@/shared/model/user";
 import OwnerModeSwitch from "@/features/profile/ui/OwnerModeSwitch.vue";
 
 const props = defineProps<{
@@ -153,7 +153,7 @@ const initials = computed(() => userInitials(props.user));
   padding: 0 4px;
   border-radius: 999px;
   background: var(--danger);
-  color: #fff;
+  color: var(--btn-primary-text);
   font-size: 10px;
   line-height: 17px;
   font-weight: 900;

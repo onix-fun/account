@@ -2,8 +2,9 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import QRCode from "qrcode";
-import { apiErrorMessage } from "@/api/client";
-import { AuthService, type QrLoginChallenge, type QrLoginChallengeStatus } from "@/api/services/AuthService";
+import { themes } from "@onix/design-system";
+import { apiErrorMessage } from "@/shared/api/client";
+import { AuthService, type QrLoginChallenge, type QrLoginChallengeStatus } from "@/shared/api/services/AuthService";
 
 const props = defineProps<{
   visible: boolean;
@@ -59,8 +60,8 @@ async function createChallenge() {
       margin: 1,
       width: 232,
       color: {
-        dark: "#17191c",
-        light: "#ffffff",
+        dark: themes.light.text,
+        light: themes.light.surface,
       },
     });
     updateCountdown();
@@ -193,7 +194,7 @@ function cleanup() {
   width: 232px;
   height: 232px;
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--btn-primary-text);
 }
 
 .qr-loading {

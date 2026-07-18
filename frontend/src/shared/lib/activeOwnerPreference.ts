@@ -1,4 +1,4 @@
-import type { OwnerIdentity, OwnerType } from "@/domain";
+import type { OwnerIdentity, OwnerType } from "@/shared/model/domain";
 
 interface ActiveOwnerPreference {
   userId: string;
